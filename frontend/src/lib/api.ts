@@ -18,4 +18,42 @@ export const api = {
   async usuarios_create(data:any){ const r=await fetch('http://localhost:3000/usuarios',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify(data)}); return r.json() },
   async usuarios_update(id:string,data:any){ const r=await fetch('http://localhost:3000/usuarios/'+id,{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify(data)}); return r.json() },
   async usuarios_delete(id:string){ const r=await fetch('http://localhost:3000/usuarios/'+id,{method:'DELETE',credentials:'include'}); return r.json() },
+  // roles y permisos
+  async roles_list(){ const r=await fetch('http://localhost:3000/roles',{credentials:'include'}); return r.json() },
+  async roles_create(data:any){ const r=await fetch('http://localhost:3000/roles',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify(data)}); return r.json() },
+  async roles_update(id:string,data:any){ const r=await fetch('http://localhost:3000/roles/'+id,{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify(data)}); return r.json() },
+  async roles_delete(id:string){ const r=await fetch('http://localhost:3000/roles/'+id,{method:'DELETE',credentials:'include'}); return r.json() },
+  async roles_set_perms(id:string, claves:string[]){ const r=await fetch(`http://localhost:3000/roles/${id}/permisos`,{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({claves})}); return r.json() },
+  async permisos_list(){ const r=await fetch('http://localhost:3000/permisos',{credentials:'include'}); return r.json() },
+
+  // al final del objeto api:
+async perfil_get(){ 
+  const r = await fetch('http://localhost:3000/perfil', { credentials:'include' })
+  if (!r.ok) throw new Error('no se pudo cargar el perfil')
+  return r.json()
+},
+async perfil_update(data:any){
+  const r = await fetch('http://localhost:3000/perfil', {
+    method:'PUT',
+    credentials:'include',
+    headers:{ 'content-type':'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!r.ok) throw new Error('no se pudo guardar el perfil')
+  return r.json()
+},
+
+  // usuarios por rol (para el select de maestro)
+  async usuarios_por_rol(role:string){
+    const r = await fetch('http://localhost:3000/usuarios?role='+encodeURIComponent(role), { credentials:'include' })
+    return r.json()
+  },
+  // detalle de nino
+  async ninos_get(id:string){
+    const r = await fetch('http://localhost:3000/ninos/'+id, { credentials:'include' })
+    return r.json()
+  },
+
+
 }
+

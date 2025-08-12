@@ -10,6 +10,7 @@ import ninos from './routes/ninos'
 import usuarios from './routes/usuarios'
 import { authMiddleware } from './core/auth_middleware'
 import { errorHandler } from './core/error_handler'
+import roles from './routes/roles'
 
 dotenv.config()
 const app = express()
@@ -25,6 +26,7 @@ app.use(niveles)
 app.use(subniveles)
 app.use(ninos)
 app.use(usuarios)
+app.use(roles)
 
 app.use(errorHandler)
 app.listen(3000, ()=> console.log('api lista en http://localhost:3000'))

@@ -39,4 +39,28 @@ r.delete('/usuarios/:id', async (req:any, res:any)=>{
   res.json({ ok:true })
 })
 
+r.get('/usuarios', async (req:any, res:any)=>{
+  const role = (req.query.role || '').toString()
+  if (role) {
+    const { rows } = await pool.query(`
+      select u.id, u.email, u.nombres, u.apellidos
+      from usuarios u
+      join usuarios_roles ur on ur.usuario_id=u.id
+      join roles r on r.id=ur.role_id
+      where r.nombre=$1
+      order by u.nombres, u.apellidos
+    `,[role])
+    return res.json(rows)
+  }
+  const q = `
+    select u.id, u.email, u.nombres, u.apellidos,
+      array(select r.nombre from usuarios_roles ur join roles r on r.id=ur.role_id where ur.usuario_id=u.id) as roles
+    from usuarios u
+    order by u.email
+  `
+  const { rows } = await pool.query(q)
+  res.json(rows)
+})
+
+
 export default r

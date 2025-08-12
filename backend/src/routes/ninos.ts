@@ -1,6 +1,52 @@
 import { Router } from 'express'
 import { pool } from '../core/db'
 const r = Router()
+import { getUserPerms } from '../core/rbac'
+
+r.get('/ninos', async (req:any, res:any)=>{
+  const userId = req.user.id
+  const perms = await getUserPerms(userId)
+  const qtxt = (req.query.q || '').toString().trim().toLowerCase()
+
+  // si NO tiene permisos "admin" (ej: ver_usuarios o crud_ninos), solo ve los suyos
+  const soloMios = !(perms.includes('ver_usuarios') || perms.includes('crud_ninos'))
+
+  const sql = `
+    select ni.id, ni.nombres, ni.apellidos,
+      (select nombre from niveles where id=ni.nivel_id) as nivel,
+      (select nombre from subniveles where id=ni.subnivel_id) as subnivel,
+      ni.maestro_id
+    from ninos ni
+    where ($1='' or lower(ni.nombres) like '%'||$1||'%' or lower(ni.apellidos) like '%'||$1||'%')
+      ${soloMios ? 'and ni.maestro_id = $2' : ''}
+    order by ni.apellidos, ni.nombres
+  `
+  const params:any[] = [qtxt]
+  if (soloMios) params.push(userId)
+  const { rows } = await pool.query(sql, params)
+  res.json(rows)
+})
+
+r.get('/ninos/:id', async (req:any, res:any)=>{
+  const id = req.params.id
+  const userId = req.user.id
+  const perms = await getUserPerms(userId)
+  const soloMios = !(perms.includes('ver_usuarios') || perms.includes('crud_ninos'))
+
+  const { rows } = await pool.query(`
+    select ni.*,
+      (select nombre from niveles where id=ni.nivel_id) as nivel_nombre,
+      (select nombre from subniveles where id=ni.subnivel_id) as subnivel_nombre,
+      (select nombres||' '||apellidos from usuarios where id=ni.maestro_id) as maestro_nombre
+    from ninos ni
+    where ni.id=$1
+  `,[id])
+  const n = rows[0]
+  if (!n) return res.status(404).json({ error:'no encontrado' })
+  if (soloMios && n.maestro_id !== userId) return res.status(403).json({ error:'no autorizado' })
+  res.json(n)
+})
+
 
 r.get('/ninos', async (req:any, res:any)=>{
   const q = (req.query.q || '').toString().trim().toLowerCase()
@@ -45,5 +91,6 @@ r.delete('/ninos/:id', async (req:any, res:any)=>{
   await pool.query('delete from ninos where id=$1',[id])
   res.json({ ok:true })
 })
+
 
 export default r
