@@ -25,6 +25,13 @@ export const api = {
   async roles_delete(id:string){ const r=await fetch('http://localhost:3000/roles/'+id,{method:'DELETE',credentials:'include'}); return r.json() },
   async roles_set_perms(id:string, claves:string[]){ const r=await fetch(`http://localhost:3000/roles/${id}/permisos`,{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({claves})}); return r.json() },
   async permisos_list(){ const r=await fetch('http://localhost:3000/permisos',{credentials:'include'}); return r.json() },
+  // facturas
+  async facturas_list(){ const r=await fetch('http://localhost:3000/facturas',{credentials:'include'}); return r.json() },
+  async facturas_subir(form:FormData){ const r=await fetch('http://localhost:3000/facturas/upload',{method:'POST',credentials:'include',body:form}); return r.json() },
+  async facturas_img(id:string){ return `http://localhost:3000/facturas/${id}/imagen` },
+  async facturas_update(id:string,data:any){ const r=await fetch('http://localhost:3000/facturas/'+id,{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify(data)}); return r.json() },
+  async facturas_delete(id:string){ const r=await fetch('http://localhost:3000/facturas/'+id,{method:'DELETE',credentials:'include'}); return r.json() },
+
 
   // al final del objeto api:
 async perfil_get(){ 

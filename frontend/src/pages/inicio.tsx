@@ -8,19 +8,19 @@ export default function Inicio(){
 
       <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px,1fr))', gap:12, marginTop:12}}>
         <a href="/ninos" className="card" style={{textDecoration:'none', color:'#0f172a'}}>
-          <div style={{fontWeight:700, marginBottom:6}}>ninos</div>
+          <div style={{fontWeight:700, marginBottom:6}}>Niños</div>
           <div style={{color:'#64748b'}}>Gestiona altas, ediciones y busquedas</div>
         </a>
         <a href="/niveles" className="card" style={{textDecoration:'none', color:'#0f172a'}}>
-          <div style={{fontWeight:700, marginBottom:6}}>niveles</div>
+          <div style={{fontWeight:700, marginBottom:6}}>Niveles</div>
           <div style={{color:'#64748b'}}>Crea y organiza los niveles</div>
         </a>
         <a href="/subniveles" className="card" style={{textDecoration:'none', color:'#0f172a'}}>
-          <div style={{fontWeight:700, marginBottom:6}}>subniveles</div>
+          <div style={{fontWeight:700, marginBottom:6}}>Subniveles</div>
           <div style={{color:'#64748b'}}>Define dias y horarios</div>
         </a>
         <a href="/admin/usuarios" className="card" style={{textDecoration:'none', color:'#0f172a'}}>
-          <div style={{fontWeight:700, marginBottom:6}}>usuarios</div>
+          <div style={{fontWeight:700, marginBottom:6}}>Usuarios</div>
           <div style={{color:'#64748b'}}>Crea usuarios y asigna roles</div>
         </a>
       </div>

@@ -11,6 +11,10 @@ import usuarios from './routes/usuarios'
 import { authMiddleware } from './core/auth_middleware'
 import { errorHandler } from './core/error_handler'
 import roles from './routes/roles'
+import path from 'path'
+import facturas from './routes/facturas'
+
+
 
 dotenv.config()
 const app = express()
@@ -27,6 +31,9 @@ app.use(subniveles)
 app.use(ninos)
 app.use(usuarios)
 app.use(roles)
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
+app.use(facturas)
+
 
 app.use(errorHandler)
 app.listen(3000, ()=> console.log('api lista en http://localhost:3000'))

@@ -13,6 +13,9 @@ import { useEffect, useState } from 'react'
 import { api } from './lib/api'
 import { can } from './lib/permissions'
 import NinoDetalle from './pages/nino_detalle'
+import Facturas from './pages/facturas'
+
+
 
 function RequirePerms({ user, perms, children }:{ user:any; perms:string[]; children:any }){
   if (!can(user, perms)) return <div>No autorizado</div>
@@ -29,6 +32,7 @@ export default function App(){
   if (!user) return <Login onDone={()=> location.reload()} />
 
   return (
+    
     <AppLayout user={user}>
       <Routes>
         <Route path="/" element={<Navigate to="/inicio" replace />} />
@@ -72,15 +76,24 @@ export default function App(){
             <Roles />
           </RequirePerms>
         } />
+        <Route path="/facturas" element={
+  <RequirePerms user={user} perms={['facturas_ver_propias','facturas_ver_todas']}>
+    <Facturas />
+  </RequirePerms>
+} />
+
 <Route path="/ninos/:id" element={
   <RequirePerms user={user} perms={['ver_ninos']}>
     <NinoDetalle />
   </RequirePerms>
+  
 } />
-        <Route path="*" element={<div>no encontrado</div>} />
+        <Route path="*" element={<div>No encontrado</div>} />
       </Routes>
     </AppLayout>
+    
   )
+  
   
 }
 
