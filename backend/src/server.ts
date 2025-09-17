@@ -13,8 +13,7 @@ import { errorHandler } from './core/error_handler'
 import roles from './routes/roles'
 import path from 'path'
 import facturas from './routes/facturas'
-
-
+import asistencia from './routes/asistencia'   // <-- NUEVO
 
 dotenv.config()
 const app = express()
@@ -25,6 +24,7 @@ app.use(cookieParser())
 
 app.use('/auth', auth)
 app.use(authMiddleware)
+
 app.use(perfil)
 app.use(niveles)
 app.use(subniveles)
@@ -33,7 +33,7 @@ app.use(usuarios)
 app.use(roles)
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 app.use(facturas)
-
+app.use(asistencia)                           // <-- NUEVO
 
 app.use(errorHandler)
 app.listen(3000, ()=> console.log('api lista en http://localhost:3000'))

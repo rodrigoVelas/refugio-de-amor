@@ -60,6 +60,20 @@ async perfil_update(data:any){
     const r = await fetch('http://localhost:3000/ninos/'+id, { credentials:'include' })
     return r.json()
   },
+// asistencia
+async asistencia_list(){ const r=await fetch('http://localhost:3000/asistencia',{credentials:'include'}); return r.json() },
+async asistencia_create(d:any){ 
+  const r=await fetch('http://localhost:3000/asistencia',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify(d)})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+},
+async asistencia_editar_load(id:string){
+  const r=await fetch('http://localhost:3000/asistencia/'+id+'/editar',{credentials:'include'})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+},
+async asistencia_set_detalles(id:string, items:any[]){
+  const r=await fetch('http://localhost:3000/asistencia/'+id+'/detalles',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({items})})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+},
 
 
 }

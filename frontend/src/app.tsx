@@ -14,11 +14,10 @@ import { api } from './lib/api'
 import { can } from './lib/permissions'
 import NinoDetalle from './pages/nino_detalle'
 import Facturas from './pages/facturas'
-
-
+import Asistencia from './pages/asistencia'
 
 function RequirePerms({ user, perms, children }:{ user:any; perms:string[]; children:any }){
-  if (!can(user, perms)) return <div>No autorizado</div>
+  if (!can(user, perms)) return <div>no autorizado</div>
   return children
 }
 
@@ -26,13 +25,14 @@ export default function App(){
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(()=>{ api.me().then(u=>{ setUser(u); setLoading(false) }).catch(()=> setLoading(false)) },[])
+  useEffect(()=>{
+    api.me().then(u=>{ setUser(u); setLoading(false) }).catch(()=> setLoading(false))
+  },[])
 
   if (loading) return <div className="alert">cargando...</div>
   if (!user) return <Login onDone={()=> location.reload()} />
 
   return (
-    
     <AppLayout user={user}>
       <Routes>
         <Route path="/" element={<Navigate to="/inicio" replace />} />
@@ -65,6 +65,11 @@ export default function App(){
             <Ninos />
           </RequirePerms>
         } />
+        <Route path="/ninos/:id" element={
+          <RequirePerms user={user} perms={['ver_ninos']}>
+            <NinoDetalle />
+          </RequirePerms>
+        } />
 
         <Route path="/admin/usuarios" element={
           <RequirePerms user={user} perms={['ver_usuarios']}>
@@ -76,24 +81,24 @@ export default function App(){
             <Roles />
           </RequirePerms>
         } />
-        <Route path="/facturas" element={
-  <RequirePerms user={user} perms={['facturas_ver_propias','facturas_ver_todas']}>
-    <Facturas />
-  </RequirePerms>
-} />
 
-<Route path="/ninos/:id" element={
-  <RequirePerms user={user} perms={['ver_ninos']}>
-    <NinoDetalle />
-  </RequirePerms>
-  
-} />
-        <Route path="*" element={<div>No encontrado</div>} />
+        <Route path="/facturas" element={
+          <RequirePerms user={user} perms={['facturas_ver_propias','facturas_ver_todas']}>
+            <Facturas />
+          </RequirePerms>
+        } />
+
+        {/* asistencia: la pagina lista, crea y edita en modal.
+           ver: asistencia_ver_propias o asistencia_ver_todas
+           crear lo valida el backend con asistencia_crear */}
+        <Route path="/asistencia" element={
+          <RequirePerms user={user} perms={['asistencia_ver_propias','asistencia_ver_todas']}>
+            <Asistencia />
+          </RequirePerms>
+        } />
+
+        <Route path="*" element={<div>no encontrado</div>} />
       </Routes>
     </AppLayout>
-    
   )
-  
-  
 }
-

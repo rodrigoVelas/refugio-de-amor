@@ -70,22 +70,22 @@ export default function Facturas(){
 
   return (
     <div>
-      <h1>facturas</h1>
+      <h1>Facturas</h1>
 
       {puedeSubir && (
         <div style={{marginBottom:8}}>
-          <button className="btn" onClick={()=>setOpen(true)}>subir factura</button>
+          <button className="btn" onClick={()=>setOpen(true)}>Subir factura</button>
         </div>
       )}
 
       <div className="alert" style={{marginBottom:8}}>
-        {verTodas ? 'viendo todas las facturas' : 'viendo mi historial'}
+        {verTodas ? 'Viendo todas las facturas' : 'Viendo mi historial'}
       </div>
 
       {loading ? (
         <div className="loading">cargando...</div>
       ) : rows.length === 0 ? (
-        <div className="alert">no hay facturas</div>
+        <div className="alert">No hay facturas</div>
       ) : (
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px,1fr))', gap:12}}>
           {rows.map(x=>(
@@ -95,9 +95,9 @@ export default function Facturas(){
                 {x.fecha || '-'} {x.total!=null ? `· Q ${x.total}` : ''} {x.email ? `· ${x.email}` : ''}
               </div>
               <div style={{display:'flex', gap:8}}>
-                <button className="btn" onClick={()=>abrirImagen(x.id)}>ver</button>
+                <button className="btn" onClick={()=>abrirImagen(x.id)}>Ver</button>
                 {!verTodas && (
-                  <button className="btn" onClick={()=>eliminar(x.id)}>eliminar</button>
+                  <button className="btn" onClick={()=>eliminar(x.id)}>Eliminar</button>
                 )}
               </div>
             </div>
@@ -107,17 +107,17 @@ export default function Facturas(){
 
       <Modal open={open} title="subir factura" onClose={()=>setOpen(false)}
         actions={<>
-          <button className="btn" onClick={subir} disabled={saving}>{saving?'subiendo...':'subir'}</button>
-          <button className="linklike" onClick={()=>setOpen(false)}>cancelar</button>
+          <button className="btn" onClick={subir} disabled={saving}>{saving?'subiendo...':'Subir'}</button>
+          <button className="linklike" onClick={()=>setOpen(false)}>Cancelar</button>
         </>}>
         <div className="form">
-          <label>imagen (jpg, png, heic, etc)</label>
+          <label>Imagen (jpg, png, heic, etc)</label>
           <input className="input" type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0]||null)} />
-          <label>descripcion</label>
+          <label>Descripcion de la factura</label>
           <input className="input" value={f.descripcion} onChange={e=>setF({...f, descripcion:e.target.value})} />
-          <label>total</label>
+          <label>Total de la factura</label>
           <input className="input" type="number" step="0.01" value={f.total} onChange={e=>setF({...f, total:e.target.value})} />
-          <label>fecha</label>
+          <label>Fecha de subida de factura</label>
           <input className="input" type="date" value={f.fecha} onChange={e=>setF({...f, fecha:e.target.value})} />
         </div>
       </Modal>
