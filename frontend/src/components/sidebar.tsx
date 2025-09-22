@@ -14,7 +14,7 @@ export default function Sidebar({ user }:{ user:any }){
     { label:'Facturas', route:'/facturas', perms:['facturas_ver_propias','facturas_ver_todas'] },
 
     { label:'Usuarios', route:'/admin/usuarios', perms:['ver_usuarios'] },
-    { label:'Roles', route:'/admin/roles', perms:['ver_roles'] },
+   // { label:'Roles', route:'/admin/roles', perms:['ver_roles'] },
   ]
 
   return (
