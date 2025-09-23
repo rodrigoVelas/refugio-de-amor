@@ -15,8 +15,10 @@ export default function Sidebar({ user }:{ user:any }){
 
     { label:'Usuarios', route:'/admin/usuarios', perms:['ver_usuarios'] },
    // { label:'Roles', route:'/admin/roles', perms:['ver_roles'] },
-  ]
+   { label:'Actividades', route:'/actividades', perms:['actividades_ver_calendario'] },
 
+  ]
+  
   return (
     <aside className="sidebar">
       <ul>

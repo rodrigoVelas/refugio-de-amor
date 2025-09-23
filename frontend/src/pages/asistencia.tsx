@@ -48,7 +48,6 @@ export default function Asistencia(){
       setSesionId(id)
       setTituloModal(esNueva ? 'marcar asistencia' : 'editar asistencia')
 
-      // construir marcas iniciales
       const map:Record<string,Marca> = {}
       const byId:Record<string, any> = {}
       d.detalles.forEach((m:any)=>{ byId[m.nino_id] = m })
@@ -99,6 +98,17 @@ export default function Asistencia(){
     }
   }
 
+  const eliminarSesion = async (id:string)=>{
+    if(!window.confirm('¿estas seguro de eliminar esta sesion de asistencia?')) return
+    try {
+      await api.asistencia_delete(id)
+      await load()
+    } catch (e:any){
+      console.error('eliminarSesion error:', e)
+      alert(e?.message || 'no se pudo eliminar la sesion')
+    }
+  }
+
   return (
     <div>
       <h1>Asistencia</h1>
@@ -108,15 +118,17 @@ export default function Asistencia(){
       </div>
 
       <table className="table">
-        <thead><tr><th>Fecha</th><th>Hora</th><th>Presentes</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>hora</th><th>Presentes</th><th>Acciones</th></tr></thead>
         <tbody>
           {rows.map(s=>(
             <tr key={s.id}>
               <td>{s.fecha}</td>
               <td>{s.hora}</td>
               <td>{s.presentes ?? 0}</td>
-              <td>
-                <button className="btn" onClick={()=>abrirEditorDeSesion(s.id, false)}>editar</button>
+              <td className="flex" style={{gap:8}}>
+                <button className="btn" onClick={()=>abrirEditorDeSesion(s.id, false)}>Editar</button>
+                <a className="btn" href={api.asistencia_export_url(s.id,'csv')} target="_blank" rel="noreferrer">Descargar asistencia</a>
+                <button className="btn" onClick={()=>eliminarSesion(s.id)}>eliminar</button>
               </td>
             </tr>
           ))}
@@ -127,12 +139,12 @@ export default function Asistencia(){
       <Modal open={openNueva} title="nueva sesion" onClose={()=>setOpenNueva(false)}
         actions={<>
           <button className="btn" onClick={crearSesion} disabled={saving}>{saving?'creando...':'crear y marcar'}</button>
-          <button className="linklike" onClick={()=>setOpenNueva(false)}>cancelar</button>
+          <button className="linklike" onClick={()=>setOpenNueva(false)}>Cancelar</button>
         </>}>
         <div className="form">
-          <label>fecha</label>
+          <label>Fecha</label>
           <input className="input" type="date" value={f.fecha} onChange={e=>setF({...f, fecha:e.target.value})} />
-          <label>hora</label>
+          <label>Hora</label>
           <input className="input" type="time" value={f.hora} onChange={e=>setF({...f, hora:e.target.value})} />
         </div>
       </Modal>
@@ -140,22 +152,27 @@ export default function Asistencia(){
       {/* modal marcar/editar */}
       <Modal open={openMarcar} title={tituloModal} onClose={()=>setOpenMarcar(false)}
         actions={<>
+          {sesionId && (
+            <a className="btn" href={api.asistencia_export_url(sesionId,'csv')} target="_blank" rel="noreferrer">
+              Descargar asistencia
+            </a>
+          )}
           <button className="btn" onClick={guardarMarcas}>guardar</button>
-          <button className="linklike" onClick={()=>setOpenMarcar(false)}>cancelar</button>
+          <button className="linklike" onClick={()=>setOpenMarcar(false)}>Cancelar</button>
         </>}>
-        {ninos.length===0 ? <div className="alert">no tienes ninos asignados</div> : (
+        {ninos.length===0 ? <div className="alert">No tienes ninos asignados</div> : (
           <div style={{display:'grid', gap:10}}>
             <div style={{display:'flex', gap:8}}>
-              <button className="btn" onClick={seleccionarTodos}>seleccionar todos</button>
-              <button className="btn" onClick={limpiarTodos}>limpiar</button>
+              <button className="btn" onClick={seleccionarTodos}>Seleccionar todos</button>
+              <button className="btn" onClick={limpiarTodos}>Limpiar</button>
             </div>
             {ninos.map(n=>(
               <div key={n.id} className="card" style={{display:'grid', gap:6}}>
                 <div style={{fontWeight:700}}>{n.codigo} · {n.nombres} {n.apellidos}</div>
                 <div style={{display:'flex', gap:10, alignItems:'center'}}>
-                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='presente')} onChange={()=>setEstado(n.id,'presente')} /> presente</label>
-                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='ausente')} onChange={()=>setEstado(n.id,'ausente')} /> ausente</label>
-                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='suplente')} onChange={()=>setEstado(n.id,'suplente')} /> suplente</label>
+                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='presente')} onChange={()=>setEstado(n.id,'presente')} /> Presente</label>
+                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='ausente')} onChange={()=>setEstado(n.id,'ausente')} /> Ausente</label>
+                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='suplente')} onChange={()=>setEstado(n.id,'suplente')} /> Suplente</label>
                 </div>
                 <input className="input" placeholder="nota (opcional)" value={marcas[n.id]?.nota||''} onChange={e=>setNota(n.id, e.target.value)} />
               </div>

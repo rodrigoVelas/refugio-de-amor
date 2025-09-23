@@ -15,6 +15,8 @@ import { can } from './lib/permissions'
 import NinoDetalle from './pages/nino_detalle'
 import Facturas from './pages/facturas'
 import Asistencia from './pages/asistencia'
+import Actividades from './pages/actividades'
+
 
 function RequirePerms({ user, perms, children }:{ user:any; perms:string[]; children:any }){
   if (!can(user, perms)) return <div>no autorizado</div>
@@ -96,6 +98,16 @@ export default function App(){
             <Asistencia />
           </RequirePerms>
         } />
+
+        import Actividades from './pages/actividades'
+
+
+<Route path="/actividades" element={
+  <RequirePerms user={user} perms={['actividades_ver_calendario']}>
+    <Actividades user={user} />
+  </RequirePerms>
+} />
+
 
         <Route path="*" element={<div>no encontrado</div>} />
       </Routes>

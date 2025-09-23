@@ -1088,3 +1088,41 @@ body, #root {
     border: 1px solid #ccc;
   }
 }
+/* celda de dia */
+.day-cell{ padding:8px 8px; cursor:pointer; transition:background .15s ease }
+.day-cell:hover{ background: rgba(59,130,246,.08) }
+.day-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px }
+.day-num{ font-weight:800; opacity:.8 }
+.btn-dot{ width:22px; height:22px; border-radius:9999px; border:1px solid var(--border); background:var(--card); cursor:pointer; line-height:20px }
+.btn-dot:hover{ background:#0ea5e9; color:#fff; border-color:transparent }
+
+/* lista dentro del dia */
+.day-list{ max-height:120px; overflow:auto; padding-right:2px }
+.day-empty{ font-size:.8rem; opacity:.5 }
+.day-item{ display:flex; align-items:center; gap:6px; background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.28); border-radius:10px; padding:4px 6px; margin-bottom:6px }
+.day-item .time{ font-size:.75rem; opacity:.8; min-width:42px }
+.day-item .title{ flex:1 }
+.day-item .item-actions{ display:flex; gap:4px }
+.day-item .mini{ border:1px solid var(--border); background:var(--card); border-radius:6px; padding:2px 6px; cursor:pointer }
+.day-item .mini:hover{ background:#0ea5e9; color:#fff; border-color:transparent }
+.day-item .mini.danger:hover{ background:#ef4444 }
+
+.day-item.done{ opacity:.8; background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.28) }
+
+/* toast */
+.toast{
+  position:fixed; right:16px; top:16px; z-index:9999;
+  background:#111827; color:#e5e7eb; border:1px solid #374151;
+  padding:10px 14px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.35);
+  animation:slidein .2s ease-out;
+}
+@keyframes slidein{ from{ transform:translateY(-10px); opacity:.0 } to{ transform:translateY(0); opacity:1 } }
+
+.desc{
+  max-width: 420px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: .85;
+  font-size: .92rem;
+}
