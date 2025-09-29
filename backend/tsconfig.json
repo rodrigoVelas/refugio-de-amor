@@ -12,8 +12,7 @@
     "strict": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node", "express"],
-    "noEmitOnError": true,
+    "types": ["node"],
     "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts"],
