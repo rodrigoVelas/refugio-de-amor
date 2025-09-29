@@ -369,7 +369,7 @@ export default function Inicio() {
               <div style={styles.featureArrow} className="feature-arrow">→</div>
             </a>
 
-            <a href="/actividades-pendientes" style={styles.featureCard} className="feature-card">
+            <a href="/actividades" style={styles.featureCard} className="feature-card">
               <div style={styles.featureIcon} className="feature-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M9 11H15M9 15H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L19.7071 9.70711C19.8946 9.89464 20 10.149 20 10.4142V19C20 20.1046 19.1046 21 18 21H17ZM17 21V11H13V7H7V19H17Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -415,7 +415,7 @@ export default function Inicio() {
             <p style={{fontSize: '1.25rem', opacity: 0.9, marginBottom: '2rem'}}>Todo lo que necesitas para brindar el mejor cuidado y seguimiento</p>
             <div style={styles.ctaButtons}>
               <a href="/ninos" style={{...styles.btn, ...styles.btnPrimary}} className="btn-primary">Comenzar Ahora</a>
-              <a href="/actividades-pendientes" style={{...styles.btn, ...styles.btnOutline}} className="btn-outline">Ver Actividades</a>
+              <a href="/actividades" style={{...styles.btn, ...styles.btnOutline}} className="btn-outline">Ver Actividades</a>
             </div>
           </div>
         </div>
