@@ -1,18 +1,18 @@
-// api.ts — usa la API configurada por variable de entorno
-// Vercel: VITE_API_URL = https://refugio-de-amor.onrender.com
-// Dev local (opcional): VITE_API_URL = http://localhost:3000
+// src/lib/api.ts
 
-const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+// Decide la base de la API:
+// - Dev => localhost:3000
+// - Prod => VITE_API_URL (Render)
+// - Fallback => mismo origen ('')
+const RAW_BASE =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? 'https://refugio-de-amor.onrender.com' : '');
 
-// Une base + path asegurando que quede un solo "/"
-function url(path: string) {
-  const p = path.startsWith('/') ? path : `/${path}`;
-  return `${BASE}${p}`;
-}
+export const BASE = (RAW_BASE || '').replace(/\/+$/, '');
 
 async function apiFetch(path: string, init: RequestInit = {}) {
-  const r = await fetch(url(path), {
-    credentials: 'include',
+  const r = await fetch(`${BASE}${path}`, {
+    credentials: 'include', // cookies para auth
     ...init,
   });
   return r;
@@ -195,11 +195,12 @@ export const api = {
     return r.json();
   },
   async facturas_subir(form: FormData) {
+    // ¡NO seteamos content-type aquí! El navegador lo arma con boundary.
     const r = await apiFetch('/facturas/upload', { method: 'POST', body: form });
     return r.json();
   },
   facturas_img(id: string) {
-    return url(`/facturas/${id}/imagen`);
+    return `${BASE}/facturas/${id}/imagen`;
   },
   async facturas_update(id: string, data: any) {
     const r = await apiFetch(`/facturas/${id}`, {
@@ -259,7 +260,7 @@ export const api = {
     return r.json();
   },
   asistencia_export_url(id: string, fmt: 'csv' = 'csv') {
-    return url(`/asistencia/${id}/export.${fmt}`);
+    return `${BASE}/asistencia/${id}/export.${fmt}`;
   },
   async asistencia_delete(id: string) {
     const r = await apiFetch(`/asistencia/${id}`, { method: 'DELETE' });
