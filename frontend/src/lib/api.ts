@@ -1,10 +1,17 @@
-// api.ts — versión prod (mismo origen, sin localhost)
-// Si algún día lo querés apuntar a otro host, poné:
-// const BASE = 'https://tu-dominio.com';
-const BASE = '';
+// api.ts — usa la API configurada por variable de entorno
+// Vercel: VITE_API_URL = https://refugio-de-amor.onrender.com
+// Dev local (opcional): VITE_API_URL = http://localhost:3000
+
+const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+
+// Une base + path asegurando que quede un solo "/"
+function url(path: string) {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${BASE}${p}`;
+}
 
 async function apiFetch(path: string, init: RequestInit = {}) {
-  const r = await fetch(`${BASE}${path}`, {
+  const r = await fetch(url(path), {
     credentials: 'include',
     ...init,
   });
@@ -188,12 +195,11 @@ export const api = {
     return r.json();
   },
   async facturas_subir(form: FormData) {
-    // ¡NO seteamos content-type aquí! El navegador lo arma con boundary.
     const r = await apiFetch('/facturas/upload', { method: 'POST', body: form });
     return r.json();
   },
   facturas_img(id: string) {
-    return `${BASE}/facturas/${id}/imagen`;
+    return url(`/facturas/${id}/imagen`);
   },
   async facturas_update(id: string, data: any) {
     const r = await apiFetch(`/facturas/${id}`, {
@@ -253,7 +259,7 @@ export const api = {
     return r.json();
   },
   asistencia_export_url(id: string, fmt: 'csv' = 'csv') {
-    return `${BASE}/asistencia/${id}/export.${fmt}`;
+    return url(`/asistencia/${id}/export.${fmt}`);
   },
   async asistencia_delete(id: string) {
     const r = await apiFetch(`/asistencia/${id}`, { method: 'DELETE' });
