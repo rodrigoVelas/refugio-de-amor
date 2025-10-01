@@ -59,11 +59,12 @@ const corsOptions: CorsOptions = {
   methods: ['GET','HEAD','PUT','PATCH','POST','DELETE'],
 };
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
-app.use(express.json());
-app.use(cookieParser());
-app.set('trust proxy', 1);                     // cookies detrás de proxy (Render)
+app.use(cors({
+  origin: true,           // refleja cualquier Origin
+  credentials: true,
+  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE']
+}));
+app.options('*', cors({ origin: true, credentials: true }));  // cookies detrás de proxy (Render)
 
 /** Health */
 app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
