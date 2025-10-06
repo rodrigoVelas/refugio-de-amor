@@ -1,18 +1,24 @@
 // src/lib/api.ts
 
-// Decide la base de la API:
-// - Dev => localhost:3000
-// - Prod => VITE_API_URL (Render)
-// - Fallback => mismo origen ('')
+// Base de API:
+// - Producción: VITE_API_URL (configurada en Vercel)
+// - Desarrollo: http://localhost:3000
 const RAW_BASE =
-  import.meta.env.VITE_API_URL ??
-  (import.meta.env.DEV ? 'https://refugio-de-amor.onrender.com' : '');
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  (import.meta.env.DEV ? 'http://localhost:3000' : '');
 
+// normaliza quitando "/" final
 export const BASE = (RAW_BASE || '').replace(/\/+$/, '');
 
+// asegura que el path empiece con "/"
+function withSlash(p: string) {
+  return p.startsWith('/') ? p : `/${p}`;
+}
+
+// fetch con credenciales (cookies) habilitadas
 async function apiFetch(path: string, init: RequestInit = {}) {
-  const r = await fetch(`${BASE}${path}`, {
-    credentials: 'include', // cookies para auth
+  const r = await fetch(`${BASE}${withSlash(path)}`, {
+    credentials: 'include',
     ...init,
   });
   return r;
@@ -30,190 +36,106 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    if (!r.ok) throw new Error('login');
-    return r.json();
+    
+    const data = await r.json();
+    
+    // Debug: mostrar respuesta en consola
+    console.log('Respuesta de login:', data);
+    
+    if (!r.ok) {
+      throw new Error(data.error || 'Error de autenticación');
+    }
+    
+    return data;
   },
   async logout() {
     await apiFetch('/auth/logout', { method: 'POST' });
   },
 
   // ---------- niveles ----------
-  async niveles_list() {
-    const r = await apiFetch('/niveles');
-    return r.json();
-  },
+  async niveles_list() { const r = await apiFetch('/niveles'); return r.json(); },
   async niveles_create(data: any) {
-    const r = await apiFetch('/niveles', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch('/niveles', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
   async niveles_update(id: string, data: any) {
-    const r = await apiFetch(`/niveles/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch(`/niveles/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
-  async niveles_delete(id: string) {
-    const r = await apiFetch(`/niveles/${id}`, { method: 'DELETE' });
-    return r.json();
-  },
+  async niveles_delete(id: string) { const r = await apiFetch(`/niveles/${id}`, { method:'DELETE' }); return r.json(); },
 
   // ---------- subniveles ----------
-  async subniveles_list() {
-    const r = await apiFetch('/subniveles');
-    return r.json();
-  },
+  async subniveles_list() { const r = await apiFetch('/subniveles'); return r.json(); },
   async subniveles_create(data: any) {
-    const r = await apiFetch('/subniveles', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch('/subniveles', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
   async subniveles_update(id: string, data: any) {
-    const r = await apiFetch(`/subniveles/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch(`/subniveles/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
-  async subniveles_delete(id: string) {
-    const r = await apiFetch(`/subniveles/${id}`, { method: 'DELETE' });
-    return r.json();
-  },
+  async subniveles_delete(id: string) { const r = await apiFetch(`/subniveles/${id}`, { method:'DELETE' }); return r.json(); },
 
   // ---------- niños ----------
-  async ninos_list(q = '') {
-    const r = await apiFetch(`/ninos?q=${encodeURIComponent(q)}`);
-    return r.json();
-  },
+  async ninos_list(q = '') { const r = await apiFetch(`/ninos?q=${encodeURIComponent(q)}`); return r.json(); },
   async ninos_create(data: any) {
-    const r = await apiFetch('/ninos', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch('/ninos', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
   async ninos_update(id: string, data: any) {
-    const r = await apiFetch(`/ninos/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch(`/ninos/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
-  async ninos_delete(id: string) {
-    const r = await apiFetch(`/ninos/${id}`, { method: 'DELETE' });
-    return r.json();
-  },
-  async ninos_get(id: string) {
-    const r = await apiFetch(`/ninos/${id}`);
-    return r.json();
-  },
+  async ninos_delete(id: string) { const r = await apiFetch(`/ninos/${id}`, { method:'DELETE' }); return r.json(); },
+  async ninos_get(id: string) { const r = await apiFetch(`/ninos/${id}`); return r.json(); },
 
   // ---------- usuarios ----------
-  async usuarios_list() {
-    const r = await apiFetch('/usuarios');
-    return r.json();
-  },
+  async usuarios_list() { const r = await apiFetch('/usuarios'); return r.json(); },
   async usuarios_create(data: any) {
-    const r = await apiFetch('/usuarios', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch('/usuarios', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
   async usuarios_update(id: string, data: any) {
-    const r = await apiFetch(`/usuarios/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch(`/usuarios/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
-  async usuarios_delete(id: string) {
-    const r = await apiFetch(`/usuarios/${id}`, { method: 'DELETE' });
-    return r.json();
-  },
+  async usuarios_delete(id: string) { const r = await apiFetch(`/usuarios/${id}`, { method:'DELETE' }); return r.json(); },
   async usuarios_por_rol(role: string) {
     const r = await apiFetch(`/usuarios?role=${encodeURIComponent(role)}`);
     return r.json();
   },
 
-  // ---------- roles y permisos ----------
-  async roles_list() {
-    const r = await apiFetch('/roles');
-    return r.json();
-  },
+  // ---------- roles / permisos ----------
+  async roles_list() { const r = await apiFetch('/roles'); return r.json(); },
   async roles_create(data: any) {
-    const r = await apiFetch('/roles', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch('/roles', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
   async roles_update(id: string, data: any) {
-    const r = await apiFetch(`/roles/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch(`/roles/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
-  async roles_delete(id: string) {
-    const r = await apiFetch(`/roles/${id}`, { method: 'DELETE' });
-    return r.json();
-  },
+  async roles_delete(id: string) { const r = await apiFetch(`/roles/${id}`, { method:'DELETE' }); return r.json(); },
   async roles_set_perms(id: string, claves: string[]) {
-    const r = await apiFetch(`/roles/${id}/permisos`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ claves }),
-    });
+    const r = await apiFetch(`/roles/${id}/permisos`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({claves}) });
     return r.json();
   },
-  async permisos_list() {
-    const r = await apiFetch('/permisos');
-    return r.json();
-  },
+  async permisos_list() { const r = await apiFetch('/permisos'); return r.json(); },
 
   // ---------- facturas ----------
-  async facturas_list() {
-    const r = await apiFetch('/facturas');
-    return r.json();
-  },
+  async facturas_list() { const r = await apiFetch('/facturas'); return r.json(); },
   async facturas_subir(form: FormData) {
-    // ¡NO seteamos content-type aquí! El navegador lo arma con boundary.
-    const r = await apiFetch('/facturas/upload', { method: 'POST', body: form });
+    const r = await apiFetch('/facturas/upload', { method:'POST', body: form });
     return r.json();
   },
-  facturas_img(id: string) {
-    return `${BASE}/facturas/${id}/imagen`;
-  },
+  facturas_img(id: string) { return `${BASE}/facturas/${id}/imagen`; },
   async facturas_update(id: string, data: any) {
-    const r = await apiFetch(`/facturas/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch(`/facturas/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
   },
-  async facturas_delete(id: string) {
-    const r = await apiFetch(`/facturas/${id}`, { method: 'DELETE' });
-    return r.json();
-  },
+  async facturas_delete(id: string) { const r = await apiFetch(`/facturas/${id}`, { method:'DELETE' }); return r.json(); },
 
   // ---------- perfil ----------
   async perfil_get() {
@@ -222,26 +144,15 @@ export const api = {
     return r.json();
   },
   async perfil_update(data: any) {
-    const r = await apiFetch('/perfil', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch('/perfil', { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     if (!r.ok) throw new Error('no se pudo guardar el perfil');
     return r.json();
   },
 
   // ---------- asistencia ----------
-  async asistencia_list() {
-    const r = await apiFetch('/asistencia');
-    return r.json();
-  },
+  async asistencia_list() { const r = await apiFetch('/asistencia'); return r.json(); },
   async asistencia_create(d: any) {
-    const r = await apiFetch('/asistencia', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(d || {}),
-    });
+    const r = await apiFetch('/asistencia', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(d || {}) });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
@@ -252,8 +163,8 @@ export const api = {
   },
   async asistencia_set_detalles(id: string, items: any[], fecha?: string, hora?: string) {
     const r = await apiFetch(`/asistencia/${id}/detalles`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method:'POST',
+      headers:{'content-type':'application/json'},
       body: JSON.stringify({ items, fecha, hora }),
     });
     if (!r.ok) throw new Error(await r.text());
@@ -263,7 +174,7 @@ export const api = {
     return `${BASE}/asistencia/${id}/export.${fmt}`;
   },
   async asistencia_delete(id: string) {
-    const r = await apiFetch(`/asistencia/${id}`, { method: 'DELETE' });
+    const r = await apiFetch(`/asistencia/${id}`, { method:'DELETE' });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
@@ -275,25 +186,17 @@ export const api = {
     return r.json();
   },
   async actividades_create(data: any) {
-    const r = await apiFetch('/actividades', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch('/actividades', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
   async actividades_update(id: string, data: any) {
-    const r = await apiFetch(`/actividades/${id}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const r = await apiFetch(`/actividades/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
   async actividades_delete(id: string) {
-    const r = await apiFetch(`/actividades/${id}`, { method: 'DELETE' });
+    const r = await apiFetch(`/actividades/${id}`, { method:'DELETE' });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
