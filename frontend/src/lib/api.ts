@@ -5,7 +5,7 @@
 // - Desarrollo: http://localhost:3000
 const RAW_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
-  (import.meta.env.DEV ? 'http://localhost:3000' : '');
+  (import.meta.env.DEV ? 'http://localhost:3000' : 'https://refugio-de-amor.onrender.com');
 
 // normaliza quitando "/" final
 export const BASE = (RAW_BASE || '').replace(/\/+$/, '');
