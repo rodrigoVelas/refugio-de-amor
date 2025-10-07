@@ -1,11 +1,7 @@
 // src/lib/api.ts
 
-// Base de API:
-// - Producción: VITE_API_URL (configurada en Vercel)
-// - Desarrollo: http://localhost:3000
-const RAW_BASE =
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  (import.meta.env.DEV ? 'http://localhost:3000' : 'https://refugio-de-amor.onrender.com');
+// Base de API - FORZADO PARA PRODUCCIÓN
+const RAW_BASE = 'https://refugio-de-amor.onrender.com'
 
 // normaliza quitando "/" final
 export const BASE = (RAW_BASE || '').replace(/\/+$/, '');
@@ -39,7 +35,6 @@ export const api = {
     
     const data = await r.json();
     
-    // Debug: mostrar respuesta en consola
     console.log('Respuesta de login:', data);
     
     if (!r.ok) {
