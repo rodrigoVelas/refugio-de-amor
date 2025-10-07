@@ -97,17 +97,17 @@ export default function Usuarios(){
 
       <div style={{display:'flex', gap:8, marginBottom:8}}>
         <input className="input" placeholder="buscar por nombre o email" value={q} onChange={e=>setQ(e.target.value)} />
-        {puedeEditar && <button className="btn" onClick={abrirNuevo}>nuevo usuario</button>}
+        {puedeEditar && <button className="btn" onClick={abrirNuevo}>Nuevo usuario</button>}
       </div>
 
       <table className="table">
         <thead>
           <tr>
-            <th>email</th>
-            <th>nombres</th>
-            <th>apellidos</th>
-            <th>roles</th>
-            {puedeEditar && <th>acciones</th>}
+            <th>Email</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th>Roles</th>
+            {puedeEditar && <th>Acciones</th>}
           </tr>
         </thead>
         <tbody>
@@ -119,8 +119,8 @@ export default function Usuarios(){
               <td>{(u.roles||[]).join(', ')}</td>
               {puedeEditar && (
                 <td>
-                  <button className="btn" onClick={()=>abrirEditar(u)}>editar</button>{' '}
-                  <button className="btn" onClick={()=>eliminar(u.id)}>eliminar</button>
+                  <button className="btn" onClick={()=>abrirEditar(u)}>Editar</button>{' '}
+                  <button className="btn" onClick={()=>eliminar(u.id)}>Eliminar</button>
                 </td>
               )}
             </tr>
@@ -134,21 +134,21 @@ export default function Usuarios(){
         onClose={cerrar}
         actions={<>
           <button className="btn" onClick={guardar} disabled={saving}>{saving?'guardando...':'guardar'}</button>
-          <button className="linklike" onClick={cerrar}>cancelar</button>
+          <button className="linklike" onClick={cerrar}>Cancelar</button>
         </>}
       >
         {edit && (
           <div className="form">
-            <label>email</label>
+            <label>Email</label>
             <input className="input" value={edit.email} onChange={e=>setEdit({...edit, email:e.target.value})} required />
 
-            <label>nombres</label>
+            <label>Nombres</label>
             <input className="input" value={edit.nombres} onChange={e=>setEdit({...edit, nombres:e.target.value})} required />
 
-            <label>apellidos</label>
+            <label>Apellidos</label>
             <input className="input" value={edit.apellidos} onChange={e=>setEdit({...edit, apellidos:e.target.value})} required />
 
-            <label>contrasena (dejar vacio para no cambiar)</label>
+            <label>Contraseña</label>
             <input className="input" type="password" value={edit.password} onChange={e=>setEdit({...edit, password:e.target.value})} placeholder="********" />
 
             <label>rol</label>

@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken'
 const JWT_SECRET = (process.env.JWT_SECRET || process.env.jwt_secret || '').toString()
 
 export async function authMiddleware(req: any, res: Response, next: NextFunction) {
-  console.log('🔒 authMiddleware - Ruta:', req.method, req.path)
+ // console.log('🔒 authMiddleware - Ruta:', req.method, req.path)
   
   try {
     const token = req.cookies?.token
@@ -21,7 +21,7 @@ export async function authMiddleware(req: any, res: Response, next: NextFunction
       rol: decoded.rol 
     }
     
-    console.log('🔒 authMiddleware - Usuario OK:', req.user.email, '- Ruta:', req.path)
+   // console.log('🔒 authMiddleware - Usuario OK:', req.user.email, '- Ruta:', req.path)
     
     next()
   } catch (error) {
