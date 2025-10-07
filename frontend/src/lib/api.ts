@@ -1,7 +1,9 @@
 // src/lib/api.ts
 
-// Base de API - FORZADO PARA PRODUCCIÓN
-const RAW_BASE = 'https://refugio-de-amor.onrender.com'
+// Detectar entorno: local usa localhost, producción usa Render
+const RAW_BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:3000'
+  : 'https://refugio-de-amor.onrender.com'
 
 // normaliza quitando "/" final
 export const BASE = (RAW_BASE || '').replace(/\/+$/, '');
