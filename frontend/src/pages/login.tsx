@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../lib/api' // Importar el api que ya configuramos
+import { api } from '../lib/api'
 
 export default function Login({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState('')
@@ -15,9 +15,8 @@ export default function Login({ onDone }: { onDone: () => void }) {
     setLoading(true)
 
     try {
-      // Usar api.login() en vez de fetch directo
       const data = await api.login(email.trim(), password)
-
+      
       console.log('Respuesta del servidor:', data)
 
       if (data.ok || data.success) {
@@ -31,11 +30,17 @@ export default function Login({ onDone }: { onDone: () => void }) {
 
         console.log('Login exitoso, llamando a onDone()')
         
-        // Llamar a onDone para actualizar el estado del App
+        // Primero actualizar el estado del App
         onDone()
         
-        // Si necesitas navegar a una ruta específica:
-        // navigate('/inicio')
+        // Esperar un momento para que onDone termine de actualizar el estado
+        // Luego navegar a la ruta correspondiente
+        setTimeout(() => {
+          const redirectPath = data.redirectTo || '/inicio'
+          console.log('Navegando a:', redirectPath)
+          navigate(redirectPath)
+        }, 100)
+        
       } else {
         setErr(data.error || 'Inicio de sesión inválido')
       }
@@ -82,8 +87,8 @@ export default function Login({ onDone }: { onDone: () => void }) {
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
 
-          <div style={{ fontSize: 12, color: '#64748b' }}>
-            
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: '1rem' }}>
+            demo: directora@refugio.local, contabilidad@refugio.local, colaborador@refugio.local (clave: password)
           </div>
         </form>
       </div>
