@@ -88,7 +88,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
           <div style={{ fontSize: 12, color: '#64748b' }}>
-            demo: directora@refugio.local, contabilidad@refugio.local, colaborador@refugio.local (clave: password)
+           
           </div>
         </form>
       </div>

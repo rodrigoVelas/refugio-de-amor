@@ -10,10 +10,10 @@ function getBase(): string {
   const hostname = window.location.hostname
   
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:3000'
+    return 'https://refugio-de-amor.onrender.com'
   }
   
-  return 'https://refugio-de-amor.onrender.com'
+  return 'http://localhost:3000'
 }
 
 // Export BASE para compatibilidad, pero se usa getBase() en apiFetch
