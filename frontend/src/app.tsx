@@ -28,26 +28,45 @@ export default function App() {
 
   const loadUser = async () => {
     try {
-      // Primero intentar cargar desde localStorage
+      // Primero intentar desde localStorage
       const storedUser = localStorage.getItem('userData')
       const storedPerms = localStorage.getItem('userPerms')
       
       if (storedUser) {
-        const userData = JSON.parse(storedUser)
-        const userPerms = storedPerms ? JSON.parse(storedPerms) : []
-        
-        console.log('Usuario desde localStorage:', userData)
-        setUser({ ...userData, perms: userPerms })
-        setLoading(false)
-        return
+        try {
+          const userData = JSON.parse(storedUser)
+          const userPerms = storedPerms ? JSON.parse(storedPerms) : []
+          
+          // Validar que tenga datos mínimos necesarios
+          if (userData && userData.id && userData.email) {
+            console.log('✅ Usuario desde localStorage:', userData)
+            setUser({ ...userData, perms: userPerms })
+            setLoading(false)
+            return
+          } else {
+            console.log('❌ Datos inválidos en localStorage, limpiando...')
+            localStorage.removeItem('userData')
+            localStorage.removeItem('userPerms')
+          }
+        } catch (parseError) {
+          console.error('❌ Error parseando localStorage:', parseError)
+          localStorage.removeItem('userData')
+          localStorage.removeItem('userPerms')
+        }
       }
       
-      // Si no hay datos en localStorage, intentar desde API
+      // Si no hay datos válidos en localStorage, intentar desde API
+      console.log('🔍 Intentando cargar usuario desde API...')
       const u = await api.me()
       console.log('Usuario desde API:', u)
-      setUser(u)
+      
+      if (u && u.id) {
+        setUser(u)
+      } else {
+        setUser(null)
+      }
     } catch (error) {
-      console.error('Error cargando usuario:', error)
+      console.error('❌ Error cargando usuario:', error)
       setUser(null)
     } finally {
       setLoading(false)
@@ -58,13 +77,34 @@ export default function App() {
     loadUser()
   }, [])
 
-  if (loading) return <div className="alert">Cargando...</div>
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '100vh',
+        fontSize: '1.2rem',
+        color: '#64748b'
+      }}>
+        Cargando...
+      </div>
+    )
+  }
 
   if (!user) {
     return <Login onDone={(userData) => {
-      console.log('Login completado con datos:', userData)
-      setUser(userData)
-      setLoading(false)
+      console.log('✅ Login completado con datos:', userData)
+      
+      // Validar que los datos sean correctos
+      if (userData && userData.id && userData.email) {
+        setUser(userData)
+        setLoading(false)
+      } else {
+        console.error('❌ Datos de usuario inválidos recibidos del login')
+        alert('Error al iniciar sesión. Por favor, intenta de nuevo.')
+        localStorage.clear()
+      }
     }} />
   }
 
@@ -159,7 +199,11 @@ export default function App() {
           </RequirePerms>
         } />
         
-        <Route path="*" element={<div className="alert">Página no encontrada</div>} />
+        <Route path="*" element={
+          <div className="alert" style={{ margin: '2rem' }}>
+            Página no encontrada
+          </div>
+        } />
       </Routes>
     </AppLayout>
   )
