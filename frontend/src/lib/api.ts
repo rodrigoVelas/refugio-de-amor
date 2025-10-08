@@ -1,22 +1,29 @@
 // src/lib/api.ts
 
-// Getter que se evalúa dinámicamente en el navegador
+// FORZAR evaluación en runtime con getter
+let cachedBase: string | null = null
+
 function getBase(): string {
-  // Solo en el navegador
+  // Solo cachear en el navegador después de la primera llamada
   if (typeof window === 'undefined') {
     return 'https://refugio-de-amor.onrender.com'
   }
   
+  // No cachear, siempre evaluar
   const hostname = window.location.hostname
   
+  console.log('🔍 Detectando hostname:', hostname) // Debug
+  
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'https://refugio-de-amor.onrender.com'
+    console.log('✅ Usando localhost:3000')
+    return 'http://localhost:3000'
   }
   
-  return 'http://localhost:3000'
+  console.log('✅ Usando Render:', 'https://refugio-de-amor.onrender.com')
+  return 'https://refugio-de-amor.onrender.com'
 }
 
-// Export BASE para compatibilidad, pero se usa getBase() en apiFetch
+// Export como getter
 export const BASE = getBase()
 
 // asegura que el path empiece con "/"
@@ -26,8 +33,10 @@ function withSlash(p: string) {
 
 // fetch con credenciales (cookies) habilitadas
 async function apiFetch(path: string, init: RequestInit = {}) {
-  // Obtener BASE dinámicamente cada vez que se hace una petición
+  // SIEMPRE llamar a getBase() para cada petición
   const baseUrl = getBase()
+  console.log('🌐 API call a:', `${baseUrl}${withSlash(path)}`) // Debug
+  
   const r = await fetch(`${baseUrl}${withSlash(path)}`, {
     credentials: 'include',
     ...init,
