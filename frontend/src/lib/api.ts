@@ -1,7 +1,8 @@
 // src/lib/api.ts
 
-// Función que se ejecuta en el navegador, NO en build time
-function getApiBase(): string {
+// Getter que se evalúa dinámicamente en el navegador
+function getBase(): string {
+  // Solo en el navegador
   if (typeof window === 'undefined') {
     return 'https://refugio-de-amor.onrender.com'
   }
@@ -15,8 +16,8 @@ function getApiBase(): string {
   return 'https://refugio-de-amor.onrender.com'
 }
 
-// Se ejecuta cada vez que se importa, en el navegador
-export const BASE = getApiBase().replace(/\/+$/, '')
+// Export BASE para compatibilidad, pero se usa getBase() en apiFetch
+export const BASE = getBase()
 
 // asegura que el path empiece con "/"
 function withSlash(p: string) {
@@ -25,7 +26,9 @@ function withSlash(p: string) {
 
 // fetch con credenciales (cookies) habilitadas
 async function apiFetch(path: string, init: RequestInit = {}) {
-  const r = await fetch(`${BASE}${withSlash(path)}`, {
+  // Obtener BASE dinámicamente cada vez que se hace una petición
+  const baseUrl = getBase()
+  const r = await fetch(`${baseUrl}${withSlash(path)}`, {
     credentials: 'include',
     ...init,
   });
@@ -137,7 +140,7 @@ export const api = {
     const r = await apiFetch('/facturas/upload', { method:'POST', body: form });
     return r.json();
   },
-  facturas_img(id: string) { return `${BASE}/facturas/${id}/imagen`; },
+  facturas_img(id: string) { return `${getBase()}/facturas/${id}/imagen`; },
   async facturas_update(id: string, data: any) {
     const r = await apiFetch(`/facturas/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
     return r.json();
@@ -178,7 +181,7 @@ export const api = {
     return r.json();
   },
   asistencia_export_url(id: string, fmt: 'csv' = 'csv') {
-    return `${BASE}/asistencia/${id}/export.${fmt}`;
+    return `${getBase()}/asistencia/${id}/export.${fmt}`;
   },
   async asistencia_delete(id: string) {
     const r = await apiFetch(`/asistencia/${id}`, { method:'DELETE' });
