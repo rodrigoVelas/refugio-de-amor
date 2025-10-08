@@ -1,12 +1,22 @@
 // src/lib/api.ts
 
-// Detectar entorno: local usa localhost, producción usa Render
-const RAW_BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-  ? 'http://localhost:3000'
-  : 'https://refugio-de-amor.onrender.com'
+// Función que se ejecuta en el navegador, NO en build time
+function getApiBase(): string {
+  if (typeof window === 'undefined') {
+    return 'https://refugio-de-amor.onrender.com'
+  }
+  
+  const hostname = window.location.hostname
+  
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:3000'
+  }
+  
+  return 'https://refugio-de-amor.onrender.com'
+}
 
-// normaliza quitando "/" final
-export const BASE = (RAW_BASE || '').replace(/\/+$/, '');
+// Se ejecuta cada vez que se importa, en el navegador
+export const BASE = getApiBase().replace(/\/+$/, '')
 
 // asegura que el path empiece con "/"
 function withSlash(p: string) {
