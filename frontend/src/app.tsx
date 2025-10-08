@@ -28,8 +28,23 @@ export default function App() {
 
   const loadUser = async () => {
     try {
+      // Primero intentar cargar desde localStorage
+      const storedUser = localStorage.getItem('userData')
+      const storedPerms = localStorage.getItem('userPerms')
+      
+      if (storedUser) {
+        const userData = JSON.parse(storedUser)
+        const userPerms = storedPerms ? JSON.parse(storedPerms) : []
+        
+        console.log('Usuario desde localStorage:', userData)
+        setUser({ ...userData, perms: userPerms })
+        setLoading(false)
+        return
+      }
+      
+      // Si no hay datos en localStorage, intentar desde API
       const u = await api.me()
-      console.log('Usuario cargado:', u) // Debug
+      console.log('Usuario desde API:', u)
       setUser(u)
     } catch (error) {
       console.error('Error cargando usuario:', error)
@@ -46,10 +61,10 @@ export default function App() {
   if (loading) return <div className="alert">Cargando...</div>
 
   if (!user) {
-    return <Login onDone={() => {
-      console.log('Login completado, recargando usuario...')
-      setLoading(true)
-      loadUser()
+    return <Login onDone={(userData) => {
+      console.log('Login completado con datos:', userData)
+      setUser(userData)
+      setLoading(false)
     }} />
   }
 
@@ -122,6 +137,25 @@ export default function App() {
         <Route path="/actividades" element={
           <RequirePerms user={user} perms={['actividades_ver_calendario']}>
             <Actividades user={user} />
+          </RequirePerms>
+        } />
+
+        {/* Rutas de dashboards por rol */}
+        <Route path="/directora/dashboard" element={
+          <RequirePerms user={user} perms={['ver_niveles']}>
+            <Inicio />
+          </RequirePerms>
+        } />
+        
+        <Route path="/contabilidad/dashboard" element={
+          <RequirePerms user={user} perms={['facturas_ver_todas']}>
+            <Inicio />
+          </RequirePerms>
+        } />
+        
+        <Route path="/colaboradores/dashboard" element={
+          <RequirePerms user={user} perms={['ver_ninos']}>
+            <Inicio />
           </RequirePerms>
         } />
         

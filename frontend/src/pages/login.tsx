@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 
-export default function Login({ onDone }: { onDone: () => void }) {
+export default function Login({ onDone }: { onDone: (user: any) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr] = useState('')
@@ -28,13 +28,18 @@ export default function Login({ onDone }: { onDone: () => void }) {
           localStorage.setItem('userPerms', JSON.stringify(data.perms))
         }
 
-        console.log('Login exitoso, llamando a onDone()')
+        console.log('Login exitoso, pasando datos a onDone')
         
-        // Primero actualizar el estado del App
-        onDone()
+        // Preparar datos completos del usuario
+        const userData = {
+          ...data.user,
+          perms: data.perms || []
+        }
         
-        // Esperar un momento para que onDone termine de actualizar el estado
-        // Luego navegar a la ruta correspondiente
+        // Pasar los datos a App.tsx
+        onDone(userData)
+        
+        // Navegar a la ruta correspondiente
         setTimeout(() => {
           const redirectPath = data.redirectTo || '/inicio'
           console.log('Navegando a:', redirectPath)
@@ -88,7 +93,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
           </button>
 
           <div style={{ fontSize: 12, color: '#64748b', marginTop: '1rem' }}>
-            demo: directora@refugio.local, contabilidad@refugio.local, colaborador@refugio.local (clave: password)
+            
           </div>
         </form>
       </div>
