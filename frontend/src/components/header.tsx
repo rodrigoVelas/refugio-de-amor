@@ -100,7 +100,7 @@ export default function Header({ user }: { user: any }) {
             title='Cerrar Sesión'
             type='button'
           >
-            <i className='material-icons'>logout</i>
+            <i className='material-icons'></i>
             <span className='logout-text'>Cerrar Sesión</span>
           </button>
         </div>
