@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Inicio() {
   const styles = {
     inicioContainer: {
@@ -347,7 +349,7 @@ export default function Inicio() {
           </div>
 
           <div style={styles.featuresGrid} className="features-grid">
-            <a href="/ninos" style={styles.featureCard} className="feature-card">
+            <Link to="/ninos" style={styles.featureCard} className="feature-card">
               <div style={styles.featureIcon} className="feature-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M16 7C16 9.20914 14.2091 11 12 11C9.79086 11 8 9.20914 8 7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -367,9 +369,9 @@ export default function Inicio() {
                 </div>
               </div>
               <div style={styles.featureArrow} className="feature-arrow">→</div>
-            </a>
+            </Link>
 
-            <a href="/actividades" style={styles.featureCard} className="feature-card">
+            <Link to="/actividades" style={styles.featureCard} className="feature-card">
               <div style={styles.featureIcon} className="feature-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M9 11H15M9 15H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L19.7071 9.70711C19.8946 9.89464 20 10.149 20 10.4142V19C20 20.1046 19.1046 21 18 21H17ZM17 21V11H13V7H7V19H17Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -388,13 +390,13 @@ export default function Inicio() {
                 </div>
               </div>
               <div style={styles.featureArrow} className="feature-arrow">→</div>
-            </a>
+            </Link>
           </div>
         </div>
 
         {/* Additional Features */}
         <div style={styles.additionalFeatures}>
-          <div style={styles.additionalGrid}>
+          <div style={styles.additionalGrid} className="additional-grid">
             <div style={styles.additionalCard}>
               <div style={styles.additionalIcon}>📋</div>
               <h4 style={{fontSize: '1.25rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.75rem'}}>Gestión de Actividades</h4>
@@ -414,8 +416,12 @@ export default function Inicio() {
             <h2 style={{fontSize: '2.5rem', fontWeight: 700, marginBottom: '1rem'}}>Comienza a gestionar tu app de refugio</h2>
             <p style={{fontSize: '1.25rem', opacity: 0.9, marginBottom: '2rem'}}>Todo lo que necesitas para brindar el mejor cuidado y seguimiento</p>
             <div style={styles.ctaButtons}>
-              <a href="/ninos" style={{...styles.btn, ...styles.btnPrimary}} className="btn-primary">Comenzar Ahora</a>
-              <a href="/actividades" style={{...styles.btn, ...styles.btnOutline}} className="btn-outline">Ver Actividades</a>
+              <Link to="/ninos" style={{...styles.btn, ...styles.btnPrimary}} className="btn-primary">
+                Comenzar Ahora
+              </Link>
+              <Link to="/actividades" style={{...styles.btn, ...styles.btnOutline}} className="btn-outline">
+                Ver Actividades
+              </Link>
             </div>
           </div>
         </div>

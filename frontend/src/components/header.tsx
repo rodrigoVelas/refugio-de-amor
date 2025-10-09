@@ -1,5 +1,6 @@
 import { api } from '../lib/api'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 export default function Header({ user }: { user: any }) {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -86,10 +87,10 @@ export default function Header({ user }: { user: any }) {
                   <p>{user?.email || 'usuario@refugio.local'}</p>
                 </div>
               </div>
-              <a href='/perfil' className='profile-menu-item' onClick={closeProfile}>
-                <i className='material-icons'></i>
-                <span>Mi Perfil</span>
-              </a>
+              <Link to='/perfil' className='profile-menu-item' onClick={closeProfile}>
+  <i className='material-icons'>person</i>
+  <span>Mi Perfil</span>
+</Link>
             </div>
           </div>
 
