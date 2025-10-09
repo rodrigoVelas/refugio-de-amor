@@ -71,7 +71,7 @@ export default function Header({ user }: { user: any }) {
                 <div className='user-role'>{user?.rol || 'Administrador'}</div>
               </div>
               <i className='material-icons' style={{ fontSize: '16px', color: '#64748b' }}>
-                {isProfileOpen ? 'expand_less' : 'expand_more'}
+                {isProfileOpen ? '' : ''}
               </i>
             </div>
 
@@ -87,7 +87,7 @@ export default function Header({ user }: { user: any }) {
                 </div>
               </div>
               <a href='/perfil' className='profile-menu-item' onClick={closeProfile}>
-                <i className='material-icons'>person</i>
+                <i className='material-icons'></i>
                 <span>Mi Perfil</span>
               </a>
             </div>
