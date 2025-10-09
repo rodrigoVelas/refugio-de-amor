@@ -1,106 +1,232 @@
-import { Router } from 'express'
+// src/routes/facturas.ts
+import { Router, Request, Response } from 'express'
 import multer from 'multer'
-import path from 'path'
-import fs from 'fs'
 import { pool } from '../core/db'
 import { getUserPerms } from '../core/rbac'
+import cloudinary from '../lib/cloudinary'
+import { Readable } from 'stream'
 
 const r = Router()
 
-// storage carpeta
-const dir = path.resolve(process.cwd(), 'uploads', 'facturas')
-fs.mkdirSync(dir, { recursive: true })
+// Configurar multer para memoria (no guardar en disco)
+const storage = multer.memoryStorage()
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB máximo
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Solo se permiten imágenes (JPG, PNG) o PDF'))
+    }
+  },
+})
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb)=> cb(null, dir),
-  filename: (_req, file, cb)=> {
-    const ts = Date.now()
-    const safe = file.originalname.replace(/[^\w.\-]+/g,'_').toLowerCase()
-    cb(null, `${ts}-${safe}`)
+// Helper: subir a Cloudinary
+async function uploadToCloudinary(buffer: Buffer, filename: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'refugio_facturas',
+        resource_type: 'auto',
+        public_id: `${Date.now()}_${filename.replace(/\.[^/.]+$/, '')}`,
+      },
+      (error, result) => {
+        if (error) reject(error)
+        else resolve(result)
+      }
+    )
+
+    const readableStream = new Readable()
+    readableStream.push(buffer)
+    readableStream.push(null)
+    readableStream.pipe(uploadStream)
+  })
+}
+
+// GET /facturas - Listar facturas según permisos
+r.get('/facturas', async (req: any, res: any) => {
+  try {
+    const userId = req.user.id
+    const perms = await getUserPerms(userId)
+    const verTodas = perms.includes('facturas_ver_todas')
+
+    const sql = verTodas
+      ? `SELECT f.*, u.email, u.nombres || ' ' || COALESCE(u.apellidos, '') as nombre_completo 
+         FROM facturas f 
+         JOIN usuarios u ON u.id = f.usuario_id 
+         ORDER BY f.creado_en DESC 
+         LIMIT 500`
+      : `SELECT f.*, u.email, u.nombres || ' ' || COALESCE(u.apellidos, '') as nombre_completo 
+         FROM facturas f 
+         JOIN usuarios u ON u.id = f.usuario_id 
+         WHERE f.usuario_id = $1 
+         ORDER BY f.creado_en DESC 
+         LIMIT 500`
+
+    const params: any[] = verTodas ? [] : [userId]
+    const { rows } = await pool.query(sql, params)
+    
+    console.log(`[facturas/list] Usuario ${userId} - Ver todas: ${verTodas} - Encontradas: ${rows.length}`)
+    res.json(rows)
+  } catch (error: any) {
+    console.error('[facturas/list] Error:', error)
+    res.status(500).json({ error: 'Error al listar facturas' })
   }
 })
-const upload = multer({ storage })
 
-// listar facturas (segun permisos)
-r.get('/facturas', async (req:any, res:any)=>{
-  const userId = req.user.id
-  const perms = await getUserPerms(userId)
-  const verTodas = perms.includes('facturas_ver_todas')
-  const sql = verTodas
-    ? `select f.*, u.email from facturas f join usuarios u on u.id=f.usuario_id order by f.creado_en desc limit 500`
-    : `select f.*, u.email from facturas f join usuarios u on u.id=f.usuario_id where f.usuario_id=$1 order by f.creado_en desc limit 500`
-  const params:any[] = verTodas ? [] : [userId]
-  const { rows } = await pool.query(sql, params)
-  res.json(rows)
+// POST /facturas/upload - Subir factura a Cloudinary
+r.post('/facturas/upload', upload.single('imagen'), async (req: any, res: any) => {
+  try {
+    const userId = req.user.id
+    const perms = await getUserPerms(userId)
+
+    if (!perms.includes('facturas_subir')) {
+      return res.status(403).json({ error: 'No autorizado' })
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Imagen requerida' })
+    }
+
+    const { descripcion, total, fecha } = req.body
+
+    console.log('[facturas/upload] Subiendo a Cloudinary...')
+    const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname)
+
+    // Guardar en BD con URL de Cloudinary
+    const { rows } = await pool.query(
+      `
+      INSERT INTO facturas (usuario_id, descripcion, imagen_path, imagen_mime, total, fecha)
+      VALUES ($1, $2, $3, $4, $5, $6) 
+      RETURNING *
+      `,
+      [
+        userId,
+        descripcion || null,
+        cloudinaryResult.secure_url, // URL de Cloudinary
+        req.file.mimetype,
+        total ? Number(total) : null,
+        fecha || null,
+      ]
+    )
+
+    console.log('[facturas/upload] Factura guardada:', rows[0].id)
+    res.json(rows[0])
+  } catch (error: any) {
+    console.error('[facturas/upload] Error:', error)
+    res.status(500).json({ error: error.message || 'Error al subir factura' })
+  }
 })
 
-// subir factura (solo colaboradores y quien tenga facturas_subir)
-r.post('/facturas/upload', upload.single('imagen'), async (req:any, res:any)=>{
-  const userId = req.user.id
-  const perms = await getUserPerms(userId)
-  if (!perms.includes('facturas_subir')) return res.status(403).json({ error:'no autorizado' })
-  if (!req.file) return res.status(400).json({ error:'imagen requerida' })
+// GET /facturas/:id/imagen - Ver imagen (ahora redirige a Cloudinary)
+r.get('/facturas/:id/imagen', async (req: any, res: any) => {
+  try {
+    const userId = req.user.id
+    const perms = await getUserPerms(userId)
+    
+    const { rows } = await pool.query('SELECT * FROM facturas WHERE id = $1', [req.params.id])
+    const f = rows[0]
+    
+    if (!f) {
+      return res.status(404).json({ error: 'Factura no encontrada' })
+    }
 
-  const { descripcion, total, fecha } = req.body
-  const { path: p, mimetype } = req.file
-  const rel = p.replace(path.resolve(process.cwd())+path.sep, '') // guardar ruta relativa
+    const esPropia = f.usuario_id === userId
+    
+    if (!(perms.includes('facturas_ver_todas') || esPropia)) {
+      return res.status(403).json({ error: 'No autorizado' })
+    }
 
-  const { rows } = await pool.query(`
-    insert into facturas (usuario_id, descripcion, imagen_path, imagen_mime, total, fecha)
-    values ($1,$2,$3,$4,$5,$6) returning *
-  `,[userId, descripcion||null, rel, mimetype, total?Number(total):null, fecha||null])
-
-  res.json(rows[0])
+    // Redirigir a la URL de Cloudinary
+    res.redirect(f.imagen_path)
+  } catch (error: any) {
+    console.error('[facturas/imagen] Error:', error)
+    res.status(500).json({ error: 'Error al obtener imagen' })
+  }
 })
 
-// descargar/ver imagen (stream)
-r.get('/facturas/:id/imagen', async (req:any, res:any)=>{
-  const userId = req.user.id
-  const perms = await getUserPerms(userId)
-  const { rows } = await pool.query('select * from facturas where id=$1',[req.params.id])
-  const f = rows[0]; if(!f) return res.status(404).end()
-  const esPropia = f.usuario_id === userId
-  if (!(perms.includes('facturas_ver_todas') || esPropia)) return res.status(403).json({ error:'no autorizado' })
+// PUT /facturas/:id - Actualizar factura (solo dueño)
+r.put('/facturas/:id', async (req: any, res: any) => {
+  try {
+    const userId = req.user.id
+    const { rows } = await pool.query('SELECT * FROM facturas WHERE id = $1', [req.params.id])
+    const f = rows[0]
+    
+    if (!f) {
+      return res.status(404).json({ error: 'Factura no encontrada' })
+    }
+    
+    if (f.usuario_id !== userId) {
+      return res.status(403).json({ error: 'No autorizado' })
+    }
 
-  const abs = path.resolve(process.cwd(), f.imagen_path)
-  if (!fs.existsSync(abs)) return res.status(404).json({ error:'archivo no existe' })
-  res.setHeader('content-type', f.imagen_mime || 'application/octet-stream')
-  fs.createReadStream(abs).pipe(res)
+    const { descripcion, total, fecha } = req.body
+    const q = `
+      UPDATE facturas SET
+        descripcion = COALESCE($1, descripcion),
+        total = $2,
+        fecha = COALESCE($3, fecha),
+        modificado_en = NOW()
+      WHERE id = $4
+      RETURNING *
+    `
+    const u = await pool.query(q, [
+      descripcion ?? null,
+      total != null ? Number(total) : f.total,
+      fecha ?? f.fecha,
+      req.params.id,
+    ])
+
+    console.log('[facturas/update] Factura actualizada:', req.params.id)
+    res.json(u.rows[0])
+  } catch (error: any) {
+    console.error('[facturas/update] Error:', error)
+    res.status(500).json({ error: 'Error al actualizar factura' })
+  }
 })
 
-// actualizar descripcion/total/fecha (solo dueño)
-r.put('/facturas/:id', async (req:any, res:any)=>{
-  const userId = req.user.id
-  const { rows } = await pool.query('select * from facturas where id=$1',[req.params.id])
-  const f = rows[0]; if(!f) return res.status(404).end()
-  if (f.usuario_id !== userId) return res.status(403).json({ error:'no autorizado' })
+// DELETE /facturas/:id - Eliminar factura (solo dueño)
+r.delete('/facturas/:id', async (req: any, res: any) => {
+  try {
+    const userId = req.user.id
+    const { rows } = await pool.query('SELECT * FROM facturas WHERE id = $1', [req.params.id])
+    const f = rows[0]
+    
+    if (!f) {
+      return res.status(404).json({ error: 'Factura no encontrada' })
+    }
+    
+    if (f.usuario_id !== userId) {
+      return res.status(403).json({ error: 'No autorizado' })
+    }
 
-  const { descripcion, total, fecha } = req.body
-  const q = `
-    update facturas set
-      descripcion = coalesce($1, descripcion),
-      total = $2,
-      fecha = coalesce($3, fecha),
-      modificado_en = now()
-    where id = $4
-    returning *
-  `
-  const u = await pool.query(q, [descripcion ?? null, total!=null?Number(total):f.total, fecha ?? f.fecha, req.params.id])
-  res.json(u.rows[0])
-})
+    // Eliminar de Cloudinary si existe
+    const url = f.imagen_path
+    const publicIdMatch = url.match(/refugio_facturas\/([^/]+)/)
 
-// eliminar (solo dueño)
-r.delete('/facturas/:id', async (req:any, res:any)=>{
-  const userId = req.user.id
-  const { rows } = await pool.query('select * from facturas where id=$1',[req.params.id])
-  const f = rows[0]; if(!f) return res.status(404).end()
-  if (f.usuario_id !== userId) return res.status(403).json({ error:'no autorizado' })
+    if (publicIdMatch) {
+      const publicId = `refugio_facturas/${publicIdMatch[1]}`
+      try {
+        await cloudinary.uploader.destroy(publicId)
+        console.log('[facturas/delete] Imagen eliminada de Cloudinary:', publicId)
+      } catch (cloudError) {
+        console.error('[facturas/delete] Error eliminando de Cloudinary:', cloudError)
+      }
+    }
 
-  // borrar archivo fisico
-  const abs = f.imagen_path ? path.resolve(process.cwd(), f.imagen_path) : ''
-  try{ if (abs && fs.existsSync(abs)) fs.unlinkSync(abs) }catch{}
-  await pool.query('delete from facturas where id=$1',[req.params.id])
-  res.json({ ok:true })
+    // Eliminar de BD
+    await pool.query('DELETE FROM facturas WHERE id = $1', [req.params.id])
+
+    console.log('[facturas/delete] Factura eliminada:', req.params.id)
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('[facturas/delete] Error:', error)
+    res.status(500).json({ error: 'Error al eliminar factura' })
+  }
 })
 
 export default r
