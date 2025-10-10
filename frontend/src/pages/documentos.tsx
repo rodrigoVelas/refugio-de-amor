@@ -157,7 +157,7 @@ export default function Documentos() {
         <div className="card-header">
           <h1 className="card-title">Documentos Mensuales</h1>
           <button className="btn" onClick={() => setShowModal(true)}>
-            <i className="material-icons">add</i>
+            <i className="material-icons"></i>
             Subir Documento
           </button>
         </div>
@@ -271,7 +271,7 @@ export default function Documentos() {
                 onClick={() => setShowModal(false)}
                 style={{ padding: '0.5rem' }}
               >
-                <i className="material-icons">close</i>
+                <i className="material-icons">Cerrar</i>
               </button>
             </div>
 
