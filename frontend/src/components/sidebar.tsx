@@ -12,7 +12,7 @@ export default function Sidebar({ user }: { user: any }) {
     { label: 'Subniveles', route: '/subniveles', perms: ['ver_niveles'], icon: '' },
     { label: 'Asistencia', route: '/asistencia', perms: ['asistencia_ver_propias', 'asistencia_ver_todas'], icon: '' },
     { label: 'Facturas', route: '/facturas', perms: ['facturas_ver_propias', 'facturas_ver_todas'], icon: '' },
-    { label: 'Documentos', route: '/documentos', perms: ['*'], icon: 'folder' },
+    { label: 'Documentos', route: '/documentos', perms: ['*'], icon: '' },
     { label: 'Actividades', route: '/actividades', perms: ['actividades_ver_calendario'], icon: '' },
     { label: 'Usuarios', route: '/admin/usuarios', perms: ['ver_usuarios'], icon: '' },
     // { label: 'Roles', route: '/admin/roles', perms: ['ver_roles'], icon: 'admin_panel_settings' },
