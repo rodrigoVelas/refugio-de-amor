@@ -9,7 +9,6 @@ import path from 'path';
 import auth from './routes/auth';
 import { authMiddleware } from './core/auth_middleware';
 import { errorHandler } from './core/error_handler';
-
 import perfil from './routes/perfil';
 import niveles from './routes/niveles';
 import subniveles from './routes/subniveles';
@@ -19,6 +18,7 @@ import roles from './routes/roles';
 import facturas from './routes/facturas';
 import asistencia from './routes/asistencia';
 import actividades from './routes/actividades';
+import documentosRouter from './routes/documentos';
 import { pool } from './core/db';
 
 dotenv.config();
@@ -34,7 +34,6 @@ app.use(cookieParser());
 app.use(express.json());
 
 // CORS: en dev permitimos todo; en prod aceptamos la lista de orígenes
-// Define CORS_ORIGIN="https://refugio-de-amor.vercel.app,*.vercel.app"
 const rawAllow = process.env.CORS_ORIGIN ?? 'https://refugio-de-amor.vercel.app';
 const allowList = rawAllow.split(',').map(s => s.trim()).filter(Boolean);
 
@@ -76,7 +75,9 @@ app.get('/db/ping', async (_req, res, next) => {
   try {
     const r = await pool.query('select 1 as ok');
     res.json({ ok: r.rows[0]?.ok === 1 });
-  } catch (e) { next(e); }
+  } catch (e) { 
+    next(e); 
+  }
 });
 
 /** Públicas */
@@ -93,6 +94,7 @@ app.use(roles);
 app.use(facturas);
 app.use(asistencia);
 app.use(actividades);
+app.use('/documentos', documentosRouter);
 
 /** Estáticos (nota: almacenamiento efímero en Render) */
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
@@ -103,6 +105,7 @@ app.use(errorHandler);
 /** Arranque */
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = '0.0.0.0';
+
 app.listen(PORT, HOST, () => {
   console.log(`API lista en http://${HOST}:${PORT}`);
 });

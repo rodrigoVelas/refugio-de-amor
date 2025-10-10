@@ -16,6 +16,11 @@ import NinoDetalle from './pages/nino_detalle'
 import Facturas from './pages/facturas'
 import Asistencia from './pages/asistencia'
 import Actividades from './pages/actividades'
+import Documentos from './pages/documentos'
+
+
+
+
 
 function RequirePerms({ user, perms, children }: { user: any; perms: string[]; children: any }) {
   if (!can(user, perms)) return <div className="alert">No autorizado</div>
@@ -204,6 +209,7 @@ export default function App() {
             Página no encontrada
           </div>
         } />
+        <Route path="/documentos" element={<Documentos />} />
       </Routes>
     </AppLayout>
   )
