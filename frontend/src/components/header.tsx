@@ -88,7 +88,7 @@ export default function Header({ user }: { user: any }) {
                 </div>
               </div>
               <Link to='/perfil' className='profile-menu-item' onClick={closeProfile}>
-  <i className='material-icons'>person</i>
+  <i className='material-icons'></i>
   <span>Mi Perfil</span>
 </Link>
             </div>

@@ -243,14 +243,14 @@ export default function Documentos() {
                       rel="noopener noreferrer"
                       className="btn btn-ghost"
                     >
-                      <i className="material-icons">download</i>
+                      <i className="material-icons"></i>
                       Descargar
                     </a>
                     <button 
                       className="btn btn-danger" 
                       onClick={() => handleEliminar(doc.id)}
                     >
-                      <i className="material-icons">delete</i>
+                      <i className="material-icons">Eliminar</i>
                     </button>
                   </div>
                 </div>
