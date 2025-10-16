@@ -39,12 +39,20 @@ async function uploadToCloudinary(buffer: Buffer, filename: string): Promise<any
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: 'refugio_documentos',
-        resource_type: 'raw', 
+        resource_type: 'raw',
+        type: 'upload',
+        format: filename.split('.').pop() || 'pdf',
         public_id: `${Date.now()}_${filename.replace(/\.[^/.]+$/, '')}`,
+        invalidate: true,
       },
       (error, result) => {
-        if (error) reject(error)
-        else resolve(result)
+        if (error) {
+          console.error('[uploadToCloudinary] Error:', error)
+          reject(error)
+        } else {
+          console.log('[uploadToCloudinary] Success:', result?.secure_url)
+          resolve(result)
+        }
       }
     )
 
