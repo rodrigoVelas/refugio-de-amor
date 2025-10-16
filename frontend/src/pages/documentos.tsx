@@ -237,14 +237,37 @@ export default function Documentos() {
                   </div>
 
                   <div className="flex" style={{ gap: '0.5rem' }}>
-                  <a 
-                  href={`${API_URL}/documentos/${doc.id}/download`}
-                  download={doc.archivo_nombre}
-                  className="btn btn-ghost"
-                  >
-                    <i className="material-icons"></i>
-                    Descargar
-                  </a>
+                  <button 
+  className="btn btn-ghost"
+  onClick={async () => {
+    try {
+      const res = await fetch(`${API_URL}/documentos/${doc.id}/download`, {
+        credentials: 'include'
+      })
+      
+      if (!res.ok) {
+        alert('Error al descargar documento')
+        return
+      }
+      
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.archivo_nombre
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Error descargando:', error)
+      alert('Error al descargar documento')
+    }
+  }}
+>
+  <i className="material-icons"></i>
+  Descargar
+</button>
                     <button 
                       className="btn btn-danger" 
                       onClick={() => handleEliminar(doc.id)}
