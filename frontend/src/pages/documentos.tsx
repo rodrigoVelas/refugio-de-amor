@@ -237,15 +237,14 @@ export default function Documentos() {
                   </div>
 
                   <div className="flex" style={{ gap: '0.5rem' }}>
-                    <a 
-                      href={doc.archivo_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="btn btn-ghost"
-                    >
-                      <i className="material-icons"></i>
-                      Descargar
-                    </a>
+                  <a 
+                  href={`${API_URL}/documentos/${doc.id}/download`}
+                  download={doc.archivo_nombre}
+                  className="btn btn-ghost"
+                  >
+                    <i className="material-icons"></i>
+                    Descargar
+                  </a>
                     <button 
                       className="btn btn-danger" 
                       onClick={() => handleEliminar(doc.id)}
