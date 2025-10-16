@@ -44,8 +44,10 @@ export default function Documentos() {
       const params = new URLSearchParams()
       if (filtroMes) params.append('mes', filtroMes)
       if (filtroAnio) params.append('anio', filtroAnio)
+      
       const url = `${API_URL}/documentos${params.toString() ? '?' + params.toString() : ''}`
       const res = await fetch(url, { credentials: 'include' })
+      
       if (res.ok) {
         const data = await res.json()
         setDocumentos(data)
@@ -59,28 +61,35 @@ export default function Documentos() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    
     if (!archivo) {
       alert('Selecciona un archivo')
       return
     }
+    
     if (!titulo.trim()) {
       alert('Ingresa un título')
       return
     }
+    
     try {
       setUploading(true)
+      
       const formData = new FormData()
       formData.append('archivo', archivo)
       formData.append('titulo', titulo)
       formData.append('descripcion', descripcion)
       formData.append('mes', mes.toString())
       formData.append('anio', anio.toString())
+      
       const res = await fetch(`${API_URL}/documentos/upload`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
       })
+      
       const data = await res.json()
+      
       if (res.ok) {
         alert('Documento subido exitosamente')
         setShowModal(false)
@@ -107,11 +116,13 @@ export default function Documentos() {
 
   async function handleEliminar(id: string) {
     if (!confirm('¿Estás seguro de eliminar este documento?')) return
+    
     try {
       const res = await fetch(`${API_URL}/documentos/${id}`, {
         method: 'DELETE',
         credentials: 'include',
       })
+      
       if (res.ok) {
         alert('Documento eliminado')
         cargarDocumentos()
@@ -149,20 +160,33 @@ export default function Documentos() {
         </div>
 
         <div className="toolbar">
-          <select className="select" value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)}>
+          <select 
+            className="select" 
+            value={filtroMes} 
+            onChange={(e) => setFiltroMes(e.target.value)}
+          >
             <option value="">Todos los meses</option>
             {meses.map((m, i) => (
               <option key={i} value={i + 1}>{m}</option>
             ))}
           </select>
-          <select className="select" value={filtroAnio} onChange={(e) => setFiltroAnio(e.target.value)}>
+
+          <select 
+            className="select" 
+            value={filtroAnio} 
+            onChange={(e) => setFiltroAnio(e.target.value)}
+          >
             <option value="">Todos los años</option>
             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
+
           {(filtroMes || filtroAnio) && (
-            <button className="btn btn-ghost" onClick={() => { setFiltroMes(''); setFiltroAnio('') }}>
+            <button 
+              className="btn btn-ghost" 
+              onClick={() => { setFiltroMes(''); setFiltroAnio('') }}
+            >
               Limpiar filtros
             </button>
           )}
@@ -176,17 +200,52 @@ export default function Documentos() {
           ) : (
             <div style={{ display: 'grid', gap: '1rem' }}>
               {documentos.map((doc) => (
-                <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '2rem' }}>{getFileIcon(doc.archivo_tipo)}</div>
+                <div 
+                  key={doc.id} 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    padding: '1rem',
+                    background: 'var(--surface-elevated)',
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ fontSize: '2rem' }}>
+                    {getFileIcon(doc.archivo_tipo)}
+                  </div>
+                  
                   <div style={{ flex: 1 }}>
                     <h3 style={{ marginBottom: '0.25rem' }}>{doc.titulo}</h3>
-                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{meses[doc.mes - 1]} {doc.anio} • {formatFileSize(doc.archivo_size)}</p>
-                    {doc.descripcion && <p className="text-sm" style={{ marginTop: '0.5rem' }}>{doc.descripcion}</p>}
-                    <p className="text-xs" style={{ color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>Subido por {doc.subido_por_nombre} el {new Date(doc.fecha_subida).toLocaleDateString()}</p>
+                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      {meses[doc.mes - 1]} {doc.anio} • {formatFileSize(doc.archivo_size)}
+                    </p>
+                    {doc.descripcion && (
+                      <p className="text-sm" style={{ marginTop: '0.5rem' }}>
+                        {doc.descripcion}
+                      </p>
+                    )}
+                    <p className="text-xs" style={{ color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>
+                      Subido por {doc.subido_por_nombre} el {new Date(doc.fecha_subida).toLocaleDateString()}
+                    </p>
                   </div>
+
                   <div className="flex" style={{ gap: '0.5rem' }}>
-                    <a href={doc.archivo_url.replace('/image/upload/', '/raw/upload/')} download={doc.archivo_nombre} target="_blank" rel="noopener noreferrer" className="btn btn-ghost">Descargar</a>
-                    <button className="btn btn-danger" onClick={() => handleEliminar(doc.id)}>Eliminar</button>
+                    <a 
+                      href={doc.archivo_url.replace('/image/upload/', '/raw/upload/')} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="btn btn-ghost"
+                    >
+                      Ver Documento
+                    </a>
+                    <button 
+                      className="btn btn-danger" 
+                      onClick={() => handleEliminar(doc.id)}
+                    >
+                      Eliminar
+                    </button>
                   </div>
                 </div>
               ))}
@@ -200,39 +259,98 @@ export default function Documentos() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="text-xl">Subir Documento</h2>
-              <button className="btn btn-ghost" onClick={() => setShowModal(false)} style={{ padding: '0.5rem' }}>✕</button>
+              <button 
+                className="btn btn-ghost" 
+                onClick={() => setShowModal(false)} 
+                style={{ padding: '0.5rem' }}
+              >
+                ✕
+              </button>
             </div>
+
             <form onSubmit={handleSubmit} className="form">
               <div>
                 <label className="label">Título*</label>
-                <input type="text" className="input" value={titulo} onChange={(e) => setTitulo(e.target.value)} required />
+                <input 
+                  type="text" 
+                  className="input" 
+                  value={titulo} 
+                  onChange={(e) => setTitulo(e.target.value)} 
+                  required 
+                />
               </div>
+
               <div>
                 <label className="label">Descripción</label>
-                <textarea className="textarea" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={3} />
+                <textarea 
+                  className="textarea" 
+                  value={descripcion} 
+                  onChange={(e) => setDescripcion(e.target.value)} 
+                  rows={3} 
+                />
               </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label className="label">Mes*</label>
-                  <select className="select" value={mes} onChange={(e) => setMes(Number(e.target.value))} required>
+                  <select 
+                    className="select" 
+                    value={mes} 
+                    onChange={(e) => setMes(Number(e.target.value))} 
+                    required
+                  >
                     {meses.map((m, i) => (
                       <option key={i} value={i + 1}>{m}</option>
                     ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="label">Año*</label>
-                  <input type="number" className="input" value={anio} onChange={(e) => setAnio(Number(e.target.value))} min={2020} max={2050} required />
+                  <input 
+                    type="number" 
+                    className="input" 
+                    value={anio} 
+                    onChange={(e) => setAnio(Number(e.target.value))} 
+                    min={2020} 
+                    max={2050} 
+                    required 
+                  />
                 </div>
               </div>
+
               <div>
                 <label className="label">Archivo* (PDF, Word, Excel - Max 10MB)</label>
-                <input type="file" className="input" accept=".pdf,.doc,.docx,.xls,.xlsx" onChange={(e) => setArchivo(e.target.files?.[0] || null)} required />
-                {archivo && <p className="text-sm" style={{ marginTop: '0.5rem', color: 'var(--text-secondary)' }}>{archivo.name} ({formatFileSize(archivo.size)})</p>}
+                <input 
+                  type="file" 
+                  className="input" 
+                  accept=".pdf,.doc,.docx,.xls,.xlsx" 
+                  onChange={(e) => setArchivo(e.target.files?.[0] || null)} 
+                  required 
+                />
+                {archivo && (
+                  <p className="text-sm" style={{ marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
+                    {archivo.name} ({formatFileSize(archivo.size)})
+                  </p>
+                )}
               </div>
+
               <div className="modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={uploading}>Cancelar</button>
-                <button type="submit" className="btn" disabled={uploading}>{uploading ? 'Subiendo...' : 'Subir Documento'}</button>
+                <button 
+                  type="button" 
+                  className="btn btn-ghost" 
+                  onClick={() => setShowModal(false)} 
+                  disabled={uploading}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn" 
+                  disabled={uploading}
+                >
+                  {uploading ? 'Subiendo...' : 'Subir Documento'}
+                </button>
               </div>
             </form>
           </div>
