@@ -63,7 +63,7 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0a0e27 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             position: relative;
             overflow: hidden;
           }
@@ -71,61 +71,110 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
           .login-container::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-              radial-gradient(circle at 20% 50%, rgba(37, 99, 235, 0.1) 0%, transparent 50%),
-              radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
-            pointer-events: none;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            top: -100px;
+            left: -100px;
+            animation: float 8s ease-in-out infinite;
+          }
+
+          .login-container::after {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            bottom: -50px;
+            right: -50px;
+            animation: float 6s ease-in-out infinite reverse;
+          }
+
+          @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(30px, -30px) scale(1.1); }
           }
 
           .login-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 24px;
-            padding: 3rem;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
             width: 100%;
             max-width: 420px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
             position: relative;
             z-index: 1;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          }
+
+          .login-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
           }
 
           .login-logo {
             display: flex;
             justify-content: center;
-            margin-bottom: 2.5rem;
+            margin-bottom: 2rem;
+            animation: fadeInDown 0.6s ease;
           }
 
           .login-logo img {
             height: 80px;
             width: auto;
-            filter: brightness(1.1);
+            transition: transform 0.3s ease;
+          }
+
+          .login-card:hover .login-logo img {
+            transform: scale(1.05);
+          }
+
+          @keyframes fadeInDown {
+            from {
+              opacity: 0;
+              transform: translateY(-20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
           }
 
           .login-title {
-            color: #ffffff;
+            color: #1e293b;
             font-size: 1.75rem;
             font-weight: 700;
             text-align: center;
             margin-bottom: 0.5rem;
-            letter-spacing: 0.5px;
+            letter-spacing: -0.5px;
+            animation: fadeIn 0.6s ease 0.2s backwards;
           }
 
           .login-subtitle {
-            color: rgba(255, 255, 255, 0.5);
+            color: #64748b;
             font-size: 0.875rem;
             text-align: center;
             margin-bottom: 2rem;
+            animation: fadeIn 0.6s ease 0.3s backwards;
+          }
+
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
           }
 
           .login-form {
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
+            gap: 1.25rem;
+            animation: fadeIn 0.6s ease 0.4s backwards;
           }
 
           .form-group {
@@ -134,39 +183,38 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
 
           .form-label {
             display: block;
-            color: rgba(255, 255, 255, 0.7);
+            color: #475569;
             font-size: 0.875rem;
             margin-bottom: 0.5rem;
-            font-weight: 500;
-            letter-spacing: 0.5px;
+            font-weight: 600;
           }
 
           .login-input {
             width: 100%;
-            padding: 1rem 1.25rem;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.875rem 1rem;
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
             border-radius: 12px;
-            color: #ffffff;
+            color: #1e293b;
             font-size: 1rem;
             transition: all 0.3s ease;
             outline: none;
           }
 
           .login-input:focus {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(37, 99, 235, 0.5);
-            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+            background: #ffffff;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
           }
 
           .login-input::placeholder {
-            color: rgba(255, 255, 255, 0.3);
+            color: #94a3b8;
           }
 
           .login-btn {
             width: 100%;
-            padding: 1rem;
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            padding: 0.875rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
             border-radius: 12px;
@@ -174,9 +222,9 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            letter-spacing: 0.5px;
             position: relative;
             overflow: hidden;
+            margin-top: 0.5rem;
           }
 
           .login-btn::before {
@@ -186,8 +234,8 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s ease;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.6s ease;
           }
 
           .login-btn:hover::before {
@@ -196,7 +244,7 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
 
           .login-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.4);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
           }
 
           .login-btn:active {
@@ -204,33 +252,34 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
           }
 
           .login-btn:disabled {
-            opacity: 0.5;
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
           }
 
           .login-error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
-            padding: 0.875rem 1rem;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 0.75rem 1rem;
             border-radius: 10px;
             font-size: 0.875rem;
             text-align: center;
-            animation: shake 0.4s ease;
+            animation: shake 0.5s ease;
           }
 
           @keyframes shake {
             0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-10px); }
-            75% { transform: translateX(10px); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
           }
 
           .login-footer {
-            margin-top: 2rem;
+            margin-top: 1.5rem;
             text-align: center;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.875rem;
+            color: #94a3b8;
+            font-size: 0.8rem;
+            animation: fadeIn 0.6s ease 0.5s backwards;
           }
 
           @media (max-width: 768px) {
