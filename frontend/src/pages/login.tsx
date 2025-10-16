@@ -63,7 +63,7 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            background: #ffffff;
             position: relative;
             overflow: hidden;
           }
@@ -71,110 +71,82 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
           .login-container::before {
             content: '';
             position: absolute;
-            width: 400px;
-            height: 400px;
-            background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(0, 113, 227, 0.03) 0%, transparent 70%);
             border-radius: 50%;
-            top: -100px;
-            left: -100px;
-            animation: float 8s ease-in-out infinite;
+            top: -150px;
+            right: -150px;
           }
 
           .login-container::after {
             content: '';
             position: absolute;
-            width: 300px;
-            height: 300px;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(0, 113, 227, 0.02) 0%, transparent 70%);
             border-radius: 50%;
-            bottom: -50px;
-            right: -50px;
-            animation: float 6s ease-in-out infinite reverse;
-          }
-
-          @keyframes float {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(30px, -30px) scale(1.1); }
+            bottom: -100px;
+            left: -100px;
           }
 
           .login-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 2.5rem;
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 3rem 2.5rem;
             width: 100%;
-            max-width: 420px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
             position: relative;
             z-index: 1;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(0, 0, 0, 0.04);
           }
 
           .login-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
           }
 
           .login-logo {
             display: flex;
             justify-content: center;
             margin-bottom: 2rem;
-            animation: fadeInDown 0.6s ease;
           }
 
           .login-logo img {
-            height: 80px;
+            height: 70px;
             width: auto;
             transition: transform 0.3s ease;
           }
 
           .login-card:hover .login-logo img {
-            transform: scale(1.05);
-          }
-
-          @keyframes fadeInDown {
-            from {
-              opacity: 0;
-              transform: translateY(-20px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
+            transform: scale(1.02);
           }
 
           .login-title {
-            color: #1e293b;
-            font-size: 1.75rem;
-            font-weight: 700;
+            color: #1d1d1f;
+            font-size: 1.875rem;
+            font-weight: 600;
             text-align: center;
             margin-bottom: 0.5rem;
             letter-spacing: -0.5px;
-            animation: fadeIn 0.6s ease 0.2s backwards;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
           }
 
           .login-subtitle {
-            color: #64748b;
-            font-size: 0.875rem;
+            color: #86868b;
+            font-size: 0.9375rem;
             text-align: center;
             margin-bottom: 2rem;
-            animation: fadeIn 0.6s ease 0.3s backwards;
-          }
-
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
+            font-weight: 400;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
           }
 
           .login-form {
             display: flex;
             flex-direction: column;
-            gap: 1.25rem;
-            animation: fadeIn 0.6s ease 0.4s backwards;
+            gap: 1rem;
           }
 
           .form-group {
@@ -183,109 +155,95 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
 
           .form-label {
             display: block;
-            color: #475569;
+            color: #1d1d1f;
             font-size: 0.875rem;
             margin-bottom: 0.5rem;
-            font-weight: 600;
+            font-weight: 500;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
           }
 
           .login-input {
             width: 100%;
-            padding: 0.875rem 1rem;
-            background: #f8fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            color: #1e293b;
+            padding: 0.75rem 1rem;
+            background: #f5f5f7;
+            border: 1.5px solid transparent;
+            border-radius: 10px;
+            color: #1d1d1f;
             font-size: 1rem;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             outline: none;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+          }
+
+          .login-input:hover {
+            background: #ebebed;
           }
 
           .login-input:focus {
             background: #ffffff;
-            border-color: #667eea;
-            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            border-color: #0071e3;
+            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.1);
           }
 
           .login-input::placeholder {
-            color: #94a3b8;
+            color: #86868b;
           }
 
           .login-btn {
             width: 100%;
-            padding: 0.875rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 0.75rem;
+            background: #0071e3;
             color: white;
             border: none;
-            border-radius: 12px;
+            border-radius: 10px;
             font-size: 1rem;
-            font-weight: 600;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            transition: all 0.2s ease;
             margin-top: 0.5rem;
-          }
-
-          .login-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transition: left 0.6s ease;
-          }
-
-          .login-btn:hover::before {
-            left: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
           }
 
           .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+            background: #0077ed;
+            box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);
           }
 
           .login-btn:active {
-            transform: translateY(0);
+            transform: scale(0.98);
           }
 
           .login-btn:disabled {
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
             transform: none;
           }
 
           .login-error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #dc2626;
-            padding: 0.75rem 1rem;
+            background: #fff5f5;
+            border: 1px solid #feb2b2;
+            color: #c53030;
+            padding: 0.75rem;
             border-radius: 10px;
             font-size: 0.875rem;
             text-align: center;
-            animation: shake 0.5s ease;
-          }
-
-          @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-8px); }
-            75% { transform: translateX(8px); }
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
           }
 
           .login-footer {
             margin-top: 1.5rem;
             text-align: center;
-            color: #94a3b8;
-            font-size: 0.8rem;
-            animation: fadeIn 0.6s ease 0.5s backwards;
+            color: #86868b;
+            font-size: 0.8125rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
           }
 
           @media (max-width: 768px) {
             .login-card {
               margin: 1rem;
-              padding: 2rem;
+              padding: 2rem 1.5rem;
+              box-shadow: none;
+              border: none;
             }
 
             .login-logo img {
@@ -293,7 +251,7 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
             }
 
             .login-title {
-              font-size: 1.5rem;
+              font-size: 1.625rem;
             }
           }
         `}
@@ -315,7 +273,7 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
                 className="login-input"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="tu@email.com"
+                placeholder="nombre@ejemplo.com"
                 type="email"
                 required
               />
@@ -328,7 +286,7 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Ingresa tu contraseña"
                 required
               />
             </div>
@@ -336,7 +294,7 @@ export default function Login({ onDone }: { onDone: (user: any) => void }) {
             {err && <div className="login-error">{err}</div>}
 
             <button className="login-btn" type="submit" disabled={loading}>
-              {loading ? 'Ingresando...' : 'Ingresar'}
+              {loading ? 'Ingresando...' : 'Iniciar sesión'}
             </button>
           </form>
 
