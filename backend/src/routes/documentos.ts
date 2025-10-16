@@ -39,7 +39,7 @@ async function uploadToCloudinary(buffer: Buffer, filename: string): Promise<any
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: 'refugio_documentos',
-        resource_type: 'auto',
+        resource_type: 'raw', 
         public_id: `${Date.now()}_${filename.replace(/\.[^/.]+$/, '')}`,
       },
       (error, result) => {
