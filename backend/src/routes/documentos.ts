@@ -40,10 +40,7 @@ async function uploadToCloudinary(buffer: Buffer, filename: string): Promise<any
       {
         folder: 'refugio_documentos',
         resource_type: 'raw',
-        type: 'upload',
-        format: filename.split('.').pop() || 'pdf',
         public_id: `${Date.now()}_${filename.replace(/\.[^/.]+$/, '')}`,
-        invalidate: true,
       },
       (error, result) => {
         if (error) {
@@ -96,43 +93,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
   } catch (error: any) {
     console.error('[documentos/list] Error:', error)
     res.status(500).json({ error: 'Error al listar documentos' })
-  }
-})
-
-// GET /documentos/:id/download - Descargar documento
-router.get('/:id/download', authMiddleware, async (req: any, res: any) => {
-  try {
-    const { id } = req.params
-
-    const result = await pool.query(
-      'SELECT * FROM documentos_mensuales WHERE id = $1',
-      [id]
-    )
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Documento no encontrado' })
-    }
-
-    const documento = result.rows[0]
-
-    // Fetch el archivo desde Cloudinary
-    const response = await fetch(documento.archivo_url)
-    
-    if (!response.ok) {
-      throw new Error('Error al obtener archivo de Cloudinary')
-    }
-
-    const buffer = await response.arrayBuffer()
-
-    // Configurar headers para descarga
-    res.setHeader('Content-Type', documento.archivo_tipo)
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(documento.archivo_nombre)}"`)
-    res.setHeader('Content-Length', buffer.byteLength)
-
-    res.send(Buffer.from(buffer))
-  } catch (error: any) {
-    console.error('[documentos/download] Error:', error)
-    res.status(500).json({ error: 'Error al descargar documento' })
   }
 })
 

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import Swal from 'sweetalert2'
 
 export default function Ninos() {
   const [rows, setRows] = useState<any[]>([])
   const [q, setQ] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [mostrarInactivos, setMostrarInactivos] = useState(false)
   const [f, setF] = useState({
     codigo: '',
     nombres: '',
@@ -17,48 +19,385 @@ export default function Ninos() {
   const [editItem, setEditItem] = useState<any|null>(null)
 
   const load = async () => {
-    const data = await api.ninos_list(q)
-    setRows(data)
+    try {
+      // Modificar para incluir parámetro de inactivos si es necesario
+      const params = new URLSearchParams()
+      if (q) params.append('q', q)
+      if (mostrarInactivos) params.append('incluirInactivos', 'true')
+      
+      const response = await fetch(`${api.baseURL}/ninos?${params}`)
+      if (!response.ok) throw new Error('Error al cargar datos')
+      
+      const data = await response.json()
+      setRows(data)
+    } catch (error) {
+      console.error('Error al cargar:', error)
+      Swal.fire('Error', 'No se pudieron cargar los registros', 'error')
+    }
   }
 
-  useEffect(() => { load() }, [q])
+  useEffect(() => { 
+    load() 
+  }, [q, mostrarInactivos])
 
   const saveNuevo = async (e:any) => {
     e.preventDefault()
-    await api.ninos_create(f)
-    setF({
-      codigo: '',
-      nombres: '',
-      apellidos: '',
-      fecha_nacimiento: '',
-      nombre_encargado: '',
-      telefono_encargado: '',
-      direccion_encargado: ''
-    })
-    setShowForm(false)
-    load()
+    try {
+      await api.ninos_create(f)
+      setF({
+        codigo: '',
+        nombres: '',
+        apellidos: '',
+        fecha_nacimiento: '',
+        nombre_encargado: '',
+        telefono_encargado: '',
+        direccion_encargado: ''
+      })
+      setShowForm(false)
+      await load()
+      Swal.fire('Éxito', 'Niño creado correctamente', 'success')
+    } catch (error: any) {
+      console.error('Error al crear:', error)
+      if (error.message?.includes('codigo ya existe')) {
+        Swal.fire('Error', 'El código ya existe', 'error')
+      } else {
+        Swal.fire('Error', 'No se pudo crear el registro', 'error')
+      }
+    }
   }
 
   const saveEditar = async (e:any) => {
     e.preventDefault()
     if (!editItem) return
-    await api.ninos_update(editItem.id, editItem)
-    setEditItem(null)
-    load()
+    
+    try {
+      await api.ninos_update(editItem.id, editItem)
+      setEditItem(null)
+      await load()
+      Swal.fire('Éxito', 'Registro actualizado correctamente', 'success')
+    } catch (error: any) {
+      console.error('Error al actualizar:', error)
+      if (error.message?.includes('codigo ya existe')) {
+        Swal.fire('Error', 'El código ya existe', 'error')
+      } else {
+        Swal.fire('Error', 'No se pudo actualizar el registro', 'error')
+      }
+    }
+  }
+
+  // Función mejorada para manejar eliminación
+  const handleEliminar = async (nino: any) => {
+    try {
+      // Primero verificar dependencias
+      const depResponse = await fetch(`${api.baseURL}/ninos/${nino.id}/dependencias`)
+      
+      if (depResponse.ok) {
+        const dependencias = await depResponse.json()
+        
+        // Si hay dependencias
+        if (dependencias.tieneDependencias) {
+          const result = await Swal.fire({
+            title: 'Registro con datos relacionados',
+            html: `
+              <p><strong>${nino.nombres} ${nino.apellidos}</strong> tiene registros relacionados:</p>
+              <ul style="text-align: left; list-style: none; padding: 0;">
+                ${Object.entries(dependencias.detalle)
+                  .filter(([_, count]: [string, any]) => count > 0)
+                  .map(([tabla, count]: [string, any]) => 
+                    `<li>• ${tabla}: <strong>${count}</strong> registros</li>`
+                  ).join('')}
+              </ul>
+              <p style="margin-top: 15px;">¿Qué desea hacer?</p>
+            `,
+            icon: 'warning',
+            showCancelButton: true,
+            showDenyButton: true,
+            confirmButtonText: '🔒 Desactivar (Recomendado)',
+            confirmButtonColor: '#3085d6',
+            denyButtonText: '🗑️ Eliminar todo',
+            denyButtonColor: '#d33',
+            cancelButtonText: 'Cancelar',
+            cancelButtonColor: '#6c757d',
+            reverseButtons: true
+          })
+          
+          if (result.isConfirmed) {
+            await desactivarNino(nino)
+          } else if (result.isDenied) {
+            await eliminarConCascada(nino)
+          }
+        } else {
+          // No hay dependencias
+          const result = await Swal.fire({
+            title: '¿Qué acción desea realizar?',
+            html: `
+              <p>Registro: <strong>${nino.nombres} ${nino.apellidos}</strong></p>
+              <p style="margin-top: 10px;">Puede desactivar el registro (recomendado) o eliminarlo permanentemente</p>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            showDenyButton: true,
+            confirmButtonText: '🔒 Desactivar',
+            confirmButtonColor: '#3085d6',
+            denyButtonText: '🗑️ Eliminar permanentemente',
+            denyButtonColor: '#d33',
+            cancelButtonText: 'Cancelar',
+            cancelButtonColor: '#6c757d',
+            reverseButtons: true
+          })
+          
+          if (result.isConfirmed) {
+            await desactivarNino(nino)
+          } else if (result.isDenied) {
+            await eliminarPermanente(nino)
+          }
+        }
+      } else {
+        // Si no se puede verificar dependencias, usar método simple
+        await eliminarSimple(nino)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      Swal.fire('Error', 'Ocurrió un error al procesar la solicitud', 'error')
+    }
+  }
+
+  // Desactivar niño (soft delete)
+  const desactivarNino = async (nino: any) => {
+    try {
+      const response = await fetch(`${api.baseURL}/ninos/${nino.id}/desactivar`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Error al desactivar')
+      }
+      
+      await Swal.fire({
+        title: '✅ Desactivado',
+        text: `${nino.nombres} ${nino.apellidos} ha sido desactivado`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      })
+      
+      await load()
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo desactivar el registro', 'error')
+    }
+  }
+
+  // Eliminar permanentemente
+  const eliminarPermanente = async (nino: any) => {
+    const confirmacion = await Swal.fire({
+      title: '⚠️ ¿Está absolutamente seguro?',
+      html: `
+        <p>Va a eliminar permanentemente a:</p>
+        <p><strong>${nino.nombres} ${nino.apellidos}</strong></p>
+        <p style="color: red; margin-top: 10px;">Esta acción NO se puede deshacer</p>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar permanentemente',
+      confirmButtonColor: '#d33',
+      cancelButtonText: 'Cancelar',
+      input: 'checkbox',
+      inputValue: 0,
+      inputPlaceholder: 'Confirmo que quiero eliminar permanentemente este registro',
+      reverseButtons: true
+    })
+    
+    if (!confirmacion.isConfirmed || !confirmacion.value) {
+      return
+    }
+    
+    try {
+      const response = await fetch(`${api.baseURL}/ninos/${nino.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        if (response.status === 409) {
+          Swal.fire({
+            title: 'No se puede eliminar',
+            html: `
+              <p>${error.message || 'Existen registros relacionados'}</p>
+              <p style="margin-top: 10px;"><small>Sugerencia: Use la opción de desactivar</small></p>
+            `,
+            icon: 'error'
+          })
+          return
+        }
+        throw new Error(error.message)
+      }
+      
+      await Swal.fire({
+        title: 'Eliminado',
+        text: 'El registro ha sido eliminado permanentemente',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      })
+      
+      await load()
+    } catch (error: any) {
+      Swal.fire('Error', error.message || 'No se pudo eliminar el registro', 'error')
+    }
+  }
+
+  // Eliminar con cascada
+  const eliminarConCascada = async (nino: any) => {
+    const confirmacion = await Swal.fire({
+      title: '⚠️ ADVERTENCIA - ELIMINACIÓN EN CASCADA ⚠️',
+      html: `
+        <div style="text-align: left;">
+          <p><strong>Esta acción eliminará PERMANENTEMENTE:</strong></p>
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li>El registro de ${nino.nombres} ${nino.apellidos}</li>
+            <li>TODOS los registros de asistencia</li>
+            <li>TODOS los documentos asociados</li>
+            <li>TODAS las facturas relacionadas</li>
+            <li>TODOS los demás datos vinculados</li>
+          </ul>
+          <p style="color: red; font-weight: bold;">⚠️ Esta acción NO se puede deshacer</p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, ELIMINAR TODO',
+      confirmButtonColor: '#d33',
+      cancelButtonText: 'Cancelar',
+      input: 'text',
+      inputPlaceholder: 'Escriba "ELIMINAR" para confirmar',
+      inputValidator: (value) => {
+        if (value !== 'ELIMINAR') {
+          return 'Debe escribir ELIMINAR en mayúsculas'
+        }
+      },
+      reverseButtons: true
+    })
+    
+    if (!confirmacion.isConfirmed) {
+      return
+    }
+    
+    try {
+      const response = await fetch(`${api.baseURL}/ninos/${nino.id}?forzar=true`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Error al eliminar')
+      }
+      
+      await Swal.fire({
+        title: 'Eliminado',
+        text: 'El registro y todos sus datos relacionados han sido eliminados',
+        icon: 'success',
+        timer: 3000,
+        showConfirmButton: false
+      })
+      
+      await load()
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo completar la eliminación', 'error')
+    }
+  }
+
+  // Método simple de eliminación (fallback)
+  const eliminarSimple = async (nino: any) => {
+    const confirmacion = await Swal.fire({
+      title: '¿Eliminar registro?',
+      text: `¿Está seguro de eliminar a ${nino.nombres} ${nino.apellidos}?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d33',
+      reverseButtons: true
+    })
+    
+    if (!confirmacion.isConfirmed) return
+    
+    try {
+      await api.ninos_delete(nino.id)
+      await load()
+      Swal.fire('Eliminado', 'El registro ha sido eliminado', 'success')
+    } catch (error: any) {
+      if (error.message?.includes('foreign key') || error.message?.includes('relacionados')) {
+        Swal.fire({
+          title: 'No se puede eliminar',
+          text: 'Existen registros relacionados. Elimine primero los registros dependientes.',
+          icon: 'error'
+        })
+      } else {
+        Swal.fire('Error', 'No se pudo eliminar el registro', 'error')
+      }
+    }
+  }
+
+  // Reactivar niño
+  const reactivarNino = async (nino: any) => {
+    const confirmacion = await Swal.fire({
+      title: '¿Reactivar registro?',
+      text: `${nino.nombres} ${nino.apellidos} volverá a estar activo`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, reactivar',
+      confirmButtonColor: '#28a745',
+      cancelButtonText: 'Cancelar',
+      reverseButtons: true
+    })
+    
+    if (!confirmacion.isConfirmed) return
+    
+    try {
+      const response = await fetch(`${api.baseURL}/ninos/${nino.id}/reactivar`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (!response.ok) throw new Error('Error al reactivar')
+      
+      await Swal.fire({
+        title: 'Reactivado',
+        text: 'El registro ha sido reactivado',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      })
+      
+      await load()
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo reactivar el registro', 'error')
+    }
   }
 
   return (
     <div>
       <h1 className="text-xl font-bold">Niños</h1>
-
-      {/* Buscar */}
-      <div className="form" style={{marginTop:12, maxWidth:400}}>
+      
+      {/* Buscar y filtros */}
+      <div className="form" style={{marginTop:12, display: 'flex', gap: '10px', alignItems: 'center', maxWidth: 600}}>
         <input
           className="input"
           placeholder="Buscar por código o nombre"
           value={q}
           onChange={e=>setQ(e.target.value)}
+          style={{flex: 1}}
         />
+        <label style={{display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer'}}>
+          <input
+            type="checkbox"
+            checked={mostrarInactivos}
+            onChange={e=>setMostrarInactivos(e.target.checked)}
+          />
+          <span>Mostrar inactivos</span>
+        </label>
       </div>
 
       {/* Botón para abrir formulario */}
@@ -140,12 +479,13 @@ export default function Ninos() {
             <th>Encargado</th>
             <th>Teléfono</th>
             <th>Dirección</th>
+            <th>Estado</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(r=>(
-            <tr key={r.id}>
+            <tr key={r.id} style={{opacity: r.activo === false ? 0.6 : 1}}>
               <td>{r.codigo}</td>
               <td>{r.nombres} {r.apellidos}</td>
               <td>{r.fecha_nacimiento || '-'}</td>
@@ -153,13 +493,21 @@ export default function Ninos() {
               <td>{r.telefono_encargado || '-'}</td>
               <td>{r.direccion_encargado || '-'}</td>
               <td>
-                <button className="btn" onClick={()=>setEditItem(r)}>Editar</button>{' '}
-                <button className="btn" onClick={async()=>{
-                  if (confirm('¿Eliminar este niño?')) {
-                    await api.ninos_delete(r.id)
-                    load()
-                  }
-                }}>Eliminar</button>
+                {r.activo === false ? (
+                  <span style={{color: 'red'}}>Inactivo</span>
+                ) : (
+                  <span style={{color: 'green'}}>Activo</span>
+                )}
+              </td>
+              <td>
+                {r.activo !== false ? (
+                  <>
+                    <button className="btn" onClick={()=>setEditItem(r)}>Editar</button>{' '}
+                    <button className="btn" onClick={()=>handleEliminar(r)}>Eliminar</button>
+                  </>
+                ) : (
+                  <button className="btn" onClick={()=>reactivarNino(r)}>Reactivar</button>
+                )}
               </td>
             </tr>
           ))}

@@ -25,6 +25,7 @@ function getBase(): string {
 
 // Export como getter
 export const BASE = getBase()
+export const baseURL = BASE // Alias para compatibilidad
 
 // asegura que el path empiece con "/"
 function withSlash(p: string) {
@@ -44,7 +45,44 @@ async function apiFetch(path: string, init: RequestInit = {}) {
   return r;
 }
 
+// Función auxiliar para manejar respuestas con errores
+async function handleResponse(response: Response) {
+  if (!response.ok) {
+    let error;
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        error = await response.json();
+      } else {
+        const text = await response.text();
+        error = { message: text || `Error ${response.status}` };
+      }
+    } catch {
+      error = { message: `Error ${response.status}` };
+    }
+    
+    // Crear un error con información adicional
+    const errorMessage = error.message || error.error || `Error ${response.status}`;
+    const err = new Error(errorMessage) as any;
+    err.status = response.status;
+    err.details = error;
+    throw err;
+  }
+  
+  // Si la respuesta es exitosa, intentar parsear JSON
+  const contentType = response.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return response.json();
+  }
+  
+  // Si no es JSON, devolver el texto
+  return response.text();
+}
+
 export const api = {
+  // Exponer baseURL para compatibilidad
+  baseURL: BASE,
+  
   // ---------- auth ----------
   async me() {
     const r = await apiFetch('/auth/me');
@@ -72,89 +110,220 @@ export const api = {
   },
 
   // ---------- niveles ----------
-  async niveles_list() { const r = await apiFetch('/niveles'); return r.json(); },
+  async niveles_list() { 
+    const r = await apiFetch('/niveles'); 
+    return r.json(); 
+  },
   async niveles_create(data: any) {
-    const r = await apiFetch('/niveles', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch('/niveles', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
   async niveles_update(id: string, data: any) {
-    const r = await apiFetch(`/niveles/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch(`/niveles/${id}`, { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
-  async niveles_delete(id: string) { const r = await apiFetch(`/niveles/${id}`, { method:'DELETE' }); return r.json(); },
+  async niveles_delete(id: string) { 
+    const r = await apiFetch(`/niveles/${id}`, { method:'DELETE' }); 
+    return r.json(); 
+  },
 
   // ---------- subniveles ----------
-  async subniveles_list() { const r = await apiFetch('/subniveles'); return r.json(); },
+  async subniveles_list() { 
+    const r = await apiFetch('/subniveles'); 
+    return r.json(); 
+  },
   async subniveles_create(data: any) {
-    const r = await apiFetch('/subniveles', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch('/subniveles', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
   async subniveles_update(id: string, data: any) {
-    const r = await apiFetch(`/subniveles/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch(`/subniveles/${id}`, { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
-  async subniveles_delete(id: string) { const r = await apiFetch(`/subniveles/${id}`, { method:'DELETE' }); return r.json(); },
+  async subniveles_delete(id: string) { 
+    const r = await apiFetch(`/subniveles/${id}`, { method:'DELETE' }); 
+    return r.json(); 
+  },
 
-  // ---------- niños ----------
-  async ninos_list(q = '') { const r = await apiFetch(`/ninos?q=${encodeURIComponent(q)}`); return r.json(); },
+  // ---------- niños (ACTUALIZADO CON NUEVAS FUNCIONES) ----------
+  async ninos_list(q = '', incluirInactivos = false) { 
+    const params = new URLSearchParams();
+    if (q) params.append('q', q);
+    if (incluirInactivos) params.append('incluirInactivos', 'true');
+    
+    const r = await apiFetch(`/ninos?${params.toString()}`); 
+    return r.json(); 
+  },
+  
   async ninos_create(data: any) {
-    const r = await apiFetch('/ninos', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    const r = await apiFetch('/ninos', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
+    return handleResponse(r);
   },
+  
   async ninos_update(id: string, data: any) {
-    const r = await apiFetch(`/ninos/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    const r = await apiFetch(`/ninos/${id}`, { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
+    return handleResponse(r);
   },
-  async ninos_delete(id: string) { const r = await apiFetch(`/ninos/${id}`, { method:'DELETE' }); return r.json(); },
-  async ninos_get(id: string) { const r = await apiFetch(`/ninos/${id}`); return r.json(); },
+  
+  async ninos_delete(id: string, forzar = false) { 
+    const params = forzar ? '?forzar=true' : '';
+    const r = await apiFetch(`/ninos/${id}${params}`, { method:'DELETE' }); 
+    
+    // Manejo especial para error 409 (conflicto de clave foránea)
+    if (r.status === 409) {
+      const error = await r.json();
+      const err = new Error(error.message || 'Existen registros relacionados') as any;
+      err.status = 409;
+      err.details = error;
+      throw err;
+    }
+    
+    return handleResponse(r);
+  },
+  
+  async ninos_get(id: string) { 
+    const r = await apiFetch(`/ninos/${id}`); 
+    return r.json(); 
+  },
+  
+  // NUEVAS FUNCIONES para soft delete y dependencias
+  async ninos_desactivar(id: string) {
+    const r = await apiFetch(`/ninos/${id}/desactivar`, { 
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' }
+    });
+    return handleResponse(r);
+  },
+  
+  async ninos_reactivar(id: string) {
+    const r = await apiFetch(`/ninos/${id}/reactivar`, { 
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' }
+    });
+    return handleResponse(r);
+  },
+  
+  async ninos_verificar_dependencias(id: string) {
+    const r = await apiFetch(`/ninos/${id}/dependencias`);
+    return handleResponse(r);
+  },
 
   // ---------- usuarios ----------
-  async usuarios_list() { const r = await apiFetch('/usuarios'); return r.json(); },
+  async usuarios_list() { 
+    const r = await apiFetch('/usuarios'); 
+    return r.json(); 
+  },
   async usuarios_create(data: any) {
-    const r = await apiFetch('/usuarios', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch('/usuarios', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
   async usuarios_update(id: string, data: any) {
-    const r = await apiFetch(`/usuarios/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch(`/usuarios/${id}`, { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
-  async usuarios_delete(id: string) { const r = await apiFetch(`/usuarios/${id}`, { method:'DELETE' }); return r.json(); },
+  async usuarios_delete(id: string) { 
+    const r = await apiFetch(`/usuarios/${id}`, { method:'DELETE' }); 
+    return r.json(); 
+  },
   async usuarios_por_rol(role: string) {
     const r = await apiFetch(`/usuarios?role=${encodeURIComponent(role)}`);
     return r.json();
   },
 
   // ---------- roles / permisos ----------
-  async roles_list() { const r = await apiFetch('/roles'); return r.json(); },
+  async roles_list() { 
+    const r = await apiFetch('/roles'); 
+    return r.json(); 
+  },
   async roles_create(data: any) {
-    const r = await apiFetch('/roles', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch('/roles', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
   async roles_update(id: string, data: any) {
-    const r = await apiFetch(`/roles/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch(`/roles/${id}`, { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
-  async roles_delete(id: string) { const r = await apiFetch(`/roles/${id}`, { method:'DELETE' }); return r.json(); },
+  async roles_delete(id: string) { 
+    const r = await apiFetch(`/roles/${id}`, { method:'DELETE' }); 
+    return r.json(); 
+  },
   async roles_set_perms(id: string, claves: string[]) {
-    const r = await apiFetch(`/roles/${id}/permisos`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({claves}) });
+    const r = await apiFetch(`/roles/${id}/permisos`, { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify({claves}) 
+    });
     return r.json();
   },
-  async permisos_list() { const r = await apiFetch('/permisos'); return r.json(); },
+  async permisos_list() { 
+    const r = await apiFetch('/permisos'); 
+    return r.json(); 
+  },
 
   // ---------- facturas ----------
-  async facturas_list() { const r = await apiFetch('/facturas'); return r.json(); },
+  async facturas_list() { 
+    const r = await apiFetch('/facturas'); 
+    return r.json(); 
+  },
   async facturas_subir(form: FormData) {
     const r = await apiFetch('/facturas/upload', { method:'POST', body: form });
     return r.json();
   },
-  facturas_img(id: string) { return `${getBase()}/facturas/${id}/imagen`; },
+  facturas_img(id: string) { 
+    return `${getBase()}/facturas/${id}/imagen`; 
+  },
   async facturas_update(id: string, data: any) {
-    const r = await apiFetch(`/facturas/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch(`/facturas/${id}`, { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     return r.json();
   },
-  async facturas_delete(id: string) { const r = await apiFetch(`/facturas/${id}`, { method:'DELETE' }); return r.json(); },
+  async facturas_delete(id: string) { 
+    const r = await apiFetch(`/facturas/${id}`, { method:'DELETE' }); 
+    return r.json(); 
+  },
 
   // ---------- perfil ----------
   async perfil_get() {
@@ -163,15 +332,26 @@ export const api = {
     return r.json();
   },
   async perfil_update(data: any) {
-    const r = await apiFetch('/perfil', { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch('/perfil', { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     if (!r.ok) throw new Error('no se pudo guardar el perfil');
     return r.json();
   },
 
   // ---------- asistencia ----------
-  async asistencia_list() { const r = await apiFetch('/asistencia'); return r.json(); },
+  async asistencia_list() { 
+    const r = await apiFetch('/asistencia'); 
+    return r.json(); 
+  },
   async asistencia_create(d: any) {
-    const r = await apiFetch('/asistencia', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(d || {}) });
+    const r = await apiFetch('/asistencia', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(d || {}) 
+    });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
@@ -205,12 +385,20 @@ export const api = {
     return r.json();
   },
   async actividades_create(data: any) {
-    const r = await apiFetch('/actividades', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch('/actividades', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
   async actividades_update(id: string, data: any) {
-    const r = await apiFetch(`/actividades/${id}`, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(data) });
+    const r = await apiFetch(`/actividades/${id}`, { 
+      method:'PUT', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
@@ -218,5 +406,23 @@ export const api = {
     const r = await apiFetch(`/actividades/${id}`, { method:'DELETE' });
     if (!r.ok) throw new Error(await r.text());
     return r.json();
+  },
+  
+  // ---------- documentos (si lo necesitas) ----------
+  async documentos_list() { 
+    const r = await apiFetch('/documentos'); 
+    return r.json(); 
+  },
+  async documentos_create(data: any) {
+    const r = await apiFetch('/documentos', { 
+      method:'POST', 
+      headers:{'content-type':'application/json'}, 
+      body:JSON.stringify(data) 
+    });
+    return r.json();
+  },
+  async documentos_delete(id: string) { 
+    const r = await apiFetch(`/documentos/${id}`, { method:'DELETE' }); 
+    return r.json(); 
   },
 };
