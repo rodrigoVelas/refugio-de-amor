@@ -319,7 +319,7 @@ router.put(
   }
 )
 
-// DELETE /ninos/:id - Eliminar niño
+// DELETE /ninos/:id - Eliminar niño (versión simplificada para testing)
 router.delete(
   '/:id',
   authMiddleware,
@@ -330,44 +330,25 @@ router.delete(
 
       console.log(`[ninos/delete] 🗑️ Eliminando niño ${id}`)
 
-      // 1. Obtener el niño
-      const nino = await pool.query('SELECT foto_url FROM ninos WHERE id = $1', [id])
+      // Verificar que existe
+      const check = await pool.query('SELECT id FROM ninos WHERE id = $1', [id])
 
-      if (nino.rows.length === 0) {
+      if (check.rows.length === 0) {
         console.log(`[ninos/delete] ❌ Niño no encontrado`)
         return res.status(404).json({ error: 'Niño no encontrado' })
       }
 
-      // 2. Eliminar de la BD primero (lo más importante)
+      // Eliminar
       await pool.query('DELETE FROM ninos WHERE id = $1', [id])
-      console.log('[ninos/delete] ✅ Niño eliminado de BD')
-
-      // 3. Intentar eliminar foto de Cloudinary (sin bloquear si falla)
-      if (nino.rows[0].foto_url) {
-        // Ejecutar de forma asíncrona sin esperar
-        setImmediate(async () => {
-          try {
-            const url = nino.rows[0].foto_url
-            const match = url.match(/refugio_ninos\/[^.]+/)
-            
-            if (match) {
-              await cloudinary.uploader.destroy(match[0])
-              console.log('[ninos/delete] 📸 Foto eliminada de Cloudinary')
-            }
-          } catch (err: any) {
-            console.error('[ninos/delete] ⚠️ Error eliminando foto (ignorado):', err.message)
-          }
-        })
-      }
-
-      // 4. Responder inmediatamente
+      
+      console.log('[ninos/delete] ✅ Niño eliminado exitosamente')
       res.json({ ok: true, message: 'Niño eliminado' })
     } catch (error: any) {
-      console.error('[ninos/delete] ❌ Error:', error.message)
+      console.error('[ninos/delete] ❌ ERROR COMPLETO:', error)
       console.error('[ninos/delete] Stack:', error.stack)
       res.status(500).json({ 
         error: 'Error al eliminar niño',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        details: error.message 
       })
     }
   }

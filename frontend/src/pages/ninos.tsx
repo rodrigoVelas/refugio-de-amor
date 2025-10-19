@@ -1,529 +1,7906 @@
-import { useState, useEffect } from 'react'
-import { API_URL } from '../config'
-
-interface Nivel {
-  id: string
-  nombre: string
-}
-
-interface Subnivel {
-  id: string
-  nombre: string
-  nivel_id: string
-}
-
-interface Nino {
-  id: string
-  nombres: string
-  apellidos: string
-  fecha_nacimiento: string
-  genero: string
-  nivel_id: string
-  subnivel_id: string
-  foto_url: string | null
-  estado: string
-  fecha_ingreso: string
-  nivel_nombre: string
-  subnivel_nombre: string
-}
-
-export default function Ninos() {
-  const [ninos, setNinos] = useState<Nino[]>([])
-  const [niveles, setNiveles] = useState<Nivel[]>([])
-  const [subniveles, setSubniveles] = useState<Subnivel[]>([])
-  const [filteredSubniveles, setFilteredSubniveles] = useState<Subnivel[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-
-  // Filtros
-  const [filtroNivel, setFiltroNivel] = useState('')
-  const [filtroSubnivel, setFiltroSubnivel] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('')
-
-  // Form state
-  const [nombres, setNombres] = useState('')
-  const [apellidos, setApellidos] = useState('')
-  const [fechaNacimiento, setFechaNacimiento] = useState('')
-  const [genero, setGenero] = useState('M')
-  const [nivelId, setNivelId] = useState('')
-  const [subnivelId, setSubnivelId] = useState('')
-  const [foto, setFoto] = useState<File | null>(null)
-  const [estado, setEstado] = useState('activo')
-  const [fechaIngreso, setFechaIngreso] = useState(new Date().toISOString().split('T')[0])
-
-  useEffect(() => {
-    cargarDatos()
-  }, [filtroNivel, filtroSubnivel, filtroEstado])
-
-  useEffect(() => {
-    if (nivelId) {
-      const subs = subniveles.filter(s => s.nivel_id === nivelId)
-      setFilteredSubniveles(subs)
-      if (!subs.find(s => s.id === subnivelId)) {
-        setSubnivelId('')
-      }
-    } else {
-      setFilteredSubniveles([])
-      setSubnivelId('')
-    }
-  }, [nivelId, subniveles, subnivelId])
-
-  async function cargarDatos() {
-    try {
-      setLoading(true)
-
-      // Cargar niveles
-      const nivelesRes = await fetch(`${API_URL}/niveles`, { credentials: 'include' })
-      if (nivelesRes.ok) {
-        const nivelesData = await nivelesRes.json()
-        setNiveles(nivelesData)
-      }
-
-      // Cargar subniveles
-      const subnivelesRes = await fetch(`${API_URL}/subniveles`, { credentials: 'include' })
-      if (subnivelesRes.ok) {
-        const subnivelesData = await subnivelesRes.json()
-        setSubniveles(subnivelesData)
-      }
-
-      // Cargar niños con filtros
-      const params = new URLSearchParams()
-      if (filtroNivel) params.append('nivel_id', filtroNivel)
-      if (filtroSubnivel) params.append('subnivel_id', filtroSubnivel)
-      if (filtroEstado) params.append('estado', filtroEstado)
-
-      const ninosUrl = `${API_URL}/ninos${params.toString() ? '?' + params.toString() : ''}`
-      const ninosRes = await fetch(ninosUrl, { credentials: 'include' })
-      
-      if (ninosRes.ok) {
-        const ninosData = await ninosRes.json()
-        setNinos(ninosData)
-      }
-    } catch (error) {
-      console.error('Error cargando datos:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function abrirModal(nino?: Nino) {
-    if (nino) {
-      setEditingId(nino.id)
-      setNombres(nino.nombres)
-      setApellidos(nino.apellidos)
-      setFechaNacimiento(nino.fecha_nacimiento)
-      setGenero(nino.genero)
-      setNivelId(nino.nivel_id)
-      setSubnivelId(nino.subnivel_id)
-      setEstado(nino.estado)
-      setFechaIngreso(nino.fecha_ingreso)
-    } else {
-      resetForm()
-    }
-    setShowModal(true)
-  }
-
-  function resetForm() {
-    setEditingId(null)
-    setNombres('')
-    setApellidos('')
-    setFechaNacimiento('')
-    setGenero('M')
-    setNivelId('')
-    setSubnivelId('')
-    setFoto(null)
-    setEstado('activo')
-    setFechaIngreso(new Date().toISOString().split('T')[0])
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !nivelId || !subnivelId) {
-      alert('Completa todos los campos requeridos')
-      return
-    }
-
-    try {
-      setUploading(true)
-
-      const formData = new FormData()
-      formData.append('nombres', nombres)
-      formData.append('apellidos', apellidos)
-      formData.append('fecha_nacimiento', fechaNacimiento)
-      formData.append('genero', genero)
-      formData.append('nivel_id', nivelId)
-      formData.append('subnivel_id', subnivelId)
-      formData.append('estado', estado)
-      formData.append('fecha_ingreso', fechaIngreso)
-      if (foto) {
-        formData.append('foto', foto)
-      }
-
-      const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
-      const method = editingId ? 'PUT' : 'POST'
-
-      const res = await fetch(url, {
-        method,
-        credentials: 'include',
-        body: formData,
-      })
-
-      const data = await res.json()
-
-      if (res.ok) {
-        alert(editingId ? 'Niño actualizado' : 'Niño registrado exitosamente')
-        setShowModal(false)
-        resetForm()
-        cargarDatos()
-      } else {
-        alert(data.error || 'Error al guardar')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      alert('Error al guardar niño')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  async function handleEliminar(id: string) {
-    if (!confirm('¿Estás seguro de eliminar este niño?')) return
-
-    try {
-      const res = await fetch(`${API_URL}/ninos/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
-
-      if (res.ok) {
-        alert('Niño eliminado')
-        cargarDatos()
-      } else {
-        const data = await res.json()
-        alert(data.error || 'Error al eliminar')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      alert('Error al eliminar niño')
-    }
-  }
-
-  function calcularEdad(fechaNac: string): number {
-    const hoy = new Date()
-    const nacimiento = new Date(fechaNac)
-    let edad = hoy.getFullYear() - nacimiento.getFullYear()
-    const mes = hoy.getMonth() - nacimiento.getMonth()
-    if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
-      edad--
-    }
-    return edad
-  }
-
-  return (
-    <div className="content">
-      <div className="card">
-        <div className="card-header">
-          <h1 className="card-title">Gestión de Niños</h1>
-          <button className="btn" onClick={() => abrirModal()}>
-            Registrar Niño
-          </button>
-        </div>
-
-        {/* Filtros */}
-        <div className="toolbar">
-          <select 
-            className="select" 
-            value={filtroNivel} 
-            onChange={(e) => {
-              setFiltroNivel(e.target.value)
-              setFiltroSubnivel('')
-            }}
-          >
-            <option value="">Todos los niveles</option>
-            {niveles.map((n) => (
-              <option key={n.id} value={n.id}>{n.nombre}</option>
-            ))}
-          </select>
-
-          <select 
-            className="select" 
-            value={filtroSubnivel} 
-            onChange={(e) => setFiltroSubnivel(e.target.value)}
-            disabled={!filtroNivel}
-          >
-            <option value="">Todos los subniveles</option>
-            {subniveles
-              .filter(s => s.nivel_id === filtroNivel)
-              .map((s) => (
-                <option key={s.id} value={s.id}>{s.nombre}</option>
-              ))}
-          </select>
-
-          <select 
-            className="select" 
-            value={filtroEstado} 
-            onChange={(e) => setFiltroEstado(e.target.value)}
-          >
-            <option value="">Todos los estados</option>
-            <option value="activo">Activos</option>
-            <option value="inactivo">Inactivos</option>
-            <option value="egresado">Egresados</option>
-          </select>
-
-          {(filtroNivel || filtroSubnivel || filtroEstado) && (
-            <button 
-              className="btn btn-ghost" 
-              onClick={() => {
-                setFiltroNivel('')
-                setFiltroSubnivel('')
-                setFiltroEstado('')
-              }}
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-
-        {/* Lista de niños */}
-        <div className="card-content">
-          {loading ? (
-            <div className="loading">Cargando niños...</div>
-          ) : ninos.length === 0 ? (
-            <div className="alert">No hay niños registrados</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-              {ninos.map((nino) => (
-                <div 
-                  key={nino.id} 
-                  style={{
-                    padding: '1rem',
-                    background: 'var(--surface-elevated)',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  {nino.foto_url && (
-                    <img 
-                      src={nino.foto_url} 
-                      alt={nino.nombres}
-                      style={{
-                        width: '100%',
-                        height: '200px',
-                        objectFit: 'cover',
-                        borderRadius: 'var(--radius)',
-                        marginBottom: '0.75rem',
-                      }}
-                    />
-                  )}
-                  
-                  <h3 style={{ marginBottom: '0.5rem' }}>
-                    {nino.nombres} {nino.apellidos}
-                  </h3>
-                  
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                    <div>Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
-                    <div>Género: {nino.genero === 'M' ? 'Masculino' : 'Femenino'}</div>
-                    <div>{nino.nivel_nombre} - {nino.subnivel_nombre}</div>
-                    <div>
-                      Estado: 
-                      <span 
-                        style={{
-                          marginLeft: '0.5rem',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          background: nino.estado === 'activo' ? '#dcfce7' : '#fee2e2',
-                          color: nino.estado === 'activo' ? '#166534' : '#991b1b',
-                        }}
-                      >
-                        {nino.estado}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
-                    <button 
-                      className="btn btn-ghost" 
-                      onClick={() => abrirModal(nino)}
-                      style={{ flex: 1 }}
-                    >
-                      Editar
-                    </button>
-                    <button 
-                      className="btn btn-danger" 
-                      onClick={() => handleEliminar(nino.id)}
-                      style={{ flex: 1 }}
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Modal */}
-      {showModal && (
-        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="text-xl">{editingId ? 'Editar Niño' : 'Registrar Niño'}</h2>
-              <button 
-                className="btn btn-ghost" 
-                onClick={() => setShowModal(false)}
-                style={{ padding: '0.5rem' }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="form">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="label">Nombres*</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={nombres}
-                    onChange={(e) => setNombres(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="label">Apellidos*</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={apellidos}
-                    onChange={(e) => setApellidos(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="label">Fecha de Nacimiento*</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={fechaNacimiento}
-                    onChange={(e) => setFechaNacimiento(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="label">Género*</label>
-                  <select 
-                    className="select" 
-                    value={genero} 
-                    onChange={(e) => setGenero(e.target.value)}
-                    required
-                  >
-                    <option value="M">Masculino</option>
-                    <option value="F">Femenino</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="label">Nivel*</label>
-                  <select 
-                    className="select" 
-                    value={nivelId} 
-                    onChange={(e) => setNivelId(e.target.value)}
-                    required
-                  >
-                    <option value="">Selecciona un nivel</option>
-                    {niveles.map((n) => (
-                      <option key={n.id} value={n.id}>{n.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="label">Subnivel*</label>
-                  <select 
-                    className="select" 
-                    value={subnivelId} 
-                    onChange={(e) => setSubnivelId(e.target.value)}
-                    required
-                    disabled={!nivelId}
-                  >
-                    <option value="">Selecciona un subnivel</option>
-                    {filteredSubniveles.map((s) => (
-                      <option key={s.id} value={s.id}>{s.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="label">Estado*</label>
-                  <select 
-                    className="select" 
-                    value={estado} 
-                    onChange={(e) => setEstado(e.target.value)}
-                    required
-                  >
-                    <option value="activo">Activo</option>
-                    <option value="inactivo">Inactivo</option>
-                    <option value="egresado">Egresado</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="label">Fecha de Ingreso*</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={fechaIngreso}
-                    onChange={(e) => setFechaIngreso(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Foto</label>
-                <input
-                  type="file"
-                  className="input"
-                  accept="image/*"
-                  onChange={(e) => setFoto(e.target.files?.[0] || null)}
-                />
-              </div>
-
-              <div className="modal-actions">
-                <button 
-                  type="button" 
-                  className="btn btn-ghost" 
-                  onClick={() => setShowModal(false)}
-                  disabled={uploading}
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn" 
-                  disabled={uploading}
-                >
-                  {uploading ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+[{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "No se encuentra el módulo \"react\" ni sus declaraciones de tipos correspondientes.",
+	"source": "ts",
+	"startLineNumber": 1,
+	"startColumn": 37,
+	"endLineNumber": 1,
+	"endColumn": 44,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "No se encuentra el módulo \"../config\" ni sus declaraciones de tipos correspondientes.",
+	"source": "ts",
+	"startLineNumber": 2,
+	"startColumn": 25,
+	"endLineNumber": 2,
+	"endColumn": 36,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2503",
+	"severity": 8,
+	"message": "No se encuentra el espacio de nombres 'React'.",
+	"source": "ts",
+	"startLineNumber": 132,
+	"startColumn": 34,
+	"endLineNumber": 132,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'alert'.",
+	"source": "ts",
+	"startLineNumber": 136,
+	"startColumn": 7,
+	"endLineNumber": 136,
+	"endColumn": 12,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'alert'.",
+	"source": "ts",
+	"startLineNumber": 161,
+	"startColumn": 9,
+	"endLineNumber": 161,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'alert'.",
+	"source": "ts",
+	"startLineNumber": 167,
+	"startColumn": 9,
+	"endLineNumber": 167,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "La propiedad 'error' no existe en el tipo 'unknown'.",
+	"source": "ts",
+	"startLineNumber": 167,
+	"startColumn": 20,
+	"endLineNumber": 167,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'alert'.",
+	"source": "ts",
+	"startLineNumber": 170,
+	"startColumn": 7,
+	"endLineNumber": 170,
+	"endColumn": 12,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'confirm'.",
+	"source": "ts",
+	"startLineNumber": 177,
+	"startColumn": 10,
+	"endLineNumber": 177,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'alert'.",
+	"source": "ts",
+	"startLineNumber": 186,
+	"startColumn": 9,
+	"endLineNumber": 186,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'alert'.",
+	"source": "ts",
+	"startLineNumber": 189,
+	"startColumn": 9,
+	"endLineNumber": 189,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'alert'.",
+	"source": "ts",
+	"startLineNumber": 192,
+	"startColumn": 7,
+	"endLineNumber": 192,
+	"endColumn": 12,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 206,
+	"startColumn": 6,
+	"endLineNumber": 206,
+	"endColumn": 9,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 206,
+	"startColumn": 10,
+	"endLineNumber": 206,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 206,
+	"startColumn": 10,
+	"endLineNumber": 206,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ')'.",
+	"source": "ts",
+	"startLineNumber": 206,
+	"startColumn": 19,
+	"endLineNumber": 206,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 207,
+	"startColumn": 8,
+	"endLineNumber": 207,
+	"endColumn": 11,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 207,
+	"startColumn": 12,
+	"endLineNumber": 207,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 207,
+	"startColumn": 12,
+	"endLineNumber": 207,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 207,
+	"startColumn": 21,
+	"endLineNumber": 207,
+	"endColumn": 22,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 208,
+	"startColumn": 10,
+	"endLineNumber": 208,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 208,
+	"startColumn": 14,
+	"endLineNumber": 208,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 208,
+	"startColumn": 14,
+	"endLineNumber": 208,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 208,
+	"startColumn": 23,
+	"endLineNumber": 208,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'h1'.",
+	"source": "ts",
+	"startLineNumber": 209,
+	"startColumn": 12,
+	"endLineNumber": 209,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 209,
+	"startColumn": 15,
+	"endLineNumber": 209,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 209,
+	"startColumn": 15,
+	"endLineNumber": 209,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 209,
+	"startColumn": 24,
+	"endLineNumber": 209,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 209,
+	"startColumn": 25,
+	"endLineNumber": 209,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Niños'.",
+	"source": "ts",
+	"startLineNumber": 209,
+	"startColumn": 38,
+	"endLineNumber": 209,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 209,
+	"startColumn": 44,
+	"endLineNumber": 209,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'button'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 12,
+	"endLineNumber": 210,
+	"endColumn": 18,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 19,
+	"endLineNumber": 210,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 19,
+	"endLineNumber": 210,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 35,
+	"endLineNumber": 210,
+	"endColumn": 42,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 35,
+	"endLineNumber": 210,
+	"endColumn": 42,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 43,
+	"endLineNumber": 210,
+	"endColumn": 44,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 44,
+	"endLineNumber": 210,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 47,
+	"endLineNumber": 210,
+	"endColumn": 49,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 63,
+	"endLineNumber": 210,
+	"endColumn": 64,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 63,
+	"endLineNumber": 210,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 63,
+	"endLineNumber": 211,
+	"endColumn": 15,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Registrar'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 64,
+	"endLineNumber": 210,
+	"endColumn": 73,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 74,
+	"endLineNumber": 210,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 211,
+	"startColumn": 10,
+	"endLineNumber": 211,
+	"endColumn": 15,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 213,
+	"startColumn": 10,
+	"endLineNumber": 213,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 213,
+	"startColumn": 14,
+	"endLineNumber": 213,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 213,
+	"startColumn": 14,
+	"endLineNumber": 213,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'select'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 12,
+	"endLineNumber": 214,
+	"endColumn": 18,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 19,
+	"endLineNumber": 214,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 19,
+	"endLineNumber": 214,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 28,
+	"endLineNumber": 214,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 38,
+	"endLineNumber": 214,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 38,
+	"endLineNumber": 214,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"filtroNivel\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 45,
+	"endLineNumber": 214,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 58,
+	"endLineNumber": 214,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onChange'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 58,
+	"endLineNumber": 214,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 67,
+	"endLineNumber": 214,
+	"endColumn": 68,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 68,
+	"endLineNumber": 214,
+	"endColumn": 69,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 69,
+	"endLineNumber": 214,
+	"endColumn": 70,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 72,
+	"endLineNumber": 214,
+	"endColumn": 74,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setFiltroNivel'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 77,
+	"endLineNumber": 214,
+	"endColumn": 91,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 92,
+	"endLineNumber": 214,
+	"endColumn": 93,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setFiltroSubnivel'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 109,
+	"endLineNumber": 214,
+	"endColumn": 126,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 132,
+	"endLineNumber": 214,
+	"endColumn": 133,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 133,
+	"endLineNumber": 214,
+	"endColumn": 134,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 14,
+	"endLineNumber": 215,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 21,
+	"endLineNumber": 215,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 21,
+	"endLineNumber": 215,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 26,
+	"endLineNumber": 215,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Todos'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 30,
+	"endLineNumber": 215,
+	"endColumn": 35,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 36,
+	"endLineNumber": 215,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'los'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 36,
+	"endLineNumber": 215,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'niveles'.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 40,
+	"endLineNumber": 215,
+	"endColumn": 47,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 215,
+	"startColumn": 48,
+	"endLineNumber": 215,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'niveles'.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 14,
+	"endLineNumber": 216,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 32,
+	"endLineNumber": 216,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 39,
+	"endLineNumber": 216,
+	"endColumn": 42,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'key'.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 39,
+	"endLineNumber": 216,
+	"endColumn": 42,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 42,
+	"endLineNumber": 216,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"n\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 44,
+	"endLineNumber": 216,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 45,
+	"endLineNumber": 216,
+	"endColumn": 46,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 50,
+	"endLineNumber": 216,
+	"endColumn": 55,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 50,
+	"endLineNumber": 216,
+	"endColumn": 55,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 56,
+	"endLineNumber": 216,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"n\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 57,
+	"endLineNumber": 216,
+	"endColumn": 58,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 58,
+	"endLineNumber": 216,
+	"endColumn": 59,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"n\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 64,
+	"endLineNumber": 216,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 65,
+	"endLineNumber": 216,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 216,
+	"startColumn": 74,
+	"endLineNumber": 216,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 217,
+	"startColumn": 12,
+	"endLineNumber": 217,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'select'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 12,
+	"endLineNumber": 219,
+	"endColumn": 18,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 19,
+	"endLineNumber": 219,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 19,
+	"endLineNumber": 219,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 38,
+	"endLineNumber": 219,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 38,
+	"endLineNumber": 219,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"filtroSubnivel\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 45,
+	"endLineNumber": 219,
+	"endColumn": 59,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 61,
+	"endLineNumber": 219,
+	"endColumn": 69,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onChange'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 61,
+	"endLineNumber": 219,
+	"endColumn": 69,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 70,
+	"endLineNumber": 219,
+	"endColumn": 71,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 71,
+	"endLineNumber": 219,
+	"endColumn": 72,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 72,
+	"endLineNumber": 219,
+	"endColumn": 73,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 75,
+	"endLineNumber": 219,
+	"endColumn": 77,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setFiltroSubnivel'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 78,
+	"endLineNumber": 219,
+	"endColumn": 95,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 96,
+	"endLineNumber": 219,
+	"endColumn": 97,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 111,
+	"endLineNumber": 219,
+	"endColumn": 112,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'disabled'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 113,
+	"endLineNumber": 219,
+	"endColumn": 121,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 123,
+	"endLineNumber": 219,
+	"endColumn": 124,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 124,
+	"endLineNumber": 219,
+	"endColumn": 135,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'filtroNivel'.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 124,
+	"endLineNumber": 219,
+	"endColumn": 135,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 135,
+	"endLineNumber": 219,
+	"endColumn": 136,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 219,
+	"startColumn": 136,
+	"endLineNumber": 219,
+	"endColumn": 137,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 14,
+	"endLineNumber": 220,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 21,
+	"endLineNumber": 220,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 21,
+	"endLineNumber": 220,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 26,
+	"endLineNumber": 220,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Todos'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 30,
+	"endLineNumber": 220,
+	"endColumn": 35,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 36,
+	"endLineNumber": 220,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'los'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 36,
+	"endLineNumber": 220,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'subniveles'.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 40,
+	"endLineNumber": 220,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 220,
+	"startColumn": 51,
+	"endLineNumber": 220,
+	"endColumn": 59,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'subniveles'.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 14,
+	"endLineNumber": 221,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'filtroNivel'.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 52,
+	"endLineNumber": 221,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 75,
+	"endLineNumber": 221,
+	"endColumn": 81,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 82,
+	"endLineNumber": 221,
+	"endColumn": 85,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'key'.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 82,
+	"endLineNumber": 221,
+	"endColumn": 85,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 85,
+	"endLineNumber": 221,
+	"endColumn": 86,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"s\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 87,
+	"endLineNumber": 221,
+	"endColumn": 88,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 88,
+	"endLineNumber": 221,
+	"endColumn": 89,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 93,
+	"endLineNumber": 221,
+	"endColumn": 98,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 93,
+	"endLineNumber": 221,
+	"endColumn": 98,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 99,
+	"endLineNumber": 221,
+	"endColumn": 125,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"s\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 100,
+	"endLineNumber": 221,
+	"endColumn": 101,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 101,
+	"endLineNumber": 221,
+	"endColumn": 102,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"s\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 107,
+	"endLineNumber": 221,
+	"endColumn": 108,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 108,
+	"endLineNumber": 221,
+	"endColumn": 109,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 221,
+	"startColumn": 117,
+	"endLineNumber": 221,
+	"endColumn": 125,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 222,
+	"startColumn": 12,
+	"endLineNumber": 222,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'select'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 12,
+	"endLineNumber": 224,
+	"endColumn": 18,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 19,
+	"endLineNumber": 224,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 19,
+	"endLineNumber": 224,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 38,
+	"endLineNumber": 224,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 38,
+	"endLineNumber": 224,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"filtroEstado\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 45,
+	"endLineNumber": 224,
+	"endColumn": 57,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 59,
+	"endLineNumber": 224,
+	"endColumn": 67,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onChange'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 59,
+	"endLineNumber": 224,
+	"endColumn": 67,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 68,
+	"endLineNumber": 224,
+	"endColumn": 69,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 69,
+	"endLineNumber": 224,
+	"endColumn": 70,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 70,
+	"endLineNumber": 224,
+	"endColumn": 71,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 73,
+	"endLineNumber": 224,
+	"endColumn": 75,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setFiltroEstado'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 76,
+	"endLineNumber": 224,
+	"endColumn": 91,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 92,
+	"endLineNumber": 224,
+	"endColumn": 93,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 107,
+	"endLineNumber": 224,
+	"endColumn": 108,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 224,
+	"startColumn": 108,
+	"endLineNumber": 224,
+	"endColumn": 109,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 225,
+	"startColumn": 14,
+	"endLineNumber": 225,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 225,
+	"startColumn": 21,
+	"endLineNumber": 225,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 225,
+	"startColumn": 21,
+	"endLineNumber": 225,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 225,
+	"startColumn": 26,
+	"endLineNumber": 225,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 225,
+	"startColumn": 27,
+	"endLineNumber": 225,
+	"endColumn": 44,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Todos'.",
+	"source": "ts",
+	"startLineNumber": 225,
+	"startColumn": 30,
+	"endLineNumber": 225,
+	"endColumn": 35,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 225,
+	"startColumn": 36,
+	"endLineNumber": 225,
+	"endColumn": 44,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 14,
+	"endLineNumber": 226,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 21,
+	"endLineNumber": 226,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 21,
+	"endLineNumber": 226,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 27,
+	"endLineNumber": 226,
+	"endColumn": 52,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Activos'.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 36,
+	"endLineNumber": 226,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 44,
+	"endLineNumber": 226,
+	"endColumn": 52,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 227,
+	"startColumn": 14,
+	"endLineNumber": 227,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 227,
+	"startColumn": 21,
+	"endLineNumber": 227,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 227,
+	"startColumn": 21,
+	"endLineNumber": 227,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 227,
+	"startColumn": 27,
+	"endLineNumber": 227,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Inactivos'.",
+	"source": "ts",
+	"startLineNumber": 227,
+	"startColumn": 38,
+	"endLineNumber": 227,
+	"endColumn": 47,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 227,
+	"startColumn": 48,
+	"endLineNumber": 227,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 14,
+	"endLineNumber": 228,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 21,
+	"endLineNumber": 228,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 21,
+	"endLineNumber": 228,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 27,
+	"endLineNumber": 228,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 27,
+	"endLineNumber": 229,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Egresados'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 38,
+	"endLineNumber": 228,
+	"endColumn": 47,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 48,
+	"endLineNumber": 228,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 229,
+	"startColumn": 12,
+	"endLineNumber": 229,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'filtroNivel'.",
+	"source": "ts",
+	"startLineNumber": 231,
+	"startColumn": 13,
+	"endLineNumber": 231,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'filtroSubnivel'.",
+	"source": "ts",
+	"startLineNumber": 231,
+	"startColumn": 28,
+	"endLineNumber": 231,
+	"endColumn": 42,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'filtroEstado'.",
+	"source": "ts",
+	"startLineNumber": 231,
+	"startColumn": 46,
+	"endLineNumber": 231,
+	"endColumn": 58,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'button'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 14,
+	"endLineNumber": 232,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 21,
+	"endLineNumber": 232,
+	"endColumn": 30,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 21,
+	"endLineNumber": 232,
+	"endColumn": 30,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ')'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 30,
+	"endLineNumber": 232,
+	"endColumn": 31,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 47,
+	"endLineNumber": 232,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 47,
+	"endLineNumber": 232,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 55,
+	"endLineNumber": 232,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 56,
+	"endLineNumber": 232,
+	"endColumn": 57,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 59,
+	"endLineNumber": 232,
+	"endColumn": 61,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setFiltroNivel'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 64,
+	"endLineNumber": 232,
+	"endColumn": 78,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setFiltroSubnivel'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 84,
+	"endLineNumber": 232,
+	"endColumn": 101,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setFiltroEstado'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 107,
+	"endLineNumber": 232,
+	"endColumn": 122,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 129,
+	"endLineNumber": 232,
+	"endColumn": 130,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 232,
+	"startColumn": 129,
+	"endLineNumber": 234,
+	"endColumn": 22,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Limpiar'.",
+	"source": "ts",
+	"startLineNumber": 233,
+	"startColumn": 15,
+	"endLineNumber": 233,
+	"endColumn": 22,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 234,
+	"startColumn": 14,
+	"endLineNumber": 234,
+	"endColumn": 22,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 235,
+	"startColumn": 11,
+	"endLineNumber": 235,
+	"endColumn": 12,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 235,
+	"startColumn": 12,
+	"endLineNumber": 235,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 236,
+	"startColumn": 10,
+	"endLineNumber": 236,
+	"endColumn": 11,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 238,
+	"startColumn": 10,
+	"endLineNumber": 238,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 238,
+	"startColumn": 14,
+	"endLineNumber": 238,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 238,
+	"startColumn": 14,
+	"endLineNumber": 238,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'string' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 238,
+	"startColumn": 24,
+	"endLineNumber": 240,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2362",
+	"severity": 8,
+	"message": "La parte izquierda de una operación aritmética debe ser de tipo \"any\", \"number\", \"bigint\" o un tipo de enumeración.",
+	"source": "ts",
+	"startLineNumber": 239,
+	"startColumn": 11,
+	"endLineNumber": 240,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2300",
+	"severity": 8,
+	"message": "Identificador '(Missing)' duplicado.",
+	"source": "ts",
+	"startLineNumber": 239,
+	"startColumn": 23,
+	"endLineNumber": 239,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1003",
+	"severity": 8,
+	"message": "Se esperaba un identificador.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 13,
+	"endLineNumber": 240,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 18,
+	"endLineNumber": 240,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2371",
+	"severity": 8,
+	"message": "Un inicializador de parámetros solo se permite en una implementación de función o de constructor.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 18,
+	"endLineNumber": 240,
+	"endColumn": 46,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Cargando'.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 38,
+	"endLineNumber": 240,
+	"endColumn": 46,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 46,
+	"endLineNumber": 240,
+	"endColumn": 49,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2300",
+	"severity": 8,
+	"message": "Identificador '(Missing)' duplicado.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 49,
+	"endLineNumber": 240,
+	"endColumn": 49,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1003",
+	"severity": 8,
+	"message": "Se esperaba un identificador.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 49,
+	"endLineNumber": 240,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1138",
+	"severity": 8,
+	"message": "Se espera una declaración de parámetros.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 50,
+	"endLineNumber": 240,
+	"endColumn": 51,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 240,
+	"startColumn": 51,
+	"endLineNumber": 240,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 241,
+	"startColumn": 11,
+	"endLineNumber": 241,
+	"endColumn": 12,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 241,
+	"startColumn": 13,
+	"endLineNumber": 241,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2552",
+	"severity": 8,
+	"message": "No se encuentra el nombre \"ninos\". ¿Quería decir \"Ninos\"?",
+	"source": "ts",
+	"startLineNumber": 241,
+	"startColumn": 15,
+	"endLineNumber": 241,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 14,
+	"endLineNumber": 242,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 18,
+	"endLineNumber": 242,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 18,
+	"endLineNumber": 242,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ')'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 27,
+	"endLineNumber": 242,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'No'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 36,
+	"endLineNumber": 242,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ':'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 39,
+	"endLineNumber": 242,
+	"endColumn": 42,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'hay'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 39,
+	"endLineNumber": 242,
+	"endColumn": 42,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'niños'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 43,
+	"endLineNumber": 242,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 49,
+	"endLineNumber": 242,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 243,
+	"startColumn": 11,
+	"endLineNumber": 243,
+	"endColumn": 12,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 243,
+	"startColumn": 13,
+	"endLineNumber": 243,
+	"endColumn": 14,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 14,
+	"endLineNumber": 244,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 18,
+	"endLineNumber": 244,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 18,
+	"endLineNumber": 244,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ')'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 23,
+	"endLineNumber": 244,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 25,
+	"endLineNumber": 244,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 36,
+	"endLineNumber": 244,
+	"endColumn": 42,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gridTemplateColumns'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 44,
+	"endLineNumber": 244,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 63,
+	"endLineNumber": 244,
+	"endColumn": 64,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 65,
+	"endLineNumber": 244,
+	"endColumn": 104,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gap'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 106,
+	"endLineNumber": 244,
+	"endColumn": 109,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 109,
+	"endLineNumber": 244,
+	"endColumn": 110,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 119,
+	"endLineNumber": 244,
+	"endColumn": 120,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 244,
+	"startColumn": 120,
+	"endLineNumber": 244,
+	"endColumn": 121,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2552",
+	"severity": 8,
+	"message": "No se encuentra el nombre \"ninos\". ¿Quería decir \"Ninos\"?",
+	"source": "ts",
+	"startLineNumber": 245,
+	"startColumn": 16,
+	"endLineNumber": 245,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 245,
+	"startColumn": 21,
+	"endLineNumber": 245,
+	"endColumn": 22,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 18,
+	"endLineNumber": 246,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 22,
+	"endLineNumber": 246,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'key'.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 22,
+	"endLineNumber": 246,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ')'.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 25,
+	"endLineNumber": 246,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 31,
+	"endLineNumber": 246,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 36,
+	"endLineNumber": 246,
+	"endColumn": 41,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 36,
+	"endLineNumber": 246,
+	"endColumn": 41,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 43,
+	"endLineNumber": 246,
+	"endColumn": 44,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 246,
+	"startColumn": 167,
+	"endLineNumber": 246,
+	"endColumn": 168,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'h3'.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 20,
+	"endLineNumber": 247,
+	"endColumn": 22,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 23,
+	"endLineNumber": 247,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 23,
+	"endLineNumber": 247,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 28,
+	"endLineNumber": 247,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 57,
+	"endLineNumber": 247,
+	"endColumn": 58,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2552",
+	"severity": 8,
+	"message": "No se encuentra el nombre \"nino\". ¿Quería decir \"Ninos\"?",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 59,
+	"endLineNumber": 247,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 63,
+	"endLineNumber": 247,
+	"endColumn": 64,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 73,
+	"endLineNumber": 247,
+	"endColumn": 74,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2552",
+	"severity": 8,
+	"message": "No se encuentra el nombre \"nino\". ¿Quería decir \"Ninos\"?",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 74,
+	"endLineNumber": 247,
+	"endColumn": 78,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 247,
+	"startColumn": 90,
+	"endLineNumber": 247,
+	"endColumn": 91,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 20,
+	"endLineNumber": 248,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 24,
+	"endLineNumber": 248,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 24,
+	"endLineNumber": 248,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 31,
+	"endLineNumber": 248,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 43,
+	"endLineNumber": 248,
+	"endColumn": 53,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'color'.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 55,
+	"endLineNumber": 248,
+	"endColumn": 60,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 60,
+	"endLineNumber": 248,
+	"endColumn": 61,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 62,
+	"endLineNumber": 248,
+	"endColumn": 85,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'marginBottom'.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 87,
+	"endLineNumber": 248,
+	"endColumn": 99,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 99,
+	"endLineNumber": 248,
+	"endColumn": 100,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 112,
+	"endLineNumber": 248,
+	"endColumn": 113,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 248,
+	"startColumn": 113,
+	"endLineNumber": 248,
+	"endColumn": 114,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 22,
+	"endLineNumber": 249,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Edad'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 26,
+	"endLineNumber": 249,
+	"endColumn": 30,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 30,
+	"endLineNumber": 249,
+	"endColumn": 31,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'calcularEdad'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 33,
+	"endLineNumber": 249,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'nino'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 46,
+	"endLineNumber": 249,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'años'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 70,
+	"endLineNumber": 249,
+	"endColumn": 74,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'boolean' y '{ nino: any; \"\": string; }'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 70,
+	"endLineNumber": 250,
+	"endColumn": 74,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 70,
+	"endLineNumber": 250,
+	"endColumn": 80,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'boolean' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 70,
+	"endLineNumber": 251,
+	"endColumn": 70,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 70,
+	"endLineNumber": 251,
+	"endColumn": 76,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 249,
+	"startColumn": 75,
+	"endLineNumber": 249,
+	"endColumn": 80,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 250,
+	"startColumn": 22,
+	"endLineNumber": 250,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"nino\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 250,
+	"startColumn": 27,
+	"endLineNumber": 250,
+	"endColumn": 31,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 250,
+	"startColumn": 31,
+	"endLineNumber": 250,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 250,
+	"startColumn": 75,
+	"endLineNumber": 250,
+	"endColumn": 80,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 22,
+	"endLineNumber": 251,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2362",
+	"severity": 8,
+	"message": "La parte izquierda de una operación aritmética debe ser de tipo \"any\", \"number\", \"bigint\" o un tipo de enumeración.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 26,
+	"endLineNumber": 251,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"nino\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 27,
+	"endLineNumber": 251,
+	"endColumn": 31,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 31,
+	"endLineNumber": 251,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2363",
+	"severity": 8,
+	"message": "La parte derecha de una operación aritmética debe ser de tipo \"any\", \"number\", \"bigint\" o un tipo de enumeración.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 48,
+	"endLineNumber": 251,
+	"endColumn": 70,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"nino\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 49,
+	"endLineNumber": 251,
+	"endColumn": 53,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 53,
+	"endLineNumber": 251,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 71,
+	"endLineNumber": 251,
+	"endColumn": 76,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 22,
+	"endLineNumber": 252,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Estado'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 26,
+	"endLineNumber": 252,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 32,
+	"endLineNumber": 252,
+	"endColumn": 33,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'span'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 35,
+	"endLineNumber": 252,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 40,
+	"endLineNumber": 252,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 40,
+	"endLineNumber": 252,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 45,
+	"endLineNumber": 252,
+	"endColumn": 46,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 58,
+	"endLineNumber": 252,
+	"endColumn": 67,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'borderRadius'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 69,
+	"endLineNumber": 252,
+	"endColumn": 81,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 81,
+	"endLineNumber": 252,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 83,
+	"endLineNumber": 252,
+	"endColumn": 88,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'fontSize'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 90,
+	"endLineNumber": 252,
+	"endColumn": 98,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 98,
+	"endLineNumber": 252,
+	"endColumn": 99,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 100,
+	"endLineNumber": 252,
+	"endColumn": 109,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'background'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 111,
+	"endLineNumber": 252,
+	"endColumn": 121,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 121,
+	"endLineNumber": 252,
+	"endColumn": 122,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'nino'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 123,
+	"endLineNumber": 252,
+	"endColumn": 127,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 123,
+	"endLineNumber": 252,
+	"endColumn": 171,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'color'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 173,
+	"endLineNumber": 252,
+	"endColumn": 178,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 178,
+	"endLineNumber": 252,
+	"endColumn": 179,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'nino'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 180,
+	"endLineNumber": 252,
+	"endColumn": 184,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 231,
+	"endLineNumber": 252,
+	"endColumn": 232,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 231,
+	"endLineNumber": 252,
+	"endColumn": 257,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"nino\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 233,
+	"endLineNumber": 252,
+	"endColumn": 237,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 237,
+	"endLineNumber": 252,
+	"endColumn": 238,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 253,
+	"startColumn": 20,
+	"endLineNumber": 253,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 20,
+	"endLineNumber": 254,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 24,
+	"endLineNumber": 254,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 24,
+	"endLineNumber": 254,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 31,
+	"endLineNumber": 254,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 42,
+	"endLineNumber": 254,
+	"endColumn": 48,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gap'.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 50,
+	"endLineNumber": 254,
+	"endColumn": 53,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 53,
+	"endLineNumber": 254,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 65,
+	"endLineNumber": 254,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 66,
+	"endLineNumber": 254,
+	"endColumn": 67,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'button'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 22,
+	"endLineNumber": 255,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 29,
+	"endLineNumber": 255,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 29,
+	"endLineNumber": 255,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 38,
+	"endLineNumber": 255,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 55,
+	"endLineNumber": 255,
+	"endColumn": 62,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 55,
+	"endLineNumber": 255,
+	"endColumn": 62,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 63,
+	"endLineNumber": 255,
+	"endColumn": 64,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 64,
+	"endLineNumber": 255,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 67,
+	"endLineNumber": 255,
+	"endColumn": 69,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'abrirModal'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 70,
+	"endLineNumber": 255,
+	"endColumn": 80,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'nino'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 81,
+	"endLineNumber": 255,
+	"endColumn": 85,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 86,
+	"endLineNumber": 255,
+	"endColumn": 87,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 88,
+	"endLineNumber": 255,
+	"endColumn": 93,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 95,
+	"endLineNumber": 255,
+	"endColumn": 96,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 106,
+	"endLineNumber": 255,
+	"endColumn": 107,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 107,
+	"endLineNumber": 255,
+	"endColumn": 108,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 107,
+	"endLineNumber": 255,
+	"endColumn": 123,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Editar'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 108,
+	"endLineNumber": 255,
+	"endColumn": 114,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 115,
+	"endLineNumber": 255,
+	"endColumn": 123,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'button'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 22,
+	"endLineNumber": 256,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 29,
+	"endLineNumber": 256,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 29,
+	"endLineNumber": 256,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 56,
+	"endLineNumber": 256,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 56,
+	"endLineNumber": 256,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 64,
+	"endLineNumber": 256,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 65,
+	"endLineNumber": 256,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 68,
+	"endLineNumber": 256,
+	"endColumn": 70,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'handleEliminar'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 71,
+	"endLineNumber": 256,
+	"endColumn": 85,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'nino'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 86,
+	"endLineNumber": 256,
+	"endColumn": 90,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 94,
+	"endLineNumber": 256,
+	"endColumn": 95,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 96,
+	"endLineNumber": 256,
+	"endColumn": 101,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 103,
+	"endLineNumber": 256,
+	"endColumn": 104,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 114,
+	"endLineNumber": 256,
+	"endColumn": 115,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 115,
+	"endLineNumber": 256,
+	"endColumn": 116,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 115,
+	"endLineNumber": 256,
+	"endColumn": 133,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 115,
+	"endLineNumber": 257,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 115,
+	"endLineNumber": 258,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Eliminar'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 116,
+	"endLineNumber": 256,
+	"endColumn": 124,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 125,
+	"endLineNumber": 256,
+	"endColumn": 133,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 257,
+	"startColumn": 20,
+	"endLineNumber": 257,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 258,
+	"startColumn": 18,
+	"endLineNumber": 258,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 259,
+	"startColumn": 15,
+	"endLineNumber": 259,
+	"endColumn": 16,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 259,
+	"startColumn": 16,
+	"endLineNumber": 259,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 259,
+	"startColumn": 17,
+	"endLineNumber": 259,
+	"endColumn": 18,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 260,
+	"startColumn": 14,
+	"endLineNumber": 260,
+	"endColumn": 15,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 261,
+	"startColumn": 11,
+	"endLineNumber": 261,
+	"endColumn": 12,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 261,
+	"startColumn": 12,
+	"endLineNumber": 261,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 262,
+	"startColumn": 10,
+	"endLineNumber": 262,
+	"endColumn": 11,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 263,
+	"startColumn": 8,
+	"endLineNumber": 263,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'showModal'.",
+	"source": "ts",
+	"startLineNumber": 265,
+	"startColumn": 8,
+	"endLineNumber": 265,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 10,
+	"endLineNumber": 266,
+	"endColumn": 13,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 14,
+	"endLineNumber": 266,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 14,
+	"endLineNumber": 266,
+	"endColumn": 23,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ')'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 23,
+	"endLineNumber": 266,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 41,
+	"endLineNumber": 266,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 41,
+	"endLineNumber": 266,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 49,
+	"endLineNumber": 266,
+	"endColumn": 50,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 50,
+	"endLineNumber": 266,
+	"endColumn": 51,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 53,
+	"endLineNumber": 266,
+	"endColumn": 55,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setShowModal'.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 56,
+	"endLineNumber": 266,
+	"endColumn": 68,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 266,
+	"startColumn": 76,
+	"endLineNumber": 266,
+	"endColumn": 77,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 12,
+	"endLineNumber": 267,
+	"endColumn": 15,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 16,
+	"endLineNumber": 267,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 16,
+	"endLineNumber": 267,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 25,
+	"endLineNumber": 267,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 34,
+	"endLineNumber": 267,
+	"endColumn": 41,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 34,
+	"endLineNumber": 267,
+	"endColumn": 41,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 42,
+	"endLineNumber": 267,
+	"endColumn": 43,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 43,
+	"endLineNumber": 267,
+	"endColumn": 44,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 44,
+	"endLineNumber": 267,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 47,
+	"endLineNumber": 267,
+	"endColumn": 49,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'e'.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 50,
+	"endLineNumber": 267,
+	"endColumn": 51,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 69,
+	"endLineNumber": 267,
+	"endColumn": 70,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 267,
+	"startColumn": 70,
+	"endLineNumber": 267,
+	"endColumn": 71,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 268,
+	"startColumn": 14,
+	"endLineNumber": 268,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 268,
+	"startColumn": 18,
+	"endLineNumber": 268,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 268,
+	"startColumn": 18,
+	"endLineNumber": 268,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 268,
+	"startColumn": 27,
+	"endLineNumber": 268,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'h2'.",
+	"source": "ts",
+	"startLineNumber": 269,
+	"startColumn": 16,
+	"endLineNumber": 269,
+	"endColumn": 18,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"editingId\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 269,
+	"startColumn": 20,
+	"endLineNumber": 269,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 269,
+	"startColumn": 32,
+	"endLineNumber": 269,
+	"endColumn": 40,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 269,
+	"startColumn": 56,
+	"endLineNumber": 269,
+	"endColumn": 60,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Niño'.",
+	"source": "ts",
+	"startLineNumber": 269,
+	"startColumn": 56,
+	"endLineNumber": 269,
+	"endColumn": 60,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 269,
+	"startColumn": 61,
+	"endLineNumber": 269,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'button'.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 16,
+	"endLineNumber": 270,
+	"endColumn": 22,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 23,
+	"endLineNumber": 270,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 23,
+	"endLineNumber": 270,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 49,
+	"endLineNumber": 270,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 49,
+	"endLineNumber": 270,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 57,
+	"endLineNumber": 270,
+	"endColumn": 58,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 58,
+	"endLineNumber": 270,
+	"endColumn": 59,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 61,
+	"endLineNumber": 270,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setShowModal'.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 64,
+	"endLineNumber": 270,
+	"endColumn": 76,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 83,
+	"endLineNumber": 270,
+	"endColumn": 84,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 84,
+	"endLineNumber": 270,
+	"endColumn": 85,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1127",
+	"severity": 8,
+	"message": "Carácter no válido.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 85,
+	"endLineNumber": 270,
+	"endColumn": 86,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 270,
+	"startColumn": 87,
+	"endLineNumber": 270,
+	"endColumn": 88,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 271,
+	"startColumn": 14,
+	"endLineNumber": 271,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'form'.",
+	"source": "ts",
+	"startLineNumber": 272,
+	"startColumn": 14,
+	"endLineNumber": 272,
+	"endColumn": 18,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 272,
+	"startColumn": 19,
+	"endLineNumber": 272,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onSubmit'.",
+	"source": "ts",
+	"startLineNumber": 272,
+	"startColumn": 19,
+	"endLineNumber": 272,
+	"endColumn": 27,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"handleSubmit\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 272,
+	"startColumn": 29,
+	"endLineNumber": 272,
+	"endColumn": 41,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 272,
+	"startColumn": 43,
+	"endLineNumber": 272,
+	"endColumn": 52,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 272,
+	"startColumn": 43,
+	"endLineNumber": 272,
+	"endColumn": 52,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 16,
+	"endLineNumber": 273,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 20,
+	"endLineNumber": 273,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 20,
+	"endLineNumber": 273,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 25,
+	"endLineNumber": 273,
+	"endColumn": 26,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 38,
+	"endLineNumber": 273,
+	"endColumn": 44,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gridTemplateColumns'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 46,
+	"endLineNumber": 273,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 65,
+	"endLineNumber": 273,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 67,
+	"endLineNumber": 273,
+	"endColumn": 76,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gap'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 78,
+	"endLineNumber": 273,
+	"endColumn": 81,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 81,
+	"endLineNumber": 273,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 273,
+	"startColumn": 92,
+	"endLineNumber": 273,
+	"endColumn": 93,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 18,
+	"endLineNumber": 274,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 23,
+	"endLineNumber": 274,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 29,
+	"endLineNumber": 274,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 29,
+	"endLineNumber": 274,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 38,
+	"endLineNumber": 274,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'string' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 39,
+	"endLineNumber": 274,
+	"endColumn": 157,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Nombres'.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 47,
+	"endLineNumber": 274,
+	"endColumn": 54,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 56,
+	"endLineNumber": 274,
+	"endColumn": 57,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 274,
+	"startColumn": 159,
+	"endLineNumber": 274,
+	"endColumn": 160,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 18,
+	"endLineNumber": 275,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 23,
+	"endLineNumber": 275,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 29,
+	"endLineNumber": 275,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 29,
+	"endLineNumber": 275,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 38,
+	"endLineNumber": 275,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'string' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 39,
+	"endLineNumber": 275,
+	"endColumn": 163,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 39,
+	"endLineNumber": 276,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Apellidos'.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 47,
+	"endLineNumber": 275,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 58,
+	"endLineNumber": 275,
+	"endColumn": 59,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 275,
+	"startColumn": 165,
+	"endLineNumber": 275,
+	"endColumn": 166,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 276,
+	"startColumn": 16,
+	"endLineNumber": 276,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 16,
+	"endLineNumber": 277,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 20,
+	"endLineNumber": 277,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 20,
+	"endLineNumber": 277,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 27,
+	"endLineNumber": 277,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 38,
+	"endLineNumber": 277,
+	"endColumn": 44,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gridTemplateColumns'.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 46,
+	"endLineNumber": 277,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 65,
+	"endLineNumber": 277,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 67,
+	"endLineNumber": 277,
+	"endColumn": 76,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gap'.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 78,
+	"endLineNumber": 277,
+	"endColumn": 81,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 81,
+	"endLineNumber": 277,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 91,
+	"endLineNumber": 277,
+	"endColumn": 92,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 277,
+	"startColumn": 92,
+	"endLineNumber": 277,
+	"endColumn": 93,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 18,
+	"endLineNumber": 278,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 23,
+	"endLineNumber": 278,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 29,
+	"endLineNumber": 278,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 29,
+	"endLineNumber": 278,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 38,
+	"endLineNumber": 278,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Fecha'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 47,
+	"endLineNumber": 278,
+	"endColumn": 52,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 53,
+	"endLineNumber": 278,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Nac'.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 53,
+	"endLineNumber": 278,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 58,
+	"endLineNumber": 278,
+	"endColumn": 59,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 278,
+	"startColumn": 189,
+	"endLineNumber": 278,
+	"endColumn": 190,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 18,
+	"endLineNumber": 279,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 23,
+	"endLineNumber": 279,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 29,
+	"endLineNumber": 279,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 29,
+	"endLineNumber": 279,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 38,
+	"endLineNumber": 279,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'string' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 39,
+	"endLineNumber": 279,
+	"endColumn": 181,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Género'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 47,
+	"endLineNumber": 279,
+	"endColumn": 53,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 55,
+	"endLineNumber": 279,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 183,
+	"endLineNumber": 279,
+	"endColumn": 189,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 190,
+	"endLineNumber": 279,
+	"endColumn": 195,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 190,
+	"endLineNumber": 279,
+	"endColumn": 195,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 195,
+	"endLineNumber": 279,
+	"endColumn": 196,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 196,
+	"endLineNumber": 279,
+	"endColumn": 225,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 196,
+	"endLineNumber": 280,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Femenino'.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 200,
+	"endLineNumber": 279,
+	"endColumn": 208,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 279,
+	"startColumn": 227,
+	"endLineNumber": 279,
+	"endColumn": 228,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 280,
+	"startColumn": 16,
+	"endLineNumber": 280,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 16,
+	"endLineNumber": 281,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 20,
+	"endLineNumber": 281,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 20,
+	"endLineNumber": 281,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 27,
+	"endLineNumber": 281,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 38,
+	"endLineNumber": 281,
+	"endColumn": 44,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gridTemplateColumns'.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 46,
+	"endLineNumber": 281,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 65,
+	"endLineNumber": 281,
+	"endColumn": 66,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2695",
+	"severity": 8,
+	"message": "La parte izquierda del operador de coma no se usa y no tiene efectos secundarios.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 67,
+	"endLineNumber": 281,
+	"endColumn": 76,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'gap'.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 78,
+	"endLineNumber": 281,
+	"endColumn": 81,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 81,
+	"endLineNumber": 281,
+	"endColumn": 82,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 91,
+	"endLineNumber": 281,
+	"endColumn": 92,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1109",
+	"severity": 8,
+	"message": "Se esperaba una expresión.",
+	"source": "ts",
+	"startLineNumber": 281,
+	"startColumn": 92,
+	"endLineNumber": 281,
+	"endColumn": 93,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 18,
+	"endLineNumber": 282,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 23,
+	"endLineNumber": 282,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 29,
+	"endLineNumber": 282,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 29,
+	"endLineNumber": 282,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 38,
+	"endLineNumber": 282,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'string' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 39,
+	"endLineNumber": 282,
+	"endColumn": 191,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'boolean' y '{ niveles: any; \"\": any; }'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 39,
+	"endLineNumber": 290,
+	"endColumn": 100,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2693",
+	"severity": 8,
+	"message": "'Nivel' solo hace referencia a un tipo, pero aquí se usa como valor.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 47,
+	"endLineNumber": 282,
+	"endColumn": 52,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 54,
+	"endLineNumber": 282,
+	"endColumn": 55,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"niveles\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 193,
+	"endLineNumber": 282,
+	"endColumn": 200,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 200,
+	"endLineNumber": 282,
+	"endColumn": 201,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 211,
+	"endLineNumber": 282,
+	"endColumn": 217,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 218,
+	"endLineNumber": 282,
+	"endColumn": 221,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'key'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 218,
+	"endLineNumber": 282,
+	"endColumn": 221,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 221,
+	"endLineNumber": 282,
+	"endColumn": 222,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"n\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 223,
+	"endLineNumber": 282,
+	"endColumn": 224,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 224,
+	"endLineNumber": 282,
+	"endColumn": 225,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 229,
+	"endLineNumber": 282,
+	"endColumn": 234,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 229,
+	"endLineNumber": 282,
+	"endColumn": 234,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 235,
+	"endLineNumber": 282,
+	"endColumn": 271,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"n\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 236,
+	"endLineNumber": 282,
+	"endColumn": 237,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 237,
+	"endLineNumber": 282,
+	"endColumn": 238,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"n\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 243,
+	"endLineNumber": 282,
+	"endColumn": 244,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 244,
+	"endLineNumber": 282,
+	"endColumn": 245,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 282,
+	"startColumn": 273,
+	"endLineNumber": 282,
+	"endColumn": 274,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 18,
+	"endLineNumber": 283,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 23,
+	"endLineNumber": 283,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 29,
+	"endLineNumber": 283,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 29,
+	"endLineNumber": 283,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 38,
+	"endLineNumber": 283,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'string' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 39,
+	"endLineNumber": 283,
+	"endColumn": 220,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'boolean' y '{ filteredSubniveles: any; \"\": any; }'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 39,
+	"endLineNumber": 285,
+	"endColumn": 92,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2693",
+	"severity": 8,
+	"message": "'Subnivel' solo hace referencia a un tipo, pero aquí se usa como valor.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 47,
+	"endLineNumber": 283,
+	"endColumn": 55,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 57,
+	"endLineNumber": 283,
+	"endColumn": 58,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"filteredSubniveles\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 222,
+	"endLineNumber": 283,
+	"endColumn": 240,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 240,
+	"endLineNumber": 283,
+	"endColumn": 241,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 251,
+	"endLineNumber": 283,
+	"endColumn": 257,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 258,
+	"endLineNumber": 283,
+	"endColumn": 261,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'key'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 258,
+	"endLineNumber": 283,
+	"endColumn": 261,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 261,
+	"endLineNumber": 283,
+	"endColumn": 262,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"s\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 263,
+	"endLineNumber": 283,
+	"endColumn": 264,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 264,
+	"endLineNumber": 283,
+	"endColumn": 265,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 269,
+	"endLineNumber": 283,
+	"endColumn": 274,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 269,
+	"endLineNumber": 283,
+	"endColumn": 274,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 275,
+	"endLineNumber": 283,
+	"endColumn": 311,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 275,
+	"endLineNumber": 284,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"s\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 276,
+	"endLineNumber": 283,
+	"endColumn": 277,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 277,
+	"endLineNumber": 283,
+	"endColumn": 278,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"s\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 283,
+	"endLineNumber": 283,
+	"endColumn": 284,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 284,
+	"endLineNumber": 283,
+	"endColumn": 285,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 283,
+	"startColumn": 313,
+	"endLineNumber": 283,
+	"endColumn": 314,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 284,
+	"startColumn": 16,
+	"endLineNumber": 284,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 285,
+	"startColumn": 16,
+	"endLineNumber": 285,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 285,
+	"startColumn": 20,
+	"endLineNumber": 285,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'style'.",
+	"source": "ts",
+	"startLineNumber": 285,
+	"startColumn": 20,
+	"endLineNumber": 285,
+	"endColumn": 25,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 285,
+	"startColumn": 27,
+	"endLineNumber": 285,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 285,
+	"startColumn": 91,
+	"endLineNumber": 285,
+	"endColumn": 92,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 18,
+	"endLineNumber": 286,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 23,
+	"endLineNumber": 286,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 29,
+	"endLineNumber": 286,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 29,
+	"endLineNumber": 286,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 38,
+	"endLineNumber": 286,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos 'string' y 'number'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 39,
+	"endLineNumber": 286,
+	"endColumn": 183,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Estado'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 47,
+	"endLineNumber": 286,
+	"endColumn": 53,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 55,
+	"endLineNumber": 286,
+	"endColumn": 56,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'option'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 185,
+	"endLineNumber": 286,
+	"endColumn": 191,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 192,
+	"endLineNumber": 286,
+	"endColumn": 197,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'value'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 192,
+	"endLineNumber": 286,
+	"endColumn": 197,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 197,
+	"endLineNumber": 286,
+	"endColumn": 198,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 198,
+	"endLineNumber": 286,
+	"endColumn": 267,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Inactivo'.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 209,
+	"endLineNumber": 286,
+	"endColumn": 217,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 286,
+	"startColumn": 269,
+	"endLineNumber": 286,
+	"endColumn": 270,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 18,
+	"endLineNumber": 287,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'label'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 23,
+	"endLineNumber": 287,
+	"endColumn": 28,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 29,
+	"endLineNumber": 287,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 29,
+	"endLineNumber": 287,
+	"endColumn": 38,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 38,
+	"endLineNumber": 287,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Fecha'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 47,
+	"endLineNumber": 287,
+	"endColumn": 52,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 53,
+	"endLineNumber": 287,
+	"endColumn": 60,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Ingreso'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 53,
+	"endLineNumber": 287,
+	"endColumn": 60,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 53,
+	"endLineNumber": 288,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 62,
+	"endLineNumber": 287,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 187,
+	"endLineNumber": 287,
+	"endColumn": 188,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 288,
+	"startColumn": 16,
+	"endLineNumber": 288,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'div'.",
+	"source": "ts",
+	"startLineNumber": 289,
+	"startColumn": 16,
+	"endLineNumber": 289,
+	"endColumn": 19,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 289,
+	"startColumn": 20,
+	"endLineNumber": 289,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 289,
+	"startColumn": 20,
+	"endLineNumber": 289,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'button'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 18,
+	"endLineNumber": 290,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba '>'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 25,
+	"endLineNumber": 290,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'type'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 25,
+	"endLineNumber": 290,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 29,
+	"endLineNumber": 290,
+	"endColumn": 30,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 39,
+	"endLineNumber": 290,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 39,
+	"endLineNumber": 290,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 65,
+	"endLineNumber": 290,
+	"endColumn": 72,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'onClick'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 65,
+	"endLineNumber": 290,
+	"endColumn": 72,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "No se puede llamar a esta expresión.\n  El tipo \"{}\" no tiene signaturas de llamada.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 73,
+	"endLineNumber": 290,
+	"endColumn": 74,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1136",
+	"severity": 8,
+	"message": "Se esperaba una asignación de propiedad.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 74,
+	"endLineNumber": 290,
+	"endColumn": 75,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 77,
+	"endLineNumber": 290,
+	"endColumn": 79,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'setShowModal'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 80,
+	"endLineNumber": 290,
+	"endColumn": 92,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 99,
+	"endLineNumber": 290,
+	"endColumn": 100,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 101,
+	"endLineNumber": 290,
+	"endColumn": 109,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'disabled'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 101,
+	"endLineNumber": 290,
+	"endColumn": 109,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 110,
+	"endLineNumber": 290,
+	"endColumn": 136,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"saving\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 111,
+	"endLineNumber": 290,
+	"endColumn": 117,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'Cancelar'.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 119,
+	"endLineNumber": 290,
+	"endColumn": 127,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 290,
+	"startColumn": 128,
+	"endLineNumber": 290,
+	"endColumn": 136,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'button'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 18,
+	"endLineNumber": 291,
+	"endColumn": 24,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 25,
+	"endLineNumber": 291,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'type'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 25,
+	"endLineNumber": 291,
+	"endColumn": 29,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 39,
+	"endLineNumber": 291,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'className'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 39,
+	"endLineNumber": 291,
+	"endColumn": 48,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ';'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 55,
+	"endLineNumber": 291,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'disabled'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 55,
+	"endLineNumber": 291,
+	"endColumn": 63,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '>' no se puede aplicar a los tipos '{ saving: any; }' y '{ saving: any; 'Guardando...': string; }'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 64,
+	"endLineNumber": 291,
+	"endColumn": 139,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 64,
+	"endLineNumber": 291,
+	"endColumn": 148,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 64,
+	"endLineNumber": 292,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 64,
+	"endLineNumber": 293,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 64,
+	"endLineNumber": 294,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2365",
+	"severity": 8,
+	"message": "El operador '<' no se puede aplicar a los tipos 'boolean' y 'RegExp'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 64,
+	"endLineNumber": 295,
+	"endColumn": 15,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"saving\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 65,
+	"endLineNumber": 291,
+	"endColumn": 71,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "18004",
+	"severity": 8,
+	"message": "No existe ningún valor en el ámbito para la propiedad abreviada \"saving\". Declare uno o proporcione un inicializador.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 74,
+	"endLineNumber": 291,
+	"endColumn": 80,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1005",
+	"severity": 8,
+	"message": "Se esperaba ','.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 83,
+	"endLineNumber": 291,
+	"endColumn": 97,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "No se encuentra el nombre 'editingId'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 100,
+	"endLineNumber": 291,
+	"endColumn": 109,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 140,
+	"endLineNumber": 291,
+	"endColumn": 148,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 292,
+	"startColumn": 16,
+	"endLineNumber": 292,
+	"endColumn": 21,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 293,
+	"startColumn": 14,
+	"endLineNumber": 293,
+	"endColumn": 20,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 294,
+	"startColumn": 12,
+	"endLineNumber": 294,
+	"endColumn": 17,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1161",
+	"severity": 8,
+	"message": "Literal de expresión regular sin terminar.",
+	"source": "ts",
+	"startLineNumber": 295,
+	"startColumn": 10,
+	"endLineNumber": 295,
+	"endColumn": 15,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 296,
+	"startColumn": 7,
+	"endLineNumber": 296,
+	"endColumn": 8,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 296,
+	"startColumn": 8,
+	"endLineNumber": 296,
+	"endColumn": 9,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1110",
+	"severity": 8,
+	"message": "Se esperaba un tipo.",
+	"source": "ts",
+	"startLineNumber": 297,
+	"startColumn": 6,
+	"endLineNumber": 297,
+	"endColumn": 7,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 298,
+	"startColumn": 3,
+	"endLineNumber": 298,
+	"endColumn": 4,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/rodrigovelasquez/Documents/U 2025/Segundo semestre/proyecto de graduacion progra/refugio-app-crud2/backend/src/routes/ninos.ts",
+	"owner": "typescript",
+	"code": "1128",
+	"severity": 8,
+	"message": "Se esperaba una declaración o una instrucción.",
+	"source": "ts",
+	"startLineNumber": 299,
+	"startColumn": 1,
+	"endLineNumber": 299,
+	"endColumn": 2,
+	"origin": "extHost1"
+}]
