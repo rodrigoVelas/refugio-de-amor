@@ -1,111 +1,114 @@
-// backend/src/server.ts
-import express from 'express';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import dotenv from 'dotenv';
-import path from 'path';
+// src/server.ts
+import express from 'express'
+import cors from 'cors'
+import cookieParser from 'cookie-parser'
+import { authMiddleware } from './core/auth_middleware'
 
-// rutas
-import auth from './routes/auth';
-import { authMiddleware } from './core/auth_middleware';
-import { errorHandler } from './core/error_handler';
-import perfil from './routes/perfil';
-import niveles from './routes/niveles';
-import subniveles from './routes/subniveles';
-import ninos from './routes/ninos';
-import usuarios from './routes/usuarios';
-import roles from './routes/roles';
-import facturas from './routes/facturas';
-import asistencia from './routes/asistencia';
-import actividades from './routes/actividades';
-import documentosRouter from './routes/documentos';
-import { pool } from './core/db';
+// Importar rutas
+import auth from './routes/auth'
+import perfil from './routes/perfil'
+import niveles from './routes/niveles'
+import subniveles from './routes/subniveles'
+import ninos from './routes/ninos'
+import usuarios from './routes/usuarios'
+import roles from './routes/roles'
+import facturas from './routes/facturas'
+import asistencia from './routes/asistencia'
+import actividades from './routes/actividades'
+import documentos from './routes/documentos'
 
-dotenv.config();
+const app = express()
+const PORT = process.env.PORT || 3000
 
-const app = express();
-const isProd = process.env.NODE_ENV === 'production';
+// CORS - Permitir frontend
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'https://refugio-app-crud2.vercel.app',
+  'https://refugio-app-crud2-git-main-rodrigo-velasquezs-projects.vercel.app',
+]
 
-// cuando estamos detrás de proxy (Render) para que "secure" y samesite=none funcionen
-app.set('trust proxy', 1);
-
-// parsers
-app.use(cookieParser());
-app.use(express.json());
-
-// CORS: en dev permitimos todo; en prod aceptamos la lista de orígenes
-const rawAllow = process.env.CORS_ORIGIN ?? 'https://refugio-de-amor.vercel.app';
-const allowList = rawAllow.split(',').map(s => s.trim()).filter(Boolean);
-
-function isAllowedOrigin(origin: string) {
-  try {
-    const host = new URL(origin).hostname.toLowerCase();
-    for (const pat0 of allowList) {
-      const pat = pat0.toLowerCase().replace(/\/+$/, '');
-      if (pat.startsWith('*.')) {
-        const suffix = pat.slice(2);
-        if (host === suffix || host.endsWith('.' + suffix)) return true;
-      } else if (!pat.startsWith('http')) {
-        if (host === pat || host.endsWith('.' + pat.replace(/^\./, ''))) return true;
-      } else if (origin.replace(/\/+$/, '') === pat) {
-        return true;
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        console.warn('❌ CORS bloqueado para:', origin)
+        callback(new Error('No permitido por CORS'))
       }
-    }
-  } catch {}
-  return false;
-}
+    },
+    credentials: true,
+  })
+)
 
-app.use(cors({
-  origin(origin, cb) {
-    if (!origin) return cb(null, true); // curl/health checks
-    if (!isProd) return cb(null, true); // dev: todo permitido
-    return isAllowedOrigin(origin) ? cb(null, true) : cb(new Error('CORS'));
-  },
-  credentials: true,
-  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE'],
-}));
+// Middlewares globales
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+app.use(cookieParser())
 
-app.options('*', cors({ origin: true, credentials: true }));
+// Logging de requests
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`)
+  next()
+})
 
-/** Health */
-app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
+// Health check
+app.get('/', (req, res) => {
+  res.json({ 
+    ok: true, 
+    message: 'API Refugio de Amor',
+    timestamp: new Date().toISOString()
+  })
+})
 
-/** DB ping simple (para probar conexión a Postgres) */
-app.get('/db/ping', async (_req, res, next) => {
-  try {
-    const r = await pool.query('select 1 as ok');
-    res.json({ ok: r.rows[0]?.ok === 1 });
-  } catch (e) { 
-    next(e); 
+// Rutas públicas (sin autenticación)
+app.use('/auth', auth)
+
+// Middleware de autenticación para todas las rutas siguientes
+app.use(authMiddleware)
+
+// Rutas protegidas (requieren autenticación)
+app.use(perfil)
+app.use('/niveles', niveles)
+app.use('/subniveles', subniveles)
+app.use('/ninos', ninos)
+app.use('/usuarios', usuarios)
+app.use('/roles', roles)
+app.use('/facturas', facturas)
+app.use('/asistencia', asistencia)
+app.use('/actividades', actividades)
+app.use('/documentos', documentos)
+
+// Manejo de rutas no encontradas
+app.use((req, res) => {
+  res.status(404).json({ error: 'Ruta no encontrada' })
+})
+
+// Manejo de errores global
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('❌ Error no manejado:', err)
+  res.status(500).json({ 
+    error: 'Error interno del servidor',
+    message: err.message 
+  })
+})
+
+// Iniciar servidor
+app.listen(PORT, () => {
+  console.log(`✅ API lista en http://0.0.0.0:${PORT}`)
+  
+  // Verificar variables de entorno críticas
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'tu_secreto_super_seguro_aqui') {
+    console.warn('⚠️  JWT_SECRET no está configurado correctamente')
   }
-});
+  
+  if (!process.env.CLOUDINARY_URL) {
+    console.warn('⚠️  CLOUDINARY_URL no está configurado')
+  } else {
+    const cloudName = process.env.CLOUDINARY_URL.match(/cloudinary:\/\/.*@(.+)/)?.[1]
+    console.log(`☁️  Cloudinary configurado: ${cloudName}`)
+  }
+})
 
-/** Públicas */
-app.use('/auth', auth);
-
-/** Protegidas */
-app.use(authMiddleware);
-app.use(perfil);
-app.use(niveles);
-app.use(subniveles);
-app.use(ninos);
-app.use(usuarios);
-app.use(roles);
-app.use(facturas);
-app.use(asistencia);
-app.use(actividades);
-app.use('/documentos', documentosRouter);
-
-/** Estáticos (nota: almacenamiento efímero en Render) */
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
-
-/** Errores */
-app.use(errorHandler);
-
-/** Arranque */
-const PORT = Number(process.env.PORT ?? 3000);
-const HOST = '0.0.0.0';
-
-app.listen(PORT, HOST, () => {
-  console.log(`API lista en http://${HOST}:${PORT}`);
-});
+export default app

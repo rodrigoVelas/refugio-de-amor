@@ -1,573 +1,524 @@
-import { useEffect, useState } from 'react'
-import { api } from '../lib/api'
-import Swal from 'sweetalert2'
+import { useState, useEffect } from 'react'
+import { API_URL } from '../config'
+
+interface Nivel {
+  id: string
+  nombre: string
+}
+
+interface Subnivel {
+  id: string
+  nombre: string
+  nivel_id: string
+}
+
+interface Nino {
+  id: string
+  nombres: string
+  apellidos: string
+  fecha_nacimiento: string
+  genero: string
+  nivel_id: string
+  subnivel_id: string
+  foto_url: string | null
+  estado: string
+  fecha_ingreso: string
+  nivel_nombre: string
+  subnivel_nombre: string
+}
 
 export default function Ninos() {
-  const [rows, setRows] = useState<any[]>([])
-  const [q, setQ] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [mostrarInactivos, setMostrarInactivos] = useState(false)
-  const [f, setF] = useState({
-    codigo: '',
-    nombres: '',
-    apellidos: '',
-    fecha_nacimiento: '',
-    nombre_encargado: '',
-    telefono_encargado: '',
-    direccion_encargado: ''
-  })
-  const [editItem, setEditItem] = useState<any|null>(null)
+  const [ninos, setNinos] = useState<Nino[]>([])
+  const [niveles, setNiveles] = useState<Nivel[]>([])
+  const [subniveles, setSubniveles] = useState<Subnivel[]>([])
+  const [filteredSubniveles, setFilteredSubniveles] = useState<Subnivel[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
 
-  const load = async () => {
+  // Filtros
+  const [filtroNivel, setFiltroNivel] = useState('')
+  const [filtroSubnivel, setFiltroSubnivel] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
+
+  // Form state
+  const [nombres, setNombres] = useState('')
+  const [apellidos, setApellidos] = useState('')
+  const [fechaNacimiento, setFechaNacimiento] = useState('')
+  const [genero, setGenero] = useState('M')
+  const [nivelId, setNivelId] = useState('')
+  const [subnivelId, setSubnivelId] = useState('')
+  const [foto, setFoto] = useState<File | null>(null)
+  const [estado, setEstado] = useState('activo')
+  const [fechaIngreso, setFechaIngreso] = useState(new Date().toISOString().split('T')[0])
+
+  useEffect(() => {
+    cargarDatos()
+  }, [filtroNivel, filtroSubnivel, filtroEstado])
+
+  useEffect(() => {
+    if (nivelId) {
+      const subs = subniveles.filter(s => s.nivel_id === nivelId)
+      setFilteredSubniveles(subs)
+      if (!subs.find(s => s.id === subnivelId)) {
+        setSubnivelId('')
+      }
+    } else {
+      setFilteredSubniveles([])
+      setSubnivelId('')
+    }
+  }, [nivelId, subniveles, subnivelId])
+
+  async function cargarDatos() {
     try {
-      // Modificar para incluir parámetro de inactivos si es necesario
+      setLoading(true)
+
+      // Cargar niveles
+      const nivelesRes = await fetch(`${API_URL}/niveles`, { credentials: 'include' })
+      if (nivelesRes.ok) {
+        const nivelesData = await nivelesRes.json()
+        setNiveles(nivelesData)
+      }
+
+      // Cargar subniveles
+      const subnivelesRes = await fetch(`${API_URL}/subniveles`, { credentials: 'include' })
+      if (subnivelesRes.ok) {
+        const subnivelesData = await subnivelesRes.json()
+        setSubniveles(subnivelesData)
+      }
+
+      // Cargar niños con filtros
       const params = new URLSearchParams()
-      if (q) params.append('q', q)
-      if (mostrarInactivos) params.append('incluirInactivos', 'true')
+      if (filtroNivel) params.append('nivel_id', filtroNivel)
+      if (filtroSubnivel) params.append('subnivel_id', filtroSubnivel)
+      if (filtroEstado) params.append('estado', filtroEstado)
+
+      const ninosUrl = `${API_URL}/ninos${params.toString() ? '?' + params.toString() : ''}`
+      const ninosRes = await fetch(ninosUrl, { credentials: 'include' })
       
-      const response = await fetch(`${api.baseURL}/ninos?${params}`)
-      if (!response.ok) throw new Error('Error al cargar datos')
-      
-      const data = await response.json()
-      setRows(data)
+      if (ninosRes.ok) {
+        const ninosData = await ninosRes.json()
+        setNinos(ninosData)
+      }
     } catch (error) {
-      console.error('Error al cargar:', error)
-      Swal.fire('Error', 'No se pudieron cargar los registros', 'error')
+      console.error('Error cargando datos:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  useEffect(() => { 
-    load() 
-  }, [q, mostrarInactivos])
+  function abrirModal(nino?: Nino) {
+    if (nino) {
+      setEditingId(nino.id)
+      setNombres(nino.nombres)
+      setApellidos(nino.apellidos)
+      setFechaNacimiento(nino.fecha_nacimiento)
+      setGenero(nino.genero)
+      setNivelId(nino.nivel_id)
+      setSubnivelId(nino.subnivel_id)
+      setEstado(nino.estado)
+      setFechaIngreso(nino.fecha_ingreso)
+    } else {
+      resetForm()
+    }
+    setShowModal(true)
+  }
 
-  const saveNuevo = async (e:any) => {
+  function resetForm() {
+    setEditingId(null)
+    setNombres('')
+    setApellidos('')
+    setFechaNacimiento('')
+    setGenero('M')
+    setNivelId('')
+    setSubnivelId('')
+    setFoto(null)
+    setEstado('activo')
+    setFechaIngreso(new Date().toISOString().split('T')[0])
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !nivelId || !subnivelId) {
+      alert('Completa todos los campos requeridos')
+      return
+    }
+
     try {
-      await api.ninos_create(f)
-      setF({
-        codigo: '',
-        nombres: '',
-        apellidos: '',
-        fecha_nacimiento: '',
-        nombre_encargado: '',
-        telefono_encargado: '',
-        direccion_encargado: ''
+      setUploading(true)
+
+      const formData = new FormData()
+      formData.append('nombres', nombres)
+      formData.append('apellidos', apellidos)
+      formData.append('fecha_nacimiento', fechaNacimiento)
+      formData.append('genero', genero)
+      formData.append('nivel_id', nivelId)
+      formData.append('subnivel_id', subnivelId)
+      formData.append('estado', estado)
+      formData.append('fecha_ingreso', fechaIngreso)
+      if (foto) {
+        formData.append('foto', foto)
+      }
+
+      const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
+      const method = editingId ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        credentials: 'include',
+        body: formData,
       })
-      setShowForm(false)
-      await load()
-      Swal.fire('Éxito', 'Niño creado correctamente', 'success')
-    } catch (error: any) {
-      console.error('Error al crear:', error)
-      if (error.message?.includes('codigo ya existe')) {
-        Swal.fire('Error', 'El código ya existe', 'error')
-      } else {
-        Swal.fire('Error', 'No se pudo crear el registro', 'error')
-      }
-    }
-  }
 
-  const saveEditar = async (e:any) => {
-    e.preventDefault()
-    if (!editItem) return
-    
-    try {
-      await api.ninos_update(editItem.id, editItem)
-      setEditItem(null)
-      await load()
-      Swal.fire('Éxito', 'Registro actualizado correctamente', 'success')
-    } catch (error: any) {
-      console.error('Error al actualizar:', error)
-      if (error.message?.includes('codigo ya existe')) {
-        Swal.fire('Error', 'El código ya existe', 'error')
-      } else {
-        Swal.fire('Error', 'No se pudo actualizar el registro', 'error')
-      }
-    }
-  }
+      const data = await res.json()
 
-  // Función mejorada para manejar eliminación
-  const handleEliminar = async (nino: any) => {
-    try {
-      // Primero verificar dependencias
-      const depResponse = await fetch(`${api.baseURL}/ninos/${nino.id}/dependencias`)
-      
-      if (depResponse.ok) {
-        const dependencias = await depResponse.json()
-        
-        // Si hay dependencias
-        if (dependencias.tieneDependencias) {
-          const result = await Swal.fire({
-            title: 'Registro con datos relacionados',
-            html: `
-              <p><strong>${nino.nombres} ${nino.apellidos}</strong> tiene registros relacionados:</p>
-              <ul style="text-align: left; list-style: none; padding: 0;">
-                ${Object.entries(dependencias.detalle)
-                  .filter(([_, count]: [string, any]) => count > 0)
-                  .map(([tabla, count]: [string, any]) => 
-                    `<li>• ${tabla}: <strong>${count}</strong> registros</li>`
-                  ).join('')}
-              </ul>
-              <p style="margin-top: 15px;">¿Qué desea hacer?</p>
-            `,
-            icon: 'warning',
-            showCancelButton: true,
-            showDenyButton: true,
-            confirmButtonText: '🔒 Desactivar (Recomendado)',
-            confirmButtonColor: '#3085d6',
-            denyButtonText: '🗑️ Eliminar todo',
-            denyButtonColor: '#d33',
-            cancelButtonText: 'Cancelar',
-            cancelButtonColor: '#6c757d',
-            reverseButtons: true
-          })
-          
-          if (result.isConfirmed) {
-            await desactivarNino(nino)
-          } else if (result.isDenied) {
-            await eliminarConCascada(nino)
-          }
-        } else {
-          // No hay dependencias
-          const result = await Swal.fire({
-            title: '¿Qué acción desea realizar?',
-            html: `
-              <p>Registro: <strong>${nino.nombres} ${nino.apellidos}</strong></p>
-              <p style="margin-top: 10px;">Puede desactivar el registro (recomendado) o eliminarlo permanentemente</p>
-            `,
-            icon: 'question',
-            showCancelButton: true,
-            showDenyButton: true,
-            confirmButtonText: '🔒 Desactivar',
-            confirmButtonColor: '#3085d6',
-            denyButtonText: '🗑️ Eliminar permanentemente',
-            denyButtonColor: '#d33',
-            cancelButtonText: 'Cancelar',
-            cancelButtonColor: '#6c757d',
-            reverseButtons: true
-          })
-          
-          if (result.isConfirmed) {
-            await desactivarNino(nino)
-          } else if (result.isDenied) {
-            await eliminarPermanente(nino)
-          }
-        }
+      if (res.ok) {
+        alert(editingId ? 'Niño actualizado' : 'Niño registrado exitosamente')
+        setShowModal(false)
+        resetForm()
+        cargarDatos()
       } else {
-        // Si no se puede verificar dependencias, usar método simple
-        await eliminarSimple(nino)
+        alert(data.error || 'Error al guardar')
       }
     } catch (error) {
       console.error('Error:', error)
-      Swal.fire('Error', 'Ocurrió un error al procesar la solicitud', 'error')
+      alert('Error al guardar niño')
+    } finally {
+      setUploading(false)
     }
   }
 
-  // Desactivar niño (soft delete)
-  const desactivarNino = async (nino: any) => {
-    try {
-      const response = await fetch(`${api.baseURL}/ninos/${nino.id}/desactivar`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Error al desactivar')
-      }
-      
-      await Swal.fire({
-        title: '✅ Desactivado',
-        text: `${nino.nombres} ${nino.apellidos} ha sido desactivado`,
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-      })
-      
-      await load()
-    } catch (error) {
-      Swal.fire('Error', 'No se pudo desactivar el registro', 'error')
-    }
-  }
+  async function handleEliminar(id: string) {
+    if (!confirm('¿Estás seguro de eliminar este niño?')) return
 
-  // Eliminar permanentemente
-  const eliminarPermanente = async (nino: any) => {
-    const confirmacion = await Swal.fire({
-      title: '⚠️ ¿Está absolutamente seguro?',
-      html: `
-        <p>Va a eliminar permanentemente a:</p>
-        <p><strong>${nino.nombres} ${nino.apellidos}</strong></p>
-        <p style="color: red; margin-top: 10px;">Esta acción NO se puede deshacer</p>
-      `,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar permanentemente',
-      confirmButtonColor: '#d33',
-      cancelButtonText: 'Cancelar',
-      input: 'checkbox',
-      inputValue: 0,
-      inputPlaceholder: 'Confirmo que quiero eliminar permanentemente este registro',
-      reverseButtons: true
-    })
-    
-    if (!confirmacion.isConfirmed || !confirmacion.value) {
-      return
-    }
-    
     try {
-      const response = await fetch(`${api.baseURL}/ninos/${nino.id}`, {
+      const res = await fetch(`${API_URL}/ninos/${id}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        credentials: 'include',
       })
-      
-      if (!response.ok) {
-        const error = await response.json()
-        if (response.status === 409) {
-          Swal.fire({
-            title: 'No se puede eliminar',
-            html: `
-              <p>${error.message || 'Existen registros relacionados'}</p>
-              <p style="margin-top: 10px;"><small>Sugerencia: Use la opción de desactivar</small></p>
-            `,
-            icon: 'error'
-          })
-          return
-        }
-        throw new Error(error.message)
-      }
-      
-      await Swal.fire({
-        title: 'Eliminado',
-        text: 'El registro ha sido eliminado permanentemente',
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-      })
-      
-      await load()
-    } catch (error: any) {
-      Swal.fire('Error', error.message || 'No se pudo eliminar el registro', 'error')
-    }
-  }
 
-  // Eliminar con cascada
-  const eliminarConCascada = async (nino: any) => {
-    const confirmacion = await Swal.fire({
-      title: '⚠️ ADVERTENCIA - ELIMINACIÓN EN CASCADA ⚠️',
-      html: `
-        <div style="text-align: left;">
-          <p><strong>Esta acción eliminará PERMANENTEMENTE:</strong></p>
-          <ul style="margin: 10px 0; padding-left: 20px;">
-            <li>El registro de ${nino.nombres} ${nino.apellidos}</li>
-            <li>TODOS los registros de asistencia</li>
-            <li>TODOS los documentos asociados</li>
-            <li>TODAS las facturas relacionadas</li>
-            <li>TODOS los demás datos vinculados</li>
-          </ul>
-          <p style="color: red; font-weight: bold;">⚠️ Esta acción NO se puede deshacer</p>
-        </div>
-      `,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, ELIMINAR TODO',
-      confirmButtonColor: '#d33',
-      cancelButtonText: 'Cancelar',
-      input: 'text',
-      inputPlaceholder: 'Escriba "ELIMINAR" para confirmar',
-      inputValidator: (value) => {
-        if (value !== 'ELIMINAR') {
-          return 'Debe escribir ELIMINAR en mayúsculas'
-        }
-      },
-      reverseButtons: true
-    })
-    
-    if (!confirmacion.isConfirmed) {
-      return
-    }
-    
-    try {
-      const response = await fetch(`${api.baseURL}/ninos/${nino.id}?forzar=true`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Error al eliminar')
-      }
-      
-      await Swal.fire({
-        title: 'Eliminado',
-        text: 'El registro y todos sus datos relacionados han sido eliminados',
-        icon: 'success',
-        timer: 3000,
-        showConfirmButton: false
-      })
-      
-      await load()
-    } catch (error) {
-      Swal.fire('Error', 'No se pudo completar la eliminación', 'error')
-    }
-  }
-
-  // Método simple de eliminación (fallback)
-  const eliminarSimple = async (nino: any) => {
-    const confirmacion = await Swal.fire({
-      title: '¿Eliminar registro?',
-      text: `¿Está seguro de eliminar a ${nino.nombres} ${nino.apellidos}?`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#d33',
-      reverseButtons: true
-    })
-    
-    if (!confirmacion.isConfirmed) return
-    
-    try {
-      await api.ninos_delete(nino.id)
-      await load()
-      Swal.fire('Eliminado', 'El registro ha sido eliminado', 'success')
-    } catch (error: any) {
-      if (error.message?.includes('foreign key') || error.message?.includes('relacionados')) {
-        Swal.fire({
-          title: 'No se puede eliminar',
-          text: 'Existen registros relacionados. Elimine primero los registros dependientes.',
-          icon: 'error'
-        })
+      if (res.ok) {
+        alert('Niño eliminado')
+        cargarDatos()
       } else {
-        Swal.fire('Error', 'No se pudo eliminar el registro', 'error')
+        const data = await res.json()
+        alert(data.error || 'Error al eliminar')
       }
+    } catch (error) {
+      console.error('Error:', error)
+      alert('Error al eliminar niño')
     }
   }
 
-  // Reactivar niño
-  const reactivarNino = async (nino: any) => {
-    const confirmacion = await Swal.fire({
-      title: '¿Reactivar registro?',
-      text: `${nino.nombres} ${nino.apellidos} volverá a estar activo`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, reactivar',
-      confirmButtonColor: '#28a745',
-      cancelButtonText: 'Cancelar',
-      reverseButtons: true
-    })
-    
-    if (!confirmacion.isConfirmed) return
-    
-    try {
-      const response = await fetch(`${api.baseURL}/ninos/${nino.id}/reactivar`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      if (!response.ok) throw new Error('Error al reactivar')
-      
-      await Swal.fire({
-        title: 'Reactivado',
-        text: 'El registro ha sido reactivado',
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-      })
-      
-      await load()
-    } catch (error) {
-      Swal.fire('Error', 'No se pudo reactivar el registro', 'error')
+  function calcularEdad(fechaNac: string): number {
+    const hoy = new Date()
+    const nacimiento = new Date(fechaNac)
+    let edad = hoy.getFullYear() - nacimiento.getFullYear()
+    const mes = hoy.getMonth() - nacimiento.getMonth()
+    if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
+      edad--
     }
+    return edad
   }
 
   return (
-    <div>
-      <h1 className="text-xl font-bold">Niños</h1>
-      
-      {/* Buscar y filtros */}
-      <div className="form" style={{marginTop:12, display: 'flex', gap: '10px', alignItems: 'center', maxWidth: 600}}>
-        <input
-          className="input"
-          placeholder="Buscar por código o nombre"
-          value={q}
-          onChange={e=>setQ(e.target.value)}
-          style={{flex: 1}}
-        />
-        <label style={{display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer'}}>
-          <input
-            type="checkbox"
-            checked={mostrarInactivos}
-            onChange={e=>setMostrarInactivos(e.target.checked)}
-          />
-          <span>Mostrar inactivos</span>
-        </label>
+    <div className="content">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="card-title">Gestión de Niños</h1>
+          <button className="btn" onClick={() => abrirModal()}>
+            Registrar Niño
+          </button>
+        </div>
+
+        {/* Filtros */}
+        <div className="toolbar">
+          <select 
+            className="select" 
+            value={filtroNivel} 
+            onChange={(e) => {
+              setFiltroNivel(e.target.value)
+              setFiltroSubnivel('')
+            }}
+          >
+            <option value="">Todos los niveles</option>
+            {niveles.map((n) => (
+              <option key={n.id} value={n.id}>{n.nombre}</option>
+            ))}
+          </select>
+
+          <select 
+            className="select" 
+            value={filtroSubnivel} 
+            onChange={(e) => setFiltroSubnivel(e.target.value)}
+            disabled={!filtroNivel}
+          >
+            <option value="">Todos los subniveles</option>
+            {subniveles
+              .filter(s => s.nivel_id === filtroNivel)
+              .map((s) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+          </select>
+
+          <select 
+            className="select" 
+            value={filtroEstado} 
+            onChange={(e) => setFiltroEstado(e.target.value)}
+          >
+            <option value="">Todos los estados</option>
+            <option value="activo">Activos</option>
+            <option value="inactivo">Inactivos</option>
+            <option value="egresado">Egresados</option>
+          </select>
+
+          {(filtroNivel || filtroSubnivel || filtroEstado) && (
+            <button 
+              className="btn btn-ghost" 
+              onClick={() => {
+                setFiltroNivel('')
+                setFiltroSubnivel('')
+                setFiltroEstado('')
+              }}
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
+        {/* Lista de niños */}
+        <div className="card-content">
+          {loading ? (
+            <div className="loading">Cargando niños...</div>
+          ) : ninos.length === 0 ? (
+            <div className="alert">No hay niños registrados</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+              {ninos.map((nino) => (
+                <div 
+                  key={nino.id} 
+                  style={{
+                    padding: '1rem',
+                    background: 'var(--surface-elevated)',
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  {nino.foto_url && (
+                    <img 
+                      src={nino.foto_url} 
+                      alt={nino.nombres}
+                      style={{
+                        width: '100%',
+                        height: '200px',
+                        objectFit: 'cover',
+                        borderRadius: 'var(--radius)',
+                        marginBottom: '0.75rem',
+                      }}
+                    />
+                  )}
+                  
+                  <h3 style={{ marginBottom: '0.5rem' }}>
+                    {nino.nombres} {nino.apellidos}
+                  </h3>
+                  
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                    <div>Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
+                    <div>Género: {nino.genero === 'M' ? 'Masculino' : 'Femenino'}</div>
+                    <div>{nino.nivel_nombre} - {nino.subnivel_nombre}</div>
+                    <div>
+                      Estado: 
+                      <span 
+                        style={{
+                          marginLeft: '0.5rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          background: nino.estado === 'activo' ? '#dcfce7' : '#fee2e2',
+                          color: nino.estado === 'activo' ? '#166534' : '#991b1b',
+                        }}
+                      >
+                        {nino.estado}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
+                    <button 
+                      className="btn btn-ghost" 
+                      onClick={() => abrirModal(nino)}
+                      style={{ flex: 1 }}
+                    >
+                      Editar
+                    </button>
+                    <button 
+                      className="btn btn-danger" 
+                      onClick={() => handleEliminar(nino.id)}
+                      style={{ flex: 1 }}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Botón para abrir formulario */}
-      <div style={{marginTop:16}}>
-        <button className="btn" onClick={()=>setShowForm(true)}>
-          + Nuevo niño
-        </button>
-      </div>
+      {/* Modal */}
+      {showModal && (
+        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="text-xl">{editingId ? 'Editar Niño' : 'Registrar Niño'}</h2>
+              <button 
+                className="btn btn-ghost" 
+                onClick={() => setShowModal(false)}
+                style={{ padding: '0.5rem' }}
+              >
+                ✕
+              </button>
+            </div>
 
-      {/* Formulario modal para crear */}
-      {showForm && (
-        <div className="modal">
-          <div className="card" style={{maxWidth:500}}>
-            <h2 className="font-bold">Nuevo niño</h2>
-            <form className="form" onSubmit={saveNuevo}>
-              <input
-                className="input"
-                placeholder="Código"
-                value={f.codigo}
-                onChange={e=>setF({...f, codigo:e.target.value})}
-                required
-              />
-              <input
-                className="input"
-                placeholder="Nombres"
-                value={f.nombres}
-                onChange={e=>setF({...f, nombres:e.target.value})}
-                required
-              />
-              <input
-                className="input"
-                placeholder="Apellidos"
-                value={f.apellidos}
-                onChange={e=>setF({...f, apellidos:e.target.value})}
-                required
-              />
-              <input
-                type="date"
-                className="input"
-                value={f.fecha_nacimiento}
-                onChange={e=>setF({...f, fecha_nacimiento:e.target.value})}
-              />
-              <input
-                className="input"
-                placeholder="Nombre del encargado"
-                value={f.nombre_encargado}
-                onChange={e=>setF({...f, nombre_encargado:e.target.value})}
-              />
-              <input
-                className="input"
-                placeholder="Teléfono del encargado"
-                value={f.telefono_encargado}
-                onChange={e=>setF({...f, telefono_encargado:e.target.value})}
-              />
-              <input
-                className="input"
-                placeholder="Dirección del encargado"
-                value={f.direccion_encargado}
-                onChange={e=>setF({...f, direccion_encargado:e.target.value})}
-              />
-              <div className="flex">
-                <button className="btn">Crear</button>
-                <button type="button" className="btn" onClick={()=>setShowForm(false)}>
+            <form onSubmit={handleSubmit} className="form">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="label">Nombres*</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={nombres}
+                    onChange={(e) => setNombres(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Apellidos*</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={apellidos}
+                    onChange={(e) => setApellidos(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="label">Fecha de Nacimiento*</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={fechaNacimiento}
+                    onChange={(e) => setFechaNacimiento(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Género*</label>
+                  <select 
+                    className="select" 
+                    value={genero} 
+                    onChange={(e) => setGenero(e.target.value)}
+                    required
+                  >
+                    <option value="M">Masculino</option>
+                    <option value="F">Femenino</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="label">Nivel*</label>
+                  <select 
+                    className="select" 
+                    value={nivelId} 
+                    onChange={(e) => setNivelId(e.target.value)}
+                    required
+                  >
+                    <option value="">Selecciona un nivel</option>
+                    {niveles.map((n) => (
+                      <option key={n.id} value={n.id}>{n.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Subnivel*</label>
+                  <select 
+                    className="select" 
+                    value={subnivelId} 
+                    onChange={(e) => setSubnivelId(e.target.value)}
+                    required
+                    disabled={!nivelId}
+                  >
+                    <option value="">Selecciona un subnivel</option>
+                    {filteredSubniveles.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="label">Estado*</label>
+                  <select 
+                    className="select" 
+                    value={estado} 
+                    onChange={(e) => setEstado(e.target.value)}
+                    required
+                  >
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                    <option value="egresado">Egresado</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Fecha de Ingreso*</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={fechaIngreso}
+                    onChange={(e) => setFechaIngreso(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Foto</label>
+                <input
+                  type="file"
+                  className="input"
+                  accept="image/*"
+                  onChange={(e) => setFoto(e.target.files?.[0] || null)}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button 
+                  type="button" 
+                  className="btn btn-ghost" 
+                  onClick={() => setShowModal(false)}
+                  disabled={uploading}
+                >
                   Cancelar
                 </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Tabla */}
-      <table className="table" style={{marginTop:16}}>
-        <thead>
-          <tr>
-            <th>Código</th>
-            <th>Nombre</th>
-            <th>Fecha nac.</th>
-            <th>Encargado</th>
-            <th>Teléfono</th>
-            <th>Dirección</th>
-            <th>Estado</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r=>(
-            <tr key={r.id} style={{opacity: r.activo === false ? 0.6 : 1}}>
-              <td>{r.codigo}</td>
-              <td>{r.nombres} {r.apellidos}</td>
-              <td>{r.fecha_nacimiento || '-'}</td>
-              <td>{r.nombre_encargado || '-'}</td>
-              <td>{r.telefono_encargado || '-'}</td>
-              <td>{r.direccion_encargado || '-'}</td>
-              <td>
-                {r.activo === false ? (
-                  <span style={{color: 'red'}}>Inactivo</span>
-                ) : (
-                  <span style={{color: 'green'}}>Activo</span>
-                )}
-              </td>
-              <td>
-                {r.activo !== false ? (
-                  <>
-                    <button className="btn" onClick={()=>setEditItem(r)}>Editar</button>{' '}
-                    <button className="btn" onClick={()=>handleEliminar(r)}>Eliminar</button>
-                  </>
-                ) : (
-                  <button className="btn" onClick={()=>reactivarNino(r)}>Reactivar</button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Modal editar */}
-      {editItem && (
-        <div className="modal">
-          <div className="card" style={{maxWidth:500}}>
-            <h2 className="font-bold">Editar niño</h2>
-            <form className="form" onSubmit={saveEditar}>
-              <input
-                className="input"
-                placeholder="Código"
-                value={editItem.codigo || ''}
-                onChange={e=>setEditItem({...editItem, codigo:e.target.value})}
-                required
-              />
-              <input
-                className="input"
-                placeholder="Nombres"
-                value={editItem.nombres || ''}
-                onChange={e=>setEditItem({...editItem, nombres:e.target.value})}
-                required
-              />
-              <input
-                className="input"
-                placeholder="Apellidos"
-                value={editItem.apellidos || ''}
-                onChange={e=>setEditItem({...editItem, apellidos:e.target.value})}
-                required
-              />
-              <input
-                type="date"
-                className="input"
-                value={editItem.fecha_nacimiento || ''}
-                onChange={e=>setEditItem({...editItem, fecha_nacimiento:e.target.value})}
-              />
-              <input
-                className="input"
-                placeholder="Nombre del encargado"
-                value={editItem.nombre_encargado || ''}
-                onChange={e=>setEditItem({...editItem, nombre_encargado:e.target.value})}
-              />
-              <input
-                className="input"
-                placeholder="Teléfono del encargado"
-                value={editItem.telefono_encargado || ''}
-                onChange={e=>setEditItem({...editItem, telefono_encargado:e.target.value})}
-              />
-              <input
-                className="input"
-                placeholder="Dirección del encargado"
-                value={editItem.direccion_encargado || ''}
-                onChange={e=>setEditItem({...editItem, direccion_encargado:e.target.value})}
-              />
-              <div className="flex">
-                <button className="btn">Guardar</button>
-                <button type="button" className="btn" onClick={()=>setEditItem(null)}>Cancelar</button>
+                <button 
+                  type="submit" 
+                  className="btn" 
+                  disabled={uploading}
+                >
+                  {uploading ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar'}
+                </button>
               </div>
             </form>
           </div>
