@@ -52,10 +52,20 @@ async function uploadFotoCloudinary(buffer: Buffer, filename: string): Promise<s
   })
 }
 
-// GET /ninos - Listar niños con filtros
+// GET /ninos - Listar niños con filtros (según permisos del usuario)
 router.get('/', authMiddleware, async (req: any, res: any) => {
   try {
     const { nivel_id, subnivel_id, estado } = req.query
+    const userId = req.user.id
+
+    // Obtener nivel y subnivel asignado al usuario (si es maestro/a)
+    const userInfo = await pool.query(
+      'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
+      [userId]
+    )
+
+    const userNivel = userInfo.rows[0]?.nivel_id
+    const userSubnivel = userInfo.rows[0]?.subnivel_id
 
     let query = `
       SELECT 
@@ -69,6 +79,20 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     `
     const params: any[] = []
 
+    // Si el usuario tiene nivel/subnivel asignado, filtrar solo esos niños
+    if (userNivel) {
+      params.push(userNivel)
+      query += ` AND n.nivel_id = $${params.length}`
+      console.log(`[ninos/list] Usuario ${userId} filtrando por nivel: ${userNivel}`)
+    }
+
+    if (userSubnivel) {
+      params.push(userSubnivel)
+      query += ` AND n.subnivel_id = $${params.length}`
+      console.log(`[ninos/list] Usuario ${userId} filtrando por subnivel: ${userSubnivel}`)
+    }
+
+    // Filtros adicionales del frontend
     if (nivel_id) {
       params.push(nivel_id)
       query += ` AND n.nivel_id = $${params.length}`
@@ -87,7 +111,7 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     query += ' ORDER BY n.apellidos, n.nombres'
 
     const result = await pool.query(query, params)
-    console.log(`[ninos/list] Encontrados: ${result.rows.length}`)
+    console.log(`[ninos/list] Encontrados: ${result.rows.length} niños`)
     res.json(result.rows)
   } catch (error: any) {
     console.error('[ninos/list] Error:', error)
@@ -99,9 +123,18 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 router.get('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
+    const userId = req.user.id
 
-    const result = await pool.query(
-      `
+    // Obtener nivel y subnivel del usuario
+    const userInfo = await pool.query(
+      'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
+      [userId]
+    )
+
+    const userNivel = userInfo.rows[0]?.nivel_id
+    const userSubnivel = userInfo.rows[0]?.subnivel_id
+
+    let query = `
       SELECT 
         n.*,
         nv.nombre as nivel_nombre,
@@ -110,12 +143,24 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
       WHERE n.id = $1
-      `,
-      [id]
-    )
+    `
+    const params: any[] = [id]
+
+    // Si tiene nivel/subnivel asignado, verificar que el niño pertenezca a ese nivel
+    if (userNivel) {
+      params.push(userNivel)
+      query += ` AND n.nivel_id = $${params.length}`
+    }
+
+    if (userSubnivel) {
+      params.push(userSubnivel)
+      query += ` AND n.subnivel_id = $${params.length}`
+    }
+
+    const result = await pool.query(query, params)
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Niño no encontrado' })
+      return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
     }
 
     res.json(result.rows[0])
@@ -186,9 +231,30 @@ router.put(
       const { id } = req.params
       const { nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso } = req.body
       const file = req.file
+      const userId = req.user.id
 
       if (!nombres || !apellidos || !fecha_nacimiento || !genero || !nivel_id || !subnivel_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
+      }
+
+      // Verificar que el usuario tenga acceso a este niño
+      const userInfo = await pool.query(
+        'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
+        [userId]
+      )
+
+      const userNivel = userInfo.rows[0]?.nivel_id
+      const userSubnivel = userInfo.rows[0]?.subnivel_id
+
+      if (userNivel) {
+        const ninoCheck = await pool.query(
+          'SELECT * FROM ninos WHERE id = $1 AND nivel_id = $2',
+          [id, userNivel]
+        )
+
+        if (ninoCheck.rows.length === 0) {
+          return res.status(403).json({ error: 'No tienes acceso a este niño' })
+        }
       }
 
       let fotoUrl = null
@@ -240,12 +306,30 @@ router.delete(
   async (req: any, res: any) => {
     try {
       const { id } = req.params
+      const userId = req.user.id
 
-      // Obtener foto_url si existe
-      const nino = await pool.query('SELECT foto_url FROM ninos WHERE id = $1', [id])
+      // Verificar que el usuario tenga acceso a este niño
+      const userInfo = await pool.query(
+        'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
+        [userId]
+      )
+
+      const userNivel = userInfo.rows[0]?.nivel_id
+      const userSubnivel = userInfo.rows[0]?.subnivel_id
+
+      // Obtener foto_url si existe y verificar acceso
+      let query = 'SELECT foto_url FROM ninos WHERE id = $1'
+      const params: any[] = [id]
+
+      if (userNivel) {
+        params.push(userNivel)
+        query += ` AND nivel_id = $${params.length}`
+      }
+
+      const nino = await pool.query(query, params)
 
       if (nino.rows.length === 0) {
-        return res.status(404).json({ error: 'Niño no encontrado' })
+        return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
       }
 
       // Eliminar foto de Cloudinary si existe
