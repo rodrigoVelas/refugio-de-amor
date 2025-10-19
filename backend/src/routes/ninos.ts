@@ -58,11 +58,15 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     const { nivel_id, subnivel_id, estado } = req.query
     const userId = req.user.id
 
+    console.log(`[ninos/list] 🔍 Usuario ID: ${userId}`)
+
     // Obtener nivel y subnivel asignado al usuario (si es maestro/a)
     const userInfo = await pool.query(
-      'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
+      'SELECT nivel_id, subnivel_id, rol_id FROM usuarios WHERE id = $1',
       [userId]
     )
+
+    console.log(`[ninos/list] 📋 Info usuario:`, userInfo.rows[0])
 
     const userNivel = userInfo.rows[0]?.nivel_id
     const userSubnivel = userInfo.rows[0]?.subnivel_id
@@ -83,38 +87,46 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     if (userNivel) {
       params.push(userNivel)
       query += ` AND n.nivel_id = $${params.length}`
-      console.log(`[ninos/list] Usuario ${userId} filtrando por nivel: ${userNivel}`)
+      console.log(`[ninos/list] ✅ Filtrando por nivel asignado: ${userNivel}`)
+    } else {
+      console.log(`[ninos/list] ⚠️ Usuario sin nivel asignado - mostrará todos los niños`)
     }
 
     if (userSubnivel) {
       params.push(userSubnivel)
       query += ` AND n.subnivel_id = $${params.length}`
-      console.log(`[ninos/list] Usuario ${userId} filtrando por subnivel: ${userSubnivel}`)
+      console.log(`[ninos/list] ✅ Filtrando por subnivel asignado: ${userSubnivel}`)
     }
 
-    // Filtros adicionales del frontend
-    if (nivel_id) {
+    // Filtros adicionales del frontend (solo si el usuario no tiene nivel asignado)
+    if (nivel_id && !userNivel) {
       params.push(nivel_id)
       query += ` AND n.nivel_id = $${params.length}`
+      console.log(`[ninos/list] 🔎 Filtro frontend - nivel: ${nivel_id}`)
     }
 
-    if (subnivel_id) {
+    if (subnivel_id && !userSubnivel) {
       params.push(subnivel_id)
       query += ` AND n.subnivel_id = $${params.length}`
+      console.log(`[ninos/list] 🔎 Filtro frontend - subnivel: ${subnivel_id}`)
     }
 
     if (estado) {
       params.push(estado)
       query += ` AND n.estado = $${params.length}`
+      console.log(`[ninos/list] 🔎 Filtro frontend - estado: ${estado}`)
     }
 
     query += ' ORDER BY n.apellidos, n.nombres'
 
+    console.log(`[ninos/list] 📝 Query SQL:`, query)
+    console.log(`[ninos/list] 📝 Params:`, params)
+
     const result = await pool.query(query, params)
-    console.log(`[ninos/list] Encontrados: ${result.rows.length} niños`)
+    console.log(`[ninos/list] ✅ Encontrados ${result.rows.length} niños`)
     res.json(result.rows)
   } catch (error: any) {
-    console.error('[ninos/list] Error:', error)
+    console.error('[ninos/list] ❌ Error:', error)
     res.status(500).json({ error: 'Error al listar niños' })
   }
 })
@@ -124,6 +136,8 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const userId = req.user.id
+
+    console.log(`[ninos/get] Usuario ${userId} consultando niño ${id}`)
 
     // Obtener nivel y subnivel del usuario
     const userInfo = await pool.query(
@@ -160,12 +174,14 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
     const result = await pool.query(query, params)
 
     if (result.rows.length === 0) {
+      console.log(`[ninos/get] ❌ Niño no encontrado o sin acceso`)
       return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
     }
 
+    console.log(`[ninos/get] ✅ Niño encontrado`)
     res.json(result.rows[0])
   } catch (error: any) {
-    console.error('[ninos/get] Error:', error)
+    console.error('[ninos/get] ❌ Error:', error)
     res.status(500).json({ error: 'Error al obtener niño' })
   }
 })
@@ -180,6 +196,8 @@ router.post(
     try {
       const { nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso } = req.body
       const file = req.file
+
+      console.log(`[ninos/create] Intentando crear niño: ${nombres} ${apellidos}`)
 
       if (!nombres || !apellidos || !fecha_nacimiento || !genero || !nivel_id || !subnivel_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
@@ -211,10 +229,10 @@ router.post(
         ]
       )
 
-      console.log('[ninos/create] Niño creado:', result.rows[0].id)
+      console.log('[ninos/create] ✅ Niño creado:', result.rows[0].id)
       res.json({ ok: true, nino: result.rows[0] })
     } catch (error: any) {
-      console.error('[ninos/create] Error:', error)
+      console.error('[ninos/create] ❌ Error:', error)
       res.status(500).json({ error: error.message || 'Error al crear niño' })
     }
   }
@@ -232,6 +250,8 @@ router.put(
       const { nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso } = req.body
       const file = req.file
       const userId = req.user.id
+
+      console.log(`[ninos/update] Usuario ${userId} actualizando niño ${id}`)
 
       if (!nombres || !apellidos || !fecha_nacimiento || !genero || !nivel_id || !subnivel_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
@@ -253,6 +273,7 @@ router.put(
         )
 
         if (ninoCheck.rows.length === 0) {
+          console.log(`[ninos/update] ❌ Usuario sin acceso al niño`)
           return res.status(403).json({ error: 'No tienes acceso a este niño' })
         }
       }
@@ -289,10 +310,10 @@ router.put(
         return res.status(404).json({ error: 'Niño no encontrado' })
       }
 
-      console.log('[ninos/update] Niño actualizado:', id)
+      console.log('[ninos/update] ✅ Niño actualizado')
       res.json({ ok: true, nino: result.rows[0] })
     } catch (error: any) {
-      console.error('[ninos/update] Error:', error)
+      console.error('[ninos/update] ❌ Error:', error)
       res.status(500).json({ error: 'Error al actualizar niño' })
     }
   }
@@ -307,6 +328,8 @@ router.delete(
     try {
       const { id } = req.params
       const userId = req.user.id
+
+      console.log(`[ninos/delete] 🗑️ Usuario ${userId} eliminando niño ${id}`)
 
       // Verificar que el usuario tenga acceso a este niño
       const userInfo = await pool.query(
@@ -324,11 +347,13 @@ router.delete(
       if (userNivel) {
         params.push(userNivel)
         query += ` AND nivel_id = $${params.length}`
+        console.log(`[ninos/delete] Verificando acceso por nivel ${userNivel}`)
       }
 
       const nino = await pool.query(query, params)
 
       if (nino.rows.length === 0) {
+        console.log(`[ninos/delete] ❌ Niño no encontrado o sin acceso`)
         return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
       }
 
@@ -341,9 +366,9 @@ router.delete(
           const publicId = `refugio_ninos/${publicIdMatch[1]}`
           try {
             await cloudinary.uploader.destroy(publicId)
-            console.log('[ninos/delete] Foto eliminada de Cloudinary:', publicId)
+            console.log('[ninos/delete] 📸 Foto eliminada de Cloudinary:', publicId)
           } catch (cloudError) {
-            console.error('[ninos/delete] Error eliminando foto:', cloudError)
+            console.error('[ninos/delete] ⚠️ Error eliminando foto:', cloudError)
           }
         }
       }
@@ -351,10 +376,10 @@ router.delete(
       // Eliminar de BD
       await pool.query('DELETE FROM ninos WHERE id = $1', [id])
 
-      console.log('[ninos/delete] Niño eliminado:', id)
+      console.log('[ninos/delete] ✅ Niño eliminado exitosamente')
       res.json({ ok: true })
     } catch (error: any) {
-      console.error('[ninos/delete] Error:', error)
+      console.error('[ninos/delete] ❌ Error:', error)
       res.status(500).json({ error: 'Error al eliminar niño' })
     }
   }

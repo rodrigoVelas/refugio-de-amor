@@ -25,13 +25,26 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:4173',
   'https://refugio-app-crud2.vercel.app',
-  'https://refugio-app-crud2-git-main-rodrigo-velasquezs-projects.vercel.app',
+  'https://refugio-de-amor.vercel.app', // ← AÑADIDO
+  /^https:\/\/refugio-app-crud2-.*\.vercel\.app$/,
+  /^https:\/\/refugio-de-amor-.*\.vercel\.app$/, // ← AÑADIDO
 ]
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Permitir requests sin origin (mobile apps, Postman, etc)
+      if (!origin) return callback(null, true)
+      
+      // Verificar si el origin está en la lista o coincide con los regex
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin
+        }
+        return allowed.test(origin)
+      })
+
+      if (isAllowed) {
         callback(null, true)
       } else {
         console.warn('❌ CORS bloqueado para:', origin)
@@ -39,6 +52,8 @@ app.use(
       }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 )
 
