@@ -3,54 +3,8 @@ import { Router } from 'express'
 import { authMiddleware } from '../core/auth_middleware'
 import { requirePerms } from '../core/perm_middleware'
 import { pool } from '../core/db'
-import multer from 'multer'
-import cloudinary from '../lib/cloudinary'
-import { Readable } from 'stream'
 
 const router = Router()
-
-// Configurar multer para fotos
-const storage = multer.memoryStorage()
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB máximo
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true)
-    } else {
-      cb(new Error('Solo se permiten imágenes'))
-    }
-  },
-})
-
-// Helper: subir foto a Cloudinary
-async function uploadFotoCloudinary(buffer: Buffer, filename: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'refugio_ninos',
-        resource_type: 'image',
-        public_id: `${Date.now()}_${filename.replace(/\.[^/.]+$/, '')}`,
-      },
-      (error, result) => {
-        if (error) {
-          console.error('[uploadFotoCloudinary] Error:', error)
-          reject(error)
-        } else {
-          console.log('[uploadFotoCloudinary] Success:', result?.secure_url)
-          resolve(result!.secure_url)
-        }
-      }
-    )
-
-    const readableStream = new Readable()
-    readableStream.push(buffer)
-    readableStream.push(null)
-    readableStream.pipe(uploadStream)
-  })
-}
 
 // GET /ninos - Listar niños con filtros (según permisos del usuario)
 router.get('/', authMiddleware, async (req: any, res: any) => {
@@ -119,9 +73,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 
     query += ' ORDER BY n.apellidos, n.nombres'
 
-    console.log(`[ninos/list] 📝 Query SQL:`, query)
-    console.log(`[ninos/list] 📝 Params:`, params)
-
     const result = await pool.query(query, params)
     console.log(`[ninos/list] ✅ Encontrados ${result.rows.length} niños`)
     res.json(result.rows)
@@ -139,7 +90,6 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
 
     console.log(`[ninos/get] Usuario ${userId} consultando niño ${id}`)
 
-    // Obtener nivel y subnivel del usuario
     const userInfo = await pool.query(
       'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
       [userId]
@@ -160,7 +110,6 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
     `
     const params: any[] = [id]
 
-    // Si tiene nivel/subnivel asignado, verificar que el niño pertenezca a ese nivel
     if (userNivel) {
       params.push(userNivel)
       query += ` AND n.nivel_id = $${params.length}`
@@ -191,29 +140,21 @@ router.post(
   '/',
   authMiddleware,
   requirePerms(['ninos_crear']),
-  upload.single('foto'),
   async (req: any, res: any) => {
     try {
       const { nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso } = req.body
-      const file = req.file
 
-      console.log(`[ninos/create] Intentando crear niño: ${nombres} ${apellidos}`)
+      console.log(`[ninos/create] Creando niño: ${nombres} ${apellidos}`)
 
       if (!nombres || !apellidos || !fecha_nacimiento || !genero || !nivel_id || !subnivel_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
       }
 
-      let fotoUrl = null
-      if (file) {
-        console.log('[ninos/create] Subiendo foto...')
-        fotoUrl = await uploadFotoCloudinary(file.buffer, file.originalname)
-      }
-
       const result = await pool.query(
         `
         INSERT INTO ninos 
-          (nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, foto_url, estado, fecha_ingreso)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          (nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
         `,
         [
@@ -223,7 +164,6 @@ router.post(
           genero,
           nivel_id,
           subnivel_id,
-          fotoUrl,
           estado || 'activo',
           fecha_ingreso || new Date().toISOString().split('T')[0],
         ]
@@ -243,12 +183,10 @@ router.put(
   '/:id',
   authMiddleware,
   requirePerms(['ninos_editar']),
-  upload.single('foto'),
   async (req: any, res: any) => {
     try {
       const { id } = req.params
       const { nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso } = req.body
-      const file = req.file
       const userId = req.user.id
 
       console.log(`[ninos/update] Usuario ${userId} actualizando niño ${id}`)
@@ -257,14 +195,13 @@ router.put(
         return res.status(400).json({ error: 'Faltan campos requeridos' })
       }
 
-      // Verificar que el usuario tenga acceso a este niño
+      // Verificar acceso
       const userInfo = await pool.query(
         'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
         [userId]
       )
 
       const userNivel = userInfo.rows[0]?.nivel_id
-      const userSubnivel = userInfo.rows[0]?.subnivel_id
 
       if (userNivel) {
         const ninoCheck = await pool.query(
@@ -273,38 +210,21 @@ router.put(
         )
 
         if (ninoCheck.rows.length === 0) {
-          console.log(`[ninos/update] ❌ Usuario sin acceso al niño`)
+          console.log(`[ninos/update] ❌ Usuario sin acceso`)
           return res.status(403).json({ error: 'No tienes acceso a este niño' })
         }
       }
 
-      let fotoUrl = null
-      if (file) {
-        console.log('[ninos/update] Subiendo nueva foto...')
-        fotoUrl = await uploadFotoCloudinary(file.buffer, file.originalname)
-      }
-
-      const updateQuery = fotoUrl
-        ? `
-          UPDATE ninos
-          SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, genero = $4, 
-              nivel_id = $5, subnivel_id = $6, foto_url = $7, estado = $8, fecha_ingreso = $9
-          WHERE id = $10
-          RETURNING *
+      const result = await pool.query(
         `
-        : `
-          UPDATE ninos
-          SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, genero = $4, 
-              nivel_id = $5, subnivel_id = $6, estado = $7, fecha_ingreso = $8
-          WHERE id = $9
-          RETURNING *
-        `
-
-      const params = fotoUrl
-        ? [nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, fotoUrl, estado, fecha_ingreso, id]
-        : [nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso, id]
-
-      const result = await pool.query(updateQuery, params)
+        UPDATE ninos
+        SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, genero = $4, 
+            nivel_id = $5, subnivel_id = $6, estado = $7, fecha_ingreso = $8
+        WHERE id = $9
+        RETURNING *
+        `,
+        [nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso, id]
+      )
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Niño no encontrado' })
@@ -319,7 +239,7 @@ router.put(
   }
 )
 
-// DELETE /ninos/:id - Eliminar niño (versión simplificada para testing)
+// DELETE /ninos/:id - Eliminar niño (con asistencias)
 router.delete(
   '/:id',
   authMiddleware,
@@ -330,7 +250,7 @@ router.delete(
 
       console.log(`[ninos/delete] 🗑️ Eliminando niño ${id}`)
 
-      // Verificar que existe
+      // 1. Verificar que existe
       const check = await pool.query('SELECT id FROM ninos WHERE id = $1', [id])
 
       if (check.rows.length === 0) {
@@ -338,14 +258,20 @@ router.delete(
         return res.status(404).json({ error: 'Niño no encontrado' })
       }
 
-      // Eliminar
+      // 2. Eliminar asistencias asociadas primero
+      const asistenciasResult = await pool.query(
+        'DELETE FROM asistencia WHERE nino_id = $1',
+        [id]
+      )
+      console.log(`[ninos/delete] 📋 Eliminadas ${asistenciasResult.rowCount} asistencias`)
+
+      // 3. Ahora eliminar el niño
       await pool.query('DELETE FROM ninos WHERE id = $1', [id])
       
       console.log('[ninos/delete] ✅ Niño eliminado exitosamente')
       res.json({ ok: true, message: 'Niño eliminado' })
     } catch (error: any) {
-      console.error('[ninos/delete] ❌ ERROR COMPLETO:', error)
-      console.error('[ninos/delete] Stack:', error.stack)
+      console.error('[ninos/delete] ❌ ERROR:', error.message)
       res.status(500).json({ 
         error: 'Error al eliminar niño',
         details: error.message 
