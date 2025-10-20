@@ -50,9 +50,6 @@ export default function Ninos() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // Filtros
-  const [filtroColaborador, setFiltroColaborador] = useState('')
-
   // Form state
   const [nombres, setNombres] = useState('')
   const [apellidos, setApellidos] = useState('')
@@ -67,7 +64,7 @@ export default function Ninos() {
 
   useEffect(() => {
     cargarDatos()
-  }, [filtroColaborador])
+  }, [])
 
   useEffect(() => {
     if (nivelId) {
@@ -98,15 +95,12 @@ export default function Ninos() {
       const subRes = await fetch(`${API_URL}/subniveles`, { credentials: 'include' })
       if (subRes.ok) setSubniveles(await subRes.json())
 
-      // Cargar niños (solo activos)
-      const params = new URLSearchParams()
-      if (filtroColaborador) params.append('colaborador_id', filtroColaborador)
-      params.append('activo', 'true') // Solo mostrar activos
-
-      const ninosUrl = `${API_URL}/ninos${params.toString() ? '?' + params.toString() : ''}`
-      const ninosRes = await fetch(ninosUrl, { credentials: 'include' })
+      // Cargar niños (el backend filtra automáticamente según el rol)
+      const ninosRes = await fetch(`${API_URL}/ninos?activo=true`, { credentials: 'include' })
       
-      if (ninosRes.ok) setNinos(await ninosRes.json())
+      if (ninosRes.ok) {
+        setNinos(await ninosRes.json())
+      }
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -174,7 +168,7 @@ export default function Ninos() {
         nombre_encargado: nombreEncargado || null,
         telefono_encargado: telefonoEncargado || null,
         direccion_encargado: direccionEncargado || null,
-        activo: true // Siempre activo
+        activo: true
       }
 
       const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
@@ -247,10 +241,11 @@ export default function Ninos() {
         })
         cargarDatos()
       } else {
+        const err = await res.json()
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: 'Error al eliminar',
+          text: err.error || 'Error al eliminar',
           confirmButtonColor: '#3b82f6'
         })
       }
@@ -277,28 +272,15 @@ export default function Ninos() {
     <div className="content">
       <div className="card">
         <div className="card-header">
-          <h1 className="card-title">Niños</h1>
+          <h1 className="card-title">Mis Niños Asignados</h1>
           <button className="btn" onClick={() => abrirModal()}>Registrar Niño</button>
-        </div>
-
-        <div className="toolbar">
-          <select className="select" value={filtroColaborador} onChange={(e) => setFiltroColaborador(e.target.value)}>
-            <option value="">Todos los colaboradores</option>
-            {colaboradores.map(c => (
-              <option key={c.id} value={c.id}>{c.nombres} {c.apellidos || ''}</option>
-            ))}
-          </select>
-
-          {filtroColaborador && (
-            <button className="btn btn-ghost" onClick={() => setFiltroColaborador('')}>Limpiar</button>
-          )}
         </div>
 
         <div className="card-content">
           {loading ? (
             <div className="loading">Cargando...</div>
           ) : ninos.length === 0 ? (
-            <div className="alert">No hay niños registrados</div>
+            <div className="alert">No tienes niños asignados</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
               {ninos.map(nino => (
