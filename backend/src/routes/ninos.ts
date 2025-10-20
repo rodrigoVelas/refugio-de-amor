@@ -14,13 +14,23 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 
     console.log(`[ninos/list] 🔍 Usuario ID: ${userId}`)
 
-    // Obtener info del usuario
+    // Obtener info del usuario y su rol
     const userInfo = await pool.query(
-      'SELECT rol_id FROM usuarios WHERE id = $1',
+      `SELECT u.rol_id, r.nombre as rol_nombre 
+       FROM usuarios u 
+       LEFT JOIN roles r ON u.rol_id = r.id 
+       WHERE u.id = $1`,
       [userId]
     )
 
     console.log(`[ninos/list] 📋 Info usuario:`, userInfo.rows[0])
+
+    const rolNombre = userInfo.rows[0]?.rol_nombre?.toLowerCase() || ''
+    
+    // Determinar si es directora/admin (pueden ver todos)
+    const esDirectora = rolNombre.includes('directora') || 
+                        rolNombre.includes('director') || 
+                        rolNombre.includes('admin')
 
     let query = `
       SELECT 
@@ -36,21 +46,23 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     `
     const params: any[] = []
 
-    // Si el usuario NO es directora/admin, solo ve sus niños asignados
-    const esDirectora = userInfo.rows[0]?.rol_id === '1'
-
+    // IMPORTANTE: Si NO es directora, solo ve sus propios niños
     if (!esDirectora) {
       params.push(userId)
       query += ` AND n.colaborador_id = $${params.length}`
-      console.log(`[ninos/list] ✅ Filtrando por colaborador: ${userId}`)
+      console.log(`[ninos/list] 🔒 Colaborador - Solo sus niños asignados`)
+    } else {
+      console.log(`[ninos/list] 👑 Directora/Admin - Ve todos los niños`)
+      
+      // Si es directora y filtra por colaborador
+      if (colaborador_id) {
+        params.push(colaborador_id)
+        query += ` AND n.colaborador_id = $${params.length}`
+        console.log(`[ninos/list] 🔎 Filtro por colaborador: ${colaborador_id}`)
+      }
     }
 
     // Filtros adicionales
-    if (colaborador_id && esDirectora) {
-      params.push(colaborador_id)
-      query += ` AND n.colaborador_id = $${params.length}`
-    }
-
     if (nivel_id) {
       params.push(nivel_id)
       query += ` AND n.nivel_id = $${params.length}`
@@ -68,6 +80,9 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 
     query += ' ORDER BY n.apellidos, n.nombres'
 
+    console.log(`[ninos/list] 📝 Query:`, query)
+    console.log(`[ninos/list] 📝 Params:`, params)
+
     const result = await pool.query(query, params)
     console.log(`[ninos/list] ✅ Encontrados ${result.rows.length} niños`)
     res.json(result.rows)
@@ -81,9 +96,25 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 router.get('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
+    const userId = req.user.id
 
-    const result = await pool.query(
-      `
+    console.log(`[ninos/get] Usuario ${userId} consultando niño ${id}`)
+
+    // Obtener rol del usuario
+    const userInfo = await pool.query(
+      `SELECT u.rol_id, r.nombre as rol_nombre 
+       FROM usuarios u 
+       LEFT JOIN roles r ON u.rol_id = r.id 
+       WHERE u.id = $1`,
+      [userId]
+    )
+
+    const rolNombre = userInfo.rows[0]?.rol_nombre?.toLowerCase() || ''
+    const esDirectora = rolNombre.includes('directora') || 
+                        rolNombre.includes('director') || 
+                        rolNombre.includes('admin')
+
+    let query = `
       SELECT 
         n.*,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre,
@@ -94,14 +125,24 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
       WHERE n.id = $1
-      `,
-      [id]
-    )
+    `
+    const params: any[] = [id]
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Niño no encontrado' })
+    // Si NO es directora, verificar que el niño le pertenezca
+    if (!esDirectora) {
+      params.push(userId)
+      query += ` AND n.colaborador_id = $${params.length}`
+      console.log(`[ninos/get] 🔒 Verificando acceso del colaborador`)
     }
 
+    const result = await pool.query(query, params)
+
+    if (result.rows.length === 0) {
+      console.log(`[ninos/get] ❌ Niño no encontrado o sin acceso`)
+      return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
+    }
+
+    console.log(`[ninos/get] ✅ Niño encontrado`)
     res.json(result.rows[0])
   } catch (error: any) {
     console.error('[ninos/get] ❌ Error:', error)
@@ -152,7 +193,7 @@ router.post(
           subnivel_id || null,
           maestro_id || null,
           colaborador_id,
-          true, // activo por defecto
+          true,
           codigo || null,
           nombre_encargado || null,
           telefono_encargado || null,
@@ -177,6 +218,7 @@ router.put(
   async (req: any, res: any) => {
     try {
       const { id } = req.params
+      const userId = req.user.id
       const { 
         nombres, 
         apellidos, 
@@ -193,10 +235,36 @@ router.put(
         fecha_baja
       } = req.body
 
-      console.log(`[ninos/update] Actualizando niño ${id}`)
+      console.log(`[ninos/update] Usuario ${userId} actualizando niño ${id}`)
 
       if (!nombres || !apellidos || !fecha_nacimiento || !colaborador_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
+      }
+
+      // Verificar acceso (si no es directora, solo puede editar sus niños)
+      const userInfo = await pool.query(
+        `SELECT u.rol_id, r.nombre as rol_nombre 
+         FROM usuarios u 
+         LEFT JOIN roles r ON u.rol_id = r.id 
+         WHERE u.id = $1`,
+        [userId]
+      )
+
+      const rolNombre = userInfo.rows[0]?.rol_nombre?.toLowerCase() || ''
+      const esDirectora = rolNombre.includes('directora') || 
+                          rolNombre.includes('director') || 
+                          rolNombre.includes('admin')
+
+      if (!esDirectora) {
+        const ninoCheck = await pool.query(
+          'SELECT * FROM ninos WHERE id = $1 AND colaborador_id = $2',
+          [id, userId]
+        )
+
+        if (ninoCheck.rows.length === 0) {
+          console.log(`[ninos/update] ❌ Usuario sin acceso`)
+          return res.status(403).json({ error: 'No tienes acceso a este niño' })
+        }
       }
 
       const result = await pool.query(
@@ -214,7 +282,7 @@ router.put(
           nombres, apellidos, fecha_nacimiento, nivel_id || null, subnivel_id || null,
           maestro_id || null, colaborador_id, activo !== undefined ? activo : true,
           codigo || null, nombre_encargado || null, telefono_encargado || null,
-          direccion_encargado || null, fecha_baja || null, req.user.id, id
+          direccion_encargado || null, fecha_baja || null, userId, id
         ]
       )
 
@@ -239,13 +307,36 @@ router.delete(
   async (req: any, res: any) => {
     try {
       const { id } = req.params
+      const userId = req.user.id
 
-      console.log(`[ninos/delete] 🗑️ Eliminando niño ${id}`)
+      console.log(`[ninos/delete] 🗑️ Usuario ${userId} eliminando niño ${id}`)
 
-      const check = await pool.query('SELECT id FROM ninos WHERE id = $1', [id])
+      // Verificar acceso
+      const userInfo = await pool.query(
+        `SELECT u.rol_id, r.nombre as rol_nombre 
+         FROM usuarios u 
+         LEFT JOIN roles r ON u.rol_id = r.id 
+         WHERE u.id = $1`,
+        [userId]
+      )
+
+      const rolNombre = userInfo.rows[0]?.rol_nombre?.toLowerCase() || ''
+      const esDirectora = rolNombre.includes('directora') || 
+                          rolNombre.includes('director') || 
+                          rolNombre.includes('admin')
+
+      let checkQuery = 'SELECT id FROM ninos WHERE id = $1'
+      const checkParams: any[] = [id]
+
+      if (!esDirectora) {
+        checkParams.push(userId)
+        checkQuery += ' AND colaborador_id = $2'
+      }
+
+      const check = await pool.query(checkQuery, checkParams)
 
       if (check.rows.length === 0) {
-        return res.status(404).json({ error: 'Niño no encontrado' })
+        return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
       }
 
       // Eliminar asistencias
