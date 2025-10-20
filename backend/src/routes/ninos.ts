@@ -33,8 +33,7 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     const params: any[] = []
 
     // Si el usuario NO es directora/admin, solo ve sus niños asignados
-    // Asumiendo que la directora tiene rol_id específico (ajusta según tu BD)
-    const esDirectora = userInfo.rows[0]?.rol_id === '1' // Ajusta el ID según tu rol de directora
+    const esDirectora = userInfo.rows[0]?.rol_id === '1' // Ajusta según tu BD
 
     if (!esDirectora) {
       params.push(userId)
@@ -122,9 +121,11 @@ router.post(
     try {
       const { nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso } = req.body
 
-      console.log(`[ninos/create] Creando niño: ${nombres} ${apellidos}`)
+      console.log(`[ninos/create] 📝 Creando niño: ${nombres} ${apellidos}`)
+      console.log(`[ninos/create] Datos recibidos:`, req.body)
 
       if (!nombres || !apellidos || !fecha_nacimiento || !genero || !colaborador_id) {
+        console.log(`[ninos/create] ❌ Faltan campos requeridos`)
         return res.status(400).json({ error: 'Faltan campos requeridos' })
       }
 
@@ -149,8 +150,17 @@ router.post(
       console.log('[ninos/create] ✅ Niño creado:', result.rows[0].id)
       res.json({ ok: true, nino: result.rows[0] })
     } catch (error: any) {
-      console.error('[ninos/create] ❌ Error:', error)
-      res.status(500).json({ error: error.message || 'Error al crear niño' })
+      console.error('[ninos/create] ❌ ERROR COMPLETO:')
+      console.error('Mensaje:', error.message)
+      console.error('Código:', error.code)
+      console.error('Detalle:', error.detail)
+      console.error('Stack:', error.stack)
+      
+      res.status(500).json({ 
+        error: error.message || 'Error al crear niño',
+        code: error.code,
+        detail: error.detail
+      })
     }
   }
 )
@@ -216,7 +226,7 @@ router.put(
   }
 )
 
-// DELETE /ninos/:id - Eliminar niño (con asistencias)
+// DELETE /ninos/:id - Eliminar niño (eliminando todas las referencias)
 router.delete(
   '/:id',
   authMiddleware,
@@ -225,7 +235,7 @@ router.delete(
     try {
       const { id } = req.params
 
-      console.log(`[ninos/delete] 🗑️ Eliminando niño ${id}`)
+      console.log(`[ninos/delete] 🗑️ Iniciando eliminación del niño ${id}`)
 
       // Verificar que existe
       const check = await pool.query('SELECT id FROM ninos WHERE id = $1', [id])
@@ -235,12 +245,14 @@ router.delete(
         return res.status(404).json({ error: 'Niño no encontrado' })
       }
 
-      // Eliminar asistencias asociadas primero
-      const asistenciasResult = await pool.query(
-        'DELETE FROM asistencia WHERE nino_id = $1',
-        [id]
-      )
-      console.log(`[ninos/delete] 📋 Eliminadas ${asistenciasResult.rowCount} asistencias`)
+      console.log(`[ninos/delete] 🔄 Eliminando referencias en otras tablas...`)
+
+      // Eliminar de todas las tablas que referencian a ninos
+      const asistenciasResult = await pool.query('DELETE FROM asistencia WHERE nino_id = $1', [id])
+      console.log(`[ninos/delete] ✅ Eliminadas ${asistenciasResult.rowCount} asistencias`)
+
+      // Si hay otras tablas que referencian ninos, agrégalas aquí
+      // Ejemplo: await pool.query('DELETE FROM otra_tabla WHERE nino_id = $1', [id])
 
       // Ahora eliminar el niño
       await pool.query('DELETE FROM ninos WHERE id = $1', [id])
@@ -248,10 +260,19 @@ router.delete(
       console.log('[ninos/delete] ✅ Niño eliminado exitosamente')
       res.json({ ok: true, message: 'Niño eliminado' })
     } catch (error: any) {
-      console.error('[ninos/delete] ❌ ERROR:', error.message)
+      console.error('[ninos/delete] ❌ ERROR COMPLETO:')
+      console.error('Mensaje:', error.message)
+      console.error('Código:', error.code)
+      console.error('Detalle:', error.detail)
+      console.error('Constraint:', error.constraint)
+      console.error('Table:', error.table)
+      console.error('Stack:', error.stack)
+      
       res.status(500).json({ 
         error: 'Error al eliminar niño',
-        details: error.message 
+        details: error.message,
+        code: error.code,
+        constraint: error.constraint
       })
     }
   }
