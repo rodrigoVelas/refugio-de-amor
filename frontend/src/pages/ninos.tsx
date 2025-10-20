@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { API_URL } from '../config'
+import Swal from 'sweetalert2'
 
 interface Colaborador {
   id: string
@@ -51,7 +52,6 @@ export default function Ninos() {
 
   // Filtros
   const [filtroColaborador, setFiltroColaborador] = useState('')
-  const [filtroActivo, setFiltroActivo] = useState('')
 
   // Form state
   const [nombres, setNombres] = useState('')
@@ -64,11 +64,10 @@ export default function Ninos() {
   const [nombreEncargado, setNombreEncargado] = useState('')
   const [telefonoEncargado, setTelefonoEncargado] = useState('')
   const [direccionEncargado, setDireccionEncargado] = useState('')
-  const [activo, setActivo] = useState(true)
 
   useEffect(() => {
     cargarDatos()
-  }, [filtroColaborador, filtroActivo])
+  }, [filtroColaborador])
 
   useEffect(() => {
     if (nivelId) {
@@ -99,10 +98,10 @@ export default function Ninos() {
       const subRes = await fetch(`${API_URL}/subniveles`, { credentials: 'include' })
       if (subRes.ok) setSubniveles(await subRes.json())
 
-      // Cargar niños
+      // Cargar niños (solo activos)
       const params = new URLSearchParams()
       if (filtroColaborador) params.append('colaborador_id', filtroColaborador)
-      if (filtroActivo) params.append('activo', filtroActivo)
+      params.append('activo', 'true') // Solo mostrar activos
 
       const ninosUrl = `${API_URL}/ninos${params.toString() ? '?' + params.toString() : ''}`
       const ninosRes = await fetch(ninosUrl, { credentials: 'include' })
@@ -128,7 +127,6 @@ export default function Ninos() {
       setNombreEncargado(nino.nombre_encargado || '')
       setTelefonoEncargado(nino.telefono_encargado || '')
       setDireccionEncargado(nino.direccion_encargado || '')
-      setActivo(nino.activo)
     } else {
       resetForm()
     }
@@ -147,14 +145,18 @@ export default function Ninos() {
     setNombreEncargado('')
     setTelefonoEncargado('')
     setDireccionEncargado('')
-    setActivo(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !colaboradorId) {
-      alert('Completa todos los campos requeridos')
+      Swal.fire({
+        icon: 'warning',
+        title: 'Campos incompletos',
+        text: 'Por favor completa todos los campos requeridos',
+        confirmButtonColor: '#3b82f6'
+      })
       return
     }
 
@@ -172,7 +174,7 @@ export default function Ninos() {
         nombre_encargado: nombreEncargado || null,
         telefono_encargado: telefonoEncargado || null,
         direccion_encargado: direccionEncargado || null,
-        activo
+        activo: true // Siempre activo
       }
 
       const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
@@ -184,23 +186,50 @@ export default function Ninos() {
       })
 
       if (res.ok) {
-        alert(editingId ? 'Actualizado' : 'Registrado')
+        await Swal.fire({
+          icon: 'success',
+          title: editingId ? '¡Actualizado!' : '¡Registrado!',
+          text: `El niño ha sido ${editingId ? 'actualizado' : 'registrado'} correctamente`,
+          timer: 2000,
+          showConfirmButton: false
+        })
         setShowModal(false)
         resetForm()
         cargarDatos()
       } else {
         const err = await res.json()
-        alert(err.error || 'Error')
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: err.error || 'Error al guardar',
+          confirmButtonColor: '#3b82f6'
+        })
       }
     } catch (error) {
-      alert('Error al guardar')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al guardar el niño',
+        confirmButtonColor: '#3b82f6'
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleEliminar(id: string) {
-    if (!confirm('¿Eliminar este niño?')) return
+  async function handleEliminar(id: string, nombre: string) {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: '¿Estás seguro?',
+      text: `¿Deseas eliminar a ${nombre}?`,
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
 
     try {
       const res = await fetch(`${API_URL}/ninos/${id}`, {
@@ -209,13 +238,29 @@ export default function Ninos() {
       })
 
       if (res.ok) {
-        alert('Eliminado')
+        await Swal.fire({
+          icon: 'success',
+          title: '¡Eliminado!',
+          text: 'El niño ha sido eliminado correctamente',
+          timer: 2000,
+          showConfirmButton: false
+        })
         cargarDatos()
       } else {
-        alert('Error al eliminar')
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Error al eliminar',
+          confirmButtonColor: '#3b82f6'
+        })
       }
     } catch (error) {
-      alert('Error al eliminar')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al eliminar el niño',
+        confirmButtonColor: '#3b82f6'
+      })
     }
   }
 
@@ -233,7 +278,7 @@ export default function Ninos() {
       <div className="card">
         <div className="card-header">
           <h1 className="card-title">Niños</h1>
-          <button className="btn" onClick={() => abrirModal()}>Registrar</button>
+          <button className="btn" onClick={() => abrirModal()}>Registrar Niño</button>
         </div>
 
         <div className="toolbar">
@@ -244,14 +289,8 @@ export default function Ninos() {
             ))}
           </select>
 
-          <select className="select" value={filtroActivo} onChange={(e) => setFiltroActivo(e.target.value)}>
-            <option value="">Todos</option>
-            <option value="true">Activos</option>
-            <option value="false">Inactivos</option>
-          </select>
-
-          {(filtroColaborador || filtroActivo) && (
-            <button className="btn btn-ghost" onClick={() => { setFiltroColaborador(''); setFiltroActivo('') }}>Limpiar</button>
+          {filtroColaborador && (
+            <button className="btn btn-ghost" onClick={() => setFiltroColaborador('')}>Limpiar</button>
           )}
         </div>
 
@@ -259,7 +298,7 @@ export default function Ninos() {
           {loading ? (
             <div className="loading">Cargando...</div>
           ) : ninos.length === 0 ? (
-            <div className="alert">No hay niños</div>
+            <div className="alert">No hay niños registrados</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
               {ninos.map(nino => (
@@ -270,12 +309,13 @@ export default function Ninos() {
                     {nino.codigo && <div>Código: {nino.codigo}</div>}
                     <div>Colaborador: {nino.colaborador_nombre}</div>
                     {nino.nivel_nombre && <div>Nivel: {nino.nivel_nombre}</div>}
+                    {nino.subnivel_nombre && <div>Subnivel: {nino.subnivel_nombre}</div>}
                     {nino.nombre_encargado && <div>Encargado: {nino.nombre_encargado}</div>}
-                    <div>Estado: <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', background: nino.activo ? '#dcfce7' : '#fee2e2', color: nino.activo ? '#166534' : '#991b1b' }}>{nino.activo ? 'Activo' : 'Inactivo'}</span></div>
+                    {nino.telefono_encargado && <div>Tel: {nino.telefono_encargado}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button className="btn btn-ghost" onClick={() => abrirModal(nino)} style={{ flex: 1 }}>Editar</button>
-                    <button className="btn btn-danger" onClick={() => handleEliminar(nino.id)} style={{ flex: 1 }}>Eliminar</button>
+                    <button className="btn btn-danger" onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} style={{ flex: 1 }}>Eliminar</button>
                   </div>
                 </div>
               ))}
@@ -286,7 +326,7 @@ export default function Ninos() {
 
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <div className="modal-header">
               <h2>{editingId ? 'Editar' : 'Registrar'} Niño</h2>
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>✕</button>
@@ -297,40 +337,32 @@ export default function Ninos() {
                 <div><label className="label">Apellidos*</label><input className="input" value={apellidos} onChange={e => setApellidos(e.target.value)} required /></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div><label className="label">Fecha Nac*</label><input type="date" className="input" value={fechaNacimiento} onChange={e => setFechaNacimiento(e.target.value)} required /></div>
-                <div><label className="label">Código</label><input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} /></div>
+                <div><label className="label">Fecha de Nacimiento*</label><input type="date" className="input" value={fechaNacimiento} onChange={e => setFechaNacimiento(e.target.value)} required /></div>
+                <div><label className="label">Código</label><input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Opcional" /></div>
               </div>
-              <div><label className="label">Colaborador*</label>
+              <div><label className="label">Asignar a Colaborador*</label>
                 <select className="select" value={colaboradorId} onChange={e => setColaboradorId(e.target.value)} required>
-                  <option value="">Selecciona</option>
+                  <option value="">Selecciona un colaborador</option>
                   {colaboradores.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos || ''}</option>)}
                 </select>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div><label className="label">Nivel</label>
+                <div><label className="label">Nivel (Opcional)</label>
                   <select className="select" value={nivelId} onChange={e => setNivelId(e.target.value)}>
                     <option value="">Ninguno</option>
                     {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
                   </select>
                 </div>
-                <div><label className="label">Subnivel</label>
+                <div><label className="label">Subnivel (Opcional)</label>
                   <select className="select" value={subnivelId} onChange={e => setSubnivelId(e.target.value)} disabled={!nivelId}>
                     <option value="">Ninguno</option>
                     {filteredSubniveles.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                   </select>
                 </div>
               </div>
-              <div><label className="label">Nombre Encargado</label><input className="input" value={nombreEncargado} onChange={e => setNombreEncargado(e.target.value)} /></div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div><label className="label">Teléfono Encargado</label><input className="input" value={telefonoEncargado} onChange={e => setTelefonoEncargado(e.target.value)} /></div>
-                <div><label className="label">Estado</label>
-                  <select className="select" value={activo ? 'true' : 'false'} onChange={e => setActivo(e.target.value === 'true')}>
-                    <option value="true">Activo</option>
-                    <option value="false">Inactivo</option>
-                  </select>
-                </div>
-              </div>
-              <div><label className="label">Dirección Encargado</label><textarea className="textarea" value={direccionEncargado} onChange={e => setDireccionEncargado(e.target.value)} rows={2} /></div>
+              <div><label className="label">Nombre del Encargado</label><input className="input" value={nombreEncargado} onChange={e => setNombreEncargado(e.target.value)} placeholder="Opcional" /></div>
+              <div><label className="label">Teléfono del Encargado</label><input className="input" value={telefonoEncargado} onChange={e => setTelefonoEncargado(e.target.value)} placeholder="Opcional" /></div>
+              <div><label className="label">Dirección del Encargado</label><textarea className="textarea" value={direccionEncargado} onChange={e => setDireccionEncargado(e.target.value)} rows={2} placeholder="Opcional" /></div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
                 <button type="submit" className="btn" disabled={saving}>{saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar'}</button>
