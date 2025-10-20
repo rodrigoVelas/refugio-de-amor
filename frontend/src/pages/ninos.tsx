@@ -26,14 +26,11 @@ interface Nino {
   fecha_nacimiento: string
   nivel_id: string | null
   subnivel_id: string | null
-  maestro_id: string | null
   colaborador_id: string
-  activo: boolean
   codigo: string | null
   nombre_encargado: string | null
   telefono_encargado: string | null
   direccion_encargado: string | null
-  fecha_baja: string | null
   colaborador_nombre: string
   nivel_nombre: string | null
   subnivel_nombre: string | null
@@ -44,7 +41,6 @@ export default function Ninos() {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [niveles, setNiveles] = useState<Nivel[]>([])
   const [subniveles, setSubniveles] = useState<Subnivel[]>([])
-  const [filteredSubniveles, setFilteredSubniveles] = useState<Subnivel[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -66,43 +62,44 @@ export default function Ninos() {
     cargarDatos()
   }, [])
 
-  useEffect(() => {
-    if (nivelId) {
-      const subs = subniveles.filter(s => s.nivel_id === nivelId)
-      setFilteredSubniveles(subs)
-      if (!subs.find(s => s.id === subnivelId)) {
-        setSubnivelId('')
-      }
-    } else {
-      setFilteredSubniveles([])
-      setSubnivelId('')
-    }
-  }, [nivelId, subniveles, subnivelId])
-
   async function cargarDatos() {
     try {
       setLoading(true)
 
-      // Cargar colaboradores
-      const colabRes = await fetch(`${API_URL}/usuarios`, { credentials: 'include' })
-      if (colabRes.ok) setColaboradores(await colabRes.json())
+      console.log('🔄 Cargando datos...')
 
-      // Cargar niveles
-      const nivRes = await fetch(`${API_URL}/niveles`, { credentials: 'include' })
-      if (nivRes.ok) setNiveles(await nivRes.json())
+      const [colabRes, nivRes, subRes, ninosRes] = await Promise.all([
+        fetch(`${API_URL}/usuarios`, { credentials: 'include' }),
+        fetch(`${API_URL}/niveles`, { credentials: 'include' }),
+        fetch(`${API_URL}/subniveles`, { credentials: 'include' }),
+        fetch(`${API_URL}/ninos?activo=true`, { credentials: 'include' })
+      ])
 
-      // Cargar subniveles
-      const subRes = await fetch(`${API_URL}/subniveles`, { credentials: 'include' })
-      if (subRes.ok) setSubniveles(await subRes.json())
+      if (colabRes.ok) {
+        const colabData = await colabRes.json()
+        console.log('✅ Colaboradores cargados:', colabData.length)
+        setColaboradores(colabData)
+      }
 
-      // Cargar niños (el backend filtra automáticamente según el rol)
-      const ninosRes = await fetch(`${API_URL}/ninos?activo=true`, { credentials: 'include' })
-      
+      if (nivRes.ok) {
+        const nivData = await nivRes.json()
+        console.log('✅ Niveles cargados:', nivData.length)
+        setNiveles(nivData)
+      }
+
+      if (subRes.ok) {
+        const subData = await subRes.json()
+        console.log('✅ Subniveles cargados:', subData)
+        setSubniveles(subData)
+      }
+
       if (ninosRes.ok) {
-        setNinos(await ninosRes.json())
+        const ninosData = await ninosRes.json()
+        console.log('✅ Niños cargados:', ninosData.length)
+        setNinos(ninosData)
       }
     } catch (error) {
-      console.error('Error:', error)
+      console.error('❌ Error cargando datos:', error)
     } finally {
       setLoading(false)
     }
@@ -110,6 +107,7 @@ export default function Ninos() {
 
   function abrirModal(nino?: Nino) {
     if (nino) {
+      console.log('Editando niño:', nino)
       setEditingId(nino.id)
       setNombres(nino.nombres)
       setApellidos(nino.apellidos)
@@ -171,6 +169,8 @@ export default function Ninos() {
         activo: true
       }
 
+      console.log('📤 Enviando datos:', data)
+
       const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
       const res = await fetch(url, {
         method: editingId ? 'PUT' : 'POST',
@@ -200,6 +200,7 @@ export default function Ninos() {
         })
       }
     } catch (error) {
+      console.error('❌ Error guardando:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -268,6 +269,13 @@ export default function Ninos() {
     return edad
   }
 
+  // Filtrar subniveles por nivel seleccionado
+  const subnivelesFiltrados = subniveles.filter(s => s.nivel_id === nivelId)
+
+  console.log('🔍 Nivel seleccionado:', nivelId)
+  console.log('🔍 Todos los subniveles:', subniveles)
+  console.log('🔍 Subniveles filtrados:', subnivelesFiltrados)
+
   return (
     <div className="content">
       <div className="card">
@@ -308,7 +316,7 @@ export default function Ninos() {
 
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <h2>{editingId ? 'Editar' : 'Registrar'} Niño</h2>
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>✕</button>
@@ -329,17 +337,42 @@ export default function Ninos() {
                 </select>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div><label className="label">Nivel (Opcional)</label>
-                  <select className="select" value={nivelId} onChange={e => setNivelId(e.target.value)}>
+                <div>
+                  <label className="label">Nivel (Opcional)</label>
+                  <select 
+                    className="select" 
+                    value={nivelId} 
+                    onChange={e => {
+                      console.log('Nivel cambiado a:', e.target.value)
+                      setNivelId(e.target.value)
+                      setSubnivelId('') // Reset subnivel
+                    }}
+                  >
                     <option value="">Ninguno</option>
                     {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
                   </select>
                 </div>
-                <div><label className="label">Subnivel (Opcional)</label>
-                  <select className="select" value={subnivelId} onChange={e => setSubnivelId(e.target.value)} disabled={!nivelId}>
+                <div>
+                  <label className="label">Subnivel (Opcional)</label>
+                  <select 
+                    className="select" 
+                    value={subnivelId} 
+                    onChange={e => {
+                      console.log('Subnivel cambiado a:', e.target.value)
+                      setSubnivelId(e.target.value)
+                    }} 
+                    disabled={!nivelId || subnivelesFiltrados.length === 0}
+                  >
                     <option value="">Ninguno</option>
-                    {filteredSubniveles.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    {subnivelesFiltrados.map(s => (
+                      <option key={s.id} value={s.id}>{s.nombre}</option>
+                    ))}
                   </select>
+                  {nivelId && subnivelesFiltrados.length === 0 && (
+                    <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
+                      No hay subniveles para este nivel
+                    </small>
+                  )}
                 </div>
               </div>
               <div><label className="label">Nombre del Encargado</label><input className="input" value={nombreEncargado} onChange={e => setNombreEncargado(e.target.value)} placeholder="Opcional" /></div>
