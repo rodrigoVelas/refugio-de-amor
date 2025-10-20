@@ -1,15 +1,10 @@
 import { useState, useEffect } from 'react'
 import { API_URL } from '../config'
 
-interface Nivel {
+interface Colaborador {
   id: string
-  nombre: string
-}
-
-interface Subnivel {
-  id: string
-  nombre: string
-  nivel_id: string
+  nombres: string
+  apellidos: string
 }
 
 interface Nino {
@@ -18,27 +13,22 @@ interface Nino {
   apellidos: string
   fecha_nacimiento: string
   genero: string
-  nivel_id: string
-  subnivel_id: string
+  colaborador_id: string
   estado: string
   fecha_ingreso: string
-  nivel_nombre: string
-  subnivel_nombre: string
+  colaborador_nombre: string
 }
 
 export default function Ninos() {
   const [ninos, setNinos] = useState<Nino[]>([])
-  const [niveles, setNiveles] = useState<Nivel[]>([])
-  const [subniveles, setSubniveles] = useState<Subnivel[]>([])
-  const [filteredSubniveles, setFilteredSubniveles] = useState<Subnivel[]>([])
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   // Filtros
-  const [filtroNivel, setFiltroNivel] = useState('')
-  const [filtroSubnivel, setFiltroSubnivel] = useState('')
+  const [filtroColaborador, setFiltroColaborador] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
 
   // Form state
@@ -46,45 +36,28 @@ export default function Ninos() {
   const [apellidos, setApellidos] = useState('')
   const [fechaNacimiento, setFechaNacimiento] = useState('')
   const [genero, setGenero] = useState('M')
-  const [nivelId, setNivelId] = useState('')
-  const [subnivelId, setSubnivelId] = useState('')
+  const [colaboradorId, setColaboradorId] = useState('')
   const [estado, setEstado] = useState('activo')
   const [fechaIngreso, setFechaIngreso] = useState(new Date().toISOString().split('T')[0])
 
   useEffect(() => {
     cargarDatos()
-  }, [filtroNivel, filtroSubnivel, filtroEstado])
-
-  useEffect(() => {
-    if (nivelId) {
-      const subs = subniveles.filter(s => s.nivel_id === nivelId)
-      setFilteredSubniveles(subs)
-      if (!subs.find(s => s.id === subnivelId)) {
-        setSubnivelId('')
-      }
-    } else {
-      setFilteredSubniveles([])
-      setSubnivelId('')
-    }
-  }, [nivelId, subniveles, subnivelId])
+  }, [filtroColaborador, filtroEstado])
 
   async function cargarDatos() {
     try {
       setLoading(true)
 
-      const nivelesRes = await fetch(`${API_URL}/niveles`, { credentials: 'include' })
-      if (nivelesRes.ok) {
-        setNiveles(await nivelesRes.json())
+      // Cargar colaboradores (usuarios)
+      const colaboradoresRes = await fetch(`${API_URL}/usuarios`, { credentials: 'include' })
+      if (colaboradoresRes.ok) {
+        const colaboradoresData = await colaboradoresRes.json()
+        setColaboradores(colaboradoresData)
       }
 
-      const subnivelesRes = await fetch(`${API_URL}/subniveles`, { credentials: 'include' })
-      if (subnivelesRes.ok) {
-        setSubniveles(await subnivelesRes.json())
-      }
-
+      // Cargar niños con filtros
       const params = new URLSearchParams()
-      if (filtroNivel) params.append('nivel_id', filtroNivel)
-      if (filtroSubnivel) params.append('subnivel_id', filtroSubnivel)
+      if (filtroColaborador) params.append('colaborador_id', filtroColaborador)
       if (filtroEstado) params.append('estado', filtroEstado)
 
       const ninosUrl = `${API_URL}/ninos${params.toString() ? '?' + params.toString() : ''}`
@@ -107,8 +80,7 @@ export default function Ninos() {
       setApellidos(nino.apellidos)
       setFechaNacimiento(nino.fecha_nacimiento)
       setGenero(nino.genero)
-      setNivelId(nino.nivel_id)
-      setSubnivelId(nino.subnivel_id)
+      setColaboradorId(nino.colaborador_id)
       setEstado(nino.estado)
       setFechaIngreso(nino.fecha_ingreso)
     } else {
@@ -123,8 +95,7 @@ export default function Ninos() {
     setApellidos('')
     setFechaNacimiento('')
     setGenero('M')
-    setNivelId('')
-    setSubnivelId('')
+    setColaboradorId('')
     setEstado('activo')
     setFechaIngreso(new Date().toISOString().split('T')[0])
   }
@@ -132,7 +103,7 @@ export default function Ninos() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !nivelId || !subnivelId) {
+    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !colaboradorId) {
       alert('Completa todos los campos')
       return
     }
@@ -150,8 +121,7 @@ export default function Ninos() {
           apellidos,
           fecha_nacimiento: fechaNacimiento,
           genero,
-          nivel_id: nivelId,
-          subnivel_id: subnivelId,
+          colaborador_id: colaboradorId,
           estado,
           fecha_ingreso: fechaIngreso,
         }),
@@ -211,14 +181,13 @@ export default function Ninos() {
         </div>
 
         <div className="toolbar">
-          <select className="select" value={filtroNivel} onChange={(e) => { setFiltroNivel(e.target.value); setFiltroSubnivel('') }}>
-            <option value="">Todos los niveles</option>
-            {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
-          </select>
-
-          <select className="select" value={filtroSubnivel} onChange={(e) => setFiltroSubnivel(e.target.value)} disabled={!filtroNivel}>
-            <option value="">Todos los subniveles</option>
-            {subniveles.filter(s => s.nivel_id === filtroNivel).map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          <select className="select" value={filtroColaborador} onChange={(e) => setFiltroColaborador(e.target.value)}>
+            <option value="">Todos los colaboradores</option>
+            {colaboradores.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.nombres} {c.apellidos || ''}
+              </option>
+            ))}
           </select>
 
           <select className="select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
@@ -228,8 +197,8 @@ export default function Ninos() {
             <option value="egresado">Egresados</option>
           </select>
 
-          {(filtroNivel || filtroSubnivel || filtroEstado) && (
-            <button className="btn btn-ghost" onClick={() => { setFiltroNivel(''); setFiltroSubnivel(''); setFiltroEstado('') }}>
+          {(filtroColaborador || filtroEstado) && (
+            <button className="btn btn-ghost" onClick={() => { setFiltroColaborador(''); setFiltroEstado('') }}>
               Limpiar
             </button>
           )}
@@ -248,7 +217,7 @@ export default function Ninos() {
                   <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
                     <div>Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
                     <div>{nino.genero === 'M' ? 'Masculino' : 'Femenino'}</div>
-                    <div>{nino.nivel_nombre} - {nino.subnivel_nombre}</div>
+                    <div>Colaborador: {nino.colaborador_nombre}</div>
                     <div>Estado: <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', background: nino.estado === 'activo' ? '#dcfce7' : '#fee2e2', color: nino.estado === 'activo' ? '#166534' : '#991b1b' }}>{nino.estado}</span></div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -278,9 +247,16 @@ export default function Ninos() {
                 <div><label className="label">Fecha Nac*</label><input type="date" className="input" value={fechaNacimiento} onChange={e => setFechaNacimiento(e.target.value)} required /></div>
                 <div><label className="label">Género*</label><select className="select" value={genero} onChange={e => setGenero(e.target.value)}><option value="M">Masculino</option><option value="F">Femenino</option></select></div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div><label className="label">Nivel*</label><select className="select" value={nivelId} onChange={e => setNivelId(e.target.value)} required><option value="">Selecciona</option>{niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}</select></div>
-                <div><label className="label">Subnivel*</label><select className="select" value={subnivelId} onChange={e => setSubnivelId(e.target.value)} required disabled={!nivelId}><option value="">Selecciona</option>{filteredSubniveles.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}</select></div>
+              <div>
+                <label className="label">Asignar a Colaborador*</label>
+                <select className="select" value={colaboradorId} onChange={e => setColaboradorId(e.target.value)} required>
+                  <option value="">Selecciona un colaborador</option>
+                  {colaboradores.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombres} {c.apellidos || ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div><label className="label">Estado*</label><select className="select" value={estado} onChange={e => setEstado(e.target.value)}><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="egresado">Egresado</option></select></div>

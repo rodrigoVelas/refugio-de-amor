@@ -9,60 +9,46 @@ const router = Router()
 // GET /ninos - Listar niños con filtros (según permisos del usuario)
 router.get('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { nivel_id, subnivel_id, estado } = req.query
+    const { colaborador_id, estado } = req.query
     const userId = req.user.id
 
     console.log(`[ninos/list] 🔍 Usuario ID: ${userId}`)
 
-    // Obtener nivel y subnivel asignado al usuario (si es maestro/a)
+    // Obtener info del usuario
     const userInfo = await pool.query(
-      'SELECT nivel_id, subnivel_id, rol_id FROM usuarios WHERE id = $1',
+      'SELECT rol_id FROM usuarios WHERE id = $1',
       [userId]
     )
 
     console.log(`[ninos/list] 📋 Info usuario:`, userInfo.rows[0])
 
-    const userNivel = userInfo.rows[0]?.nivel_id
-    const userSubnivel = userInfo.rows[0]?.subnivel_id
-
     let query = `
       SELECT 
         n.*,
-        nv.nombre as nivel_nombre,
-        sn.nombre as subnivel_nombre
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre
       FROM ninos n
-      LEFT JOIN niveles nv ON n.nivel_id = nv.id
-      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      LEFT JOIN usuarios u ON n.colaborador_id = u.id
       WHERE 1=1
     `
     const params: any[] = []
 
-    // Si el usuario tiene nivel/subnivel asignado, filtrar solo esos niños
-    if (userNivel) {
-      params.push(userNivel)
-      query += ` AND n.nivel_id = $${params.length}`
-      console.log(`[ninos/list] ✅ Filtrando por nivel asignado: ${userNivel}`)
+    // Si el usuario NO es directora/admin, solo ve sus niños asignados
+    // Asumiendo que la directora tiene rol_id específico (ajusta según tu BD)
+    const esDirectora = userInfo.rows[0]?.rol_id === '1' // Ajusta el ID según tu rol de directora
+
+    if (!esDirectora) {
+      params.push(userId)
+      query += ` AND n.colaborador_id = $${params.length}`
+      console.log(`[ninos/list] ✅ Filtrando por colaborador: ${userId}`)
     } else {
-      console.log(`[ninos/list] ⚠️ Usuario sin nivel asignado - mostrará todos los niños`)
+      console.log(`[ninos/list] ⚠️ Directora - mostrará todos los niños`)
     }
 
-    if (userSubnivel) {
-      params.push(userSubnivel)
-      query += ` AND n.subnivel_id = $${params.length}`
-      console.log(`[ninos/list] ✅ Filtrando por subnivel asignado: ${userSubnivel}`)
-    }
-
-    // Filtros adicionales del frontend (solo si el usuario no tiene nivel asignado)
-    if (nivel_id && !userNivel) {
-      params.push(nivel_id)
-      query += ` AND n.nivel_id = $${params.length}`
-      console.log(`[ninos/list] 🔎 Filtro frontend - nivel: ${nivel_id}`)
-    }
-
-    if (subnivel_id && !userSubnivel) {
-      params.push(subnivel_id)
-      query += ` AND n.subnivel_id = $${params.length}`
-      console.log(`[ninos/list] 🔎 Filtro frontend - subnivel: ${subnivel_id}`)
+    // Filtros adicionales del frontend
+    if (colaborador_id && esDirectora) {
+      params.push(colaborador_id)
+      query += ` AND n.colaborador_id = $${params.length}`
+      console.log(`[ninos/list] 🔎 Filtro frontend - colaborador: ${colaborador_id}`)
     }
 
     if (estado) {
@@ -91,33 +77,25 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
     console.log(`[ninos/get] Usuario ${userId} consultando niño ${id}`)
 
     const userInfo = await pool.query(
-      'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
+      'SELECT rol_id FROM usuarios WHERE id = $1',
       [userId]
     )
 
-    const userNivel = userInfo.rows[0]?.nivel_id
-    const userSubnivel = userInfo.rows[0]?.subnivel_id
+    const esDirectora = userInfo.rows[0]?.rol_id === '1'
 
     let query = `
       SELECT 
         n.*,
-        nv.nombre as nivel_nombre,
-        sn.nombre as subnivel_nombre
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre
       FROM ninos n
-      LEFT JOIN niveles nv ON n.nivel_id = nv.id
-      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      LEFT JOIN usuarios u ON n.colaborador_id = u.id
       WHERE n.id = $1
     `
     const params: any[] = [id]
 
-    if (userNivel) {
-      params.push(userNivel)
-      query += ` AND n.nivel_id = $${params.length}`
-    }
-
-    if (userSubnivel) {
-      params.push(userSubnivel)
-      query += ` AND n.subnivel_id = $${params.length}`
+    if (!esDirectora) {
+      params.push(userId)
+      query += ` AND n.colaborador_id = $${params.length}`
     }
 
     const result = await pool.query(query, params)
@@ -142,19 +120,19 @@ router.post(
   requirePerms(['ninos_crear']),
   async (req: any, res: any) => {
     try {
-      const { nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso } = req.body
+      const { nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso } = req.body
 
       console.log(`[ninos/create] Creando niño: ${nombres} ${apellidos}`)
 
-      if (!nombres || !apellidos || !fecha_nacimiento || !genero || !nivel_id || !subnivel_id) {
+      if (!nombres || !apellidos || !fecha_nacimiento || !genero || !colaborador_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
       }
 
       const result = await pool.query(
         `
         INSERT INTO ninos 
-          (nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          (nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
         `,
         [
@@ -162,8 +140,7 @@ router.post(
           apellidos,
           fecha_nacimiento,
           genero,
-          nivel_id,
-          subnivel_id,
+          colaborador_id,
           estado || 'activo',
           fecha_ingreso || new Date().toISOString().split('T')[0],
         ]
@@ -186,27 +163,27 @@ router.put(
   async (req: any, res: any) => {
     try {
       const { id } = req.params
-      const { nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso } = req.body
+      const { nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso } = req.body
       const userId = req.user.id
 
       console.log(`[ninos/update] Usuario ${userId} actualizando niño ${id}`)
 
-      if (!nombres || !apellidos || !fecha_nacimiento || !genero || !nivel_id || !subnivel_id) {
+      if (!nombres || !apellidos || !fecha_nacimiento || !genero || !colaborador_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
       }
 
-      // Verificar acceso
+      // Verificar acceso (solo si no es directora)
       const userInfo = await pool.query(
-        'SELECT nivel_id, subnivel_id FROM usuarios WHERE id = $1',
+        'SELECT rol_id FROM usuarios WHERE id = $1',
         [userId]
       )
 
-      const userNivel = userInfo.rows[0]?.nivel_id
+      const esDirectora = userInfo.rows[0]?.rol_id === '1'
 
-      if (userNivel) {
+      if (!esDirectora) {
         const ninoCheck = await pool.query(
-          'SELECT * FROM ninos WHERE id = $1 AND nivel_id = $2',
-          [id, userNivel]
+          'SELECT * FROM ninos WHERE id = $1 AND colaborador_id = $2',
+          [id, userId]
         )
 
         if (ninoCheck.rows.length === 0) {
@@ -219,11 +196,11 @@ router.put(
         `
         UPDATE ninos
         SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, genero = $4, 
-            nivel_id = $5, subnivel_id = $6, estado = $7, fecha_ingreso = $8
-        WHERE id = $9
+            colaborador_id = $5, estado = $6, fecha_ingreso = $7
+        WHERE id = $8
         RETURNING *
         `,
-        [nombres, apellidos, fecha_nacimiento, genero, nivel_id, subnivel_id, estado, fecha_ingreso, id]
+        [nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso, id]
       )
 
       if (result.rows.length === 0) {
@@ -250,7 +227,7 @@ router.delete(
 
       console.log(`[ninos/delete] 🗑️ Eliminando niño ${id}`)
 
-      // 1. Verificar que existe
+      // Verificar que existe
       const check = await pool.query('SELECT id FROM ninos WHERE id = $1', [id])
 
       if (check.rows.length === 0) {
@@ -258,14 +235,14 @@ router.delete(
         return res.status(404).json({ error: 'Niño no encontrado' })
       }
 
-      // 2. Eliminar asistencias asociadas primero
+      // Eliminar asistencias asociadas primero
       const asistenciasResult = await pool.query(
         'DELETE FROM asistencia WHERE nino_id = $1',
         [id]
       )
       console.log(`[ninos/delete] 📋 Eliminadas ${asistenciasResult.rowCount} asistencias`)
 
-      // 3. Ahora eliminar el niño
+      // Ahora eliminar el niño
       await pool.query('DELETE FROM ninos WHERE id = $1', [id])
       
       console.log('[ninos/delete] ✅ Niño eliminado exitosamente')
