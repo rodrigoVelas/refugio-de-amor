@@ -9,7 +9,7 @@ const router = Router()
 // GET /ninos - Listar niños con filtros (según permisos del usuario)
 router.get('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { colaborador_id, estado } = req.query
+    const { colaborador_id, nivel_id, subnivel_id, activo } = req.query
     const userId = req.user.id
 
     console.log(`[ninos/list] 🔍 Usuario ID: ${userId}`)
@@ -25,35 +25,45 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     let query = `
       SELECT 
         n.*,
-        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre,
+        nv.nombre as nivel_nombre,
+        sn.nombre as subnivel_nombre
       FROM ninos n
       LEFT JOIN usuarios u ON n.colaborador_id = u.id
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
       WHERE 1=1
     `
     const params: any[] = []
 
     // Si el usuario NO es directora/admin, solo ve sus niños asignados
-    const esDirectora = userInfo.rows[0]?.rol_id === '1' // Ajusta según tu BD
+    const esDirectora = userInfo.rows[0]?.rol_id === '1'
 
     if (!esDirectora) {
       params.push(userId)
       query += ` AND n.colaborador_id = $${params.length}`
       console.log(`[ninos/list] ✅ Filtrando por colaborador: ${userId}`)
-    } else {
-      console.log(`[ninos/list] ⚠️ Directora - mostrará todos los niños`)
     }
 
-    // Filtros adicionales del frontend
+    // Filtros adicionales
     if (colaborador_id && esDirectora) {
       params.push(colaborador_id)
       query += ` AND n.colaborador_id = $${params.length}`
-      console.log(`[ninos/list] 🔎 Filtro frontend - colaborador: ${colaborador_id}`)
     }
 
-    if (estado) {
-      params.push(estado)
-      query += ` AND n.estado = $${params.length}`
-      console.log(`[ninos/list] 🔎 Filtro frontend - estado: ${estado}`)
+    if (nivel_id) {
+      params.push(nivel_id)
+      query += ` AND n.nivel_id = $${params.length}`
+    }
+
+    if (subnivel_id) {
+      params.push(subnivel_id)
+      query += ` AND n.subnivel_id = $${params.length}`
+    }
+
+    if (activo !== undefined) {
+      params.push(activo === 'true')
+      query += ` AND n.activo = $${params.length}`
     }
 
     query += ' ORDER BY n.apellidos, n.nombres'
@@ -71,40 +81,27 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 router.get('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
-    const userId = req.user.id
 
-    console.log(`[ninos/get] Usuario ${userId} consultando niño ${id}`)
-
-    const userInfo = await pool.query(
-      'SELECT rol_id FROM usuarios WHERE id = $1',
-      [userId]
-    )
-
-    const esDirectora = userInfo.rows[0]?.rol_id === '1'
-
-    let query = `
+    const result = await pool.query(
+      `
       SELECT 
         n.*,
-        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre,
+        nv.nombre as nivel_nombre,
+        sn.nombre as subnivel_nombre
       FROM ninos n
       LEFT JOIN usuarios u ON n.colaborador_id = u.id
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
       WHERE n.id = $1
-    `
-    const params: any[] = [id]
-
-    if (!esDirectora) {
-      params.push(userId)
-      query += ` AND n.colaborador_id = $${params.length}`
-    }
-
-    const result = await pool.query(query, params)
+      `,
+      [id]
+    )
 
     if (result.rows.length === 0) {
-      console.log(`[ninos/get] ❌ Niño no encontrado o sin acceso`)
-      return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
+      return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
-    console.log(`[ninos/get] ✅ Niño encontrado`)
     res.json(result.rows[0])
   } catch (error: any) {
     console.error('[ninos/get] ❌ Error:', error)
@@ -119,48 +116,55 @@ router.post(
   requirePerms(['ninos_crear']),
   async (req: any, res: any) => {
     try {
-      const { nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso } = req.body
+      const { 
+        nombres, 
+        apellidos, 
+        fecha_nacimiento, 
+        nivel_id, 
+        subnivel_id, 
+        maestro_id,
+        colaborador_id,
+        codigo,
+        nombre_encargado,
+        telefono_encargado,
+        direccion_encargado
+      } = req.body
 
       console.log(`[ninos/create] 📝 Creando niño: ${nombres} ${apellidos}`)
-      console.log(`[ninos/create] Datos recibidos:`, req.body)
 
-      if (!nombres || !apellidos || !fecha_nacimiento || !genero || !colaborador_id) {
-        console.log(`[ninos/create] ❌ Faltan campos requeridos`)
+      if (!nombres || !apellidos || !fecha_nacimiento || !colaborador_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
       }
 
       const result = await pool.query(
         `
         INSERT INTO ninos 
-          (nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+          (nombres, apellidos, fecha_nacimiento, nivel_id, subnivel_id, maestro_id, colaborador_id, 
+           activo, codigo, nombre_encargado, telefono_encargado, direccion_encargado, creado_en)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
         RETURNING *
         `,
         [
           nombres,
           apellidos,
           fecha_nacimiento,
-          genero,
+          nivel_id || null,
+          subnivel_id || null,
+          maestro_id || null,
           colaborador_id,
-          estado || 'activo',
-          fecha_ingreso || new Date().toISOString().split('T')[0],
+          true, // activo por defecto
+          codigo || null,
+          nombre_encargado || null,
+          telefono_encargado || null,
+          direccion_encargado || null
         ]
       )
 
       console.log('[ninos/create] ✅ Niño creado:', result.rows[0].id)
       res.json({ ok: true, nino: result.rows[0] })
     } catch (error: any) {
-      console.error('[ninos/create] ❌ ERROR COMPLETO:')
-      console.error('Mensaje:', error.message)
-      console.error('Código:', error.code)
-      console.error('Detalle:', error.detail)
-      console.error('Stack:', error.stack)
-      
-      res.status(500).json({ 
-        error: error.message || 'Error al crear niño',
-        code: error.code,
-        detail: error.detail
-      })
+      console.error('[ninos/create] ❌ ERROR:', error.message)
+      res.status(500).json({ error: error.message })
     }
   }
 )
@@ -173,44 +177,45 @@ router.put(
   async (req: any, res: any) => {
     try {
       const { id } = req.params
-      const { nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso } = req.body
-      const userId = req.user.id
+      const { 
+        nombres, 
+        apellidos, 
+        fecha_nacimiento, 
+        nivel_id, 
+        subnivel_id, 
+        maestro_id,
+        colaborador_id,
+        activo,
+        codigo,
+        nombre_encargado,
+        telefono_encargado,
+        direccion_encargado,
+        fecha_baja
+      } = req.body
 
-      console.log(`[ninos/update] Usuario ${userId} actualizando niño ${id}`)
+      console.log(`[ninos/update] Actualizando niño ${id}`)
 
-      if (!nombres || !apellidos || !fecha_nacimiento || !genero || !colaborador_id) {
+      if (!nombres || !apellidos || !fecha_nacimiento || !colaborador_id) {
         return res.status(400).json({ error: 'Faltan campos requeridos' })
-      }
-
-      // Verificar acceso (solo si no es directora)
-      const userInfo = await pool.query(
-        'SELECT rol_id FROM usuarios WHERE id = $1',
-        [userId]
-      )
-
-      const esDirectora = userInfo.rows[0]?.rol_id === '1'
-
-      if (!esDirectora) {
-        const ninoCheck = await pool.query(
-          'SELECT * FROM ninos WHERE id = $1 AND colaborador_id = $2',
-          [id, userId]
-        )
-
-        if (ninoCheck.rows.length === 0) {
-          console.log(`[ninos/update] ❌ Usuario sin acceso`)
-          return res.status(403).json({ error: 'No tienes acceso a este niño' })
-        }
       }
 
       const result = await pool.query(
         `
         UPDATE ninos
-        SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, genero = $4, 
-            colaborador_id = $5, estado = $6, fecha_ingreso = $7
-        WHERE id = $8
+        SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, nivel_id = $4, 
+            subnivel_id = $5, maestro_id = $6, colaborador_id = $7, activo = $8,
+            codigo = $9, nombre_encargado = $10, telefono_encargado = $11, 
+            direccion_encargado = $12, fecha_baja = $13, modificado_en = NOW(),
+            modificado_por = $14
+        WHERE id = $15
         RETURNING *
         `,
-        [nombres, apellidos, fecha_nacimiento, genero, colaborador_id, estado, fecha_ingreso, id]
+        [
+          nombres, apellidos, fecha_nacimiento, nivel_id || null, subnivel_id || null,
+          maestro_id || null, colaborador_id, activo !== undefined ? activo : true,
+          codigo || null, nombre_encargado || null, telefono_encargado || null,
+          direccion_encargado || null, fecha_baja || null, req.user.id, id
+        ]
       )
 
       if (result.rows.length === 0) {
@@ -226,7 +231,7 @@ router.put(
   }
 )
 
-// DELETE /ninos/:id - Eliminar niño (eliminando todas las referencias)
+// DELETE /ninos/:id - Eliminar niño
 router.delete(
   '/:id',
   authMiddleware,
@@ -235,45 +240,26 @@ router.delete(
     try {
       const { id } = req.params
 
-      console.log(`[ninos/delete] 🗑️ Iniciando eliminación del niño ${id}`)
+      console.log(`[ninos/delete] 🗑️ Eliminando niño ${id}`)
 
-      // Verificar que existe
       const check = await pool.query('SELECT id FROM ninos WHERE id = $1', [id])
 
       if (check.rows.length === 0) {
-        console.log(`[ninos/delete] ❌ Niño no encontrado`)
         return res.status(404).json({ error: 'Niño no encontrado' })
       }
 
-      console.log(`[ninos/delete] 🔄 Eliminando referencias en otras tablas...`)
+      // Eliminar asistencias
+      await pool.query('DELETE FROM asistencia WHERE nino_id = $1', [id])
+      console.log(`[ninos/delete] ✅ Asistencias eliminadas`)
 
-      // Eliminar de todas las tablas que referencian a ninos
-      const asistenciasResult = await pool.query('DELETE FROM asistencia WHERE nino_id = $1', [id])
-      console.log(`[ninos/delete] ✅ Eliminadas ${asistenciasResult.rowCount} asistencias`)
-
-      // Si hay otras tablas que referencian ninos, agrégalas aquí
-      // Ejemplo: await pool.query('DELETE FROM otra_tabla WHERE nino_id = $1', [id])
-
-      // Ahora eliminar el niño
+      // Eliminar niño
       await pool.query('DELETE FROM ninos WHERE id = $1', [id])
       
-      console.log('[ninos/delete] ✅ Niño eliminado exitosamente')
-      res.json({ ok: true, message: 'Niño eliminado' })
+      console.log('[ninos/delete] ✅ Niño eliminado')
+      res.json({ ok: true })
     } catch (error: any) {
-      console.error('[ninos/delete] ❌ ERROR COMPLETO:')
-      console.error('Mensaje:', error.message)
-      console.error('Código:', error.code)
-      console.error('Detalle:', error.detail)
-      console.error('Constraint:', error.constraint)
-      console.error('Table:', error.table)
-      console.error('Stack:', error.stack)
-      
-      res.status(500).json({ 
-        error: 'Error al eliminar niño',
-        details: error.message,
-        code: error.code,
-        constraint: error.constraint
-      })
+      console.error('[ninos/delete] ❌ ERROR:', error.message)
+      res.status(500).json({ error: error.message })
     }
   }
 )

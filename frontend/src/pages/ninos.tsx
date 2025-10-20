@@ -7,21 +7,43 @@ interface Colaborador {
   apellidos: string
 }
 
+interface Nivel {
+  id: string
+  nombre: string
+}
+
+interface Subnivel {
+  id: string
+  nombre: string
+  nivel_id: string
+}
+
 interface Nino {
   id: string
   nombres: string
   apellidos: string
   fecha_nacimiento: string
-  genero: string
+  nivel_id: string | null
+  subnivel_id: string | null
+  maestro_id: string | null
   colaborador_id: string
-  estado: string
-  fecha_ingreso: string
+  activo: boolean
+  codigo: string | null
+  nombre_encargado: string | null
+  telefono_encargado: string | null
+  direccion_encargado: string | null
+  fecha_baja: string | null
   colaborador_nombre: string
+  nivel_nombre: string | null
+  subnivel_nombre: string | null
 }
 
 export default function Ninos() {
   const [ninos, setNinos] = useState<Nino[]>([])
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
+  const [niveles, setNiveles] = useState<Nivel[]>([])
+  const [subniveles, setSubniveles] = useState<Subnivel[]>([])
+  const [filteredSubniveles, setFilteredSubniveles] = useState<Subnivel[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -29,43 +51,63 @@ export default function Ninos() {
 
   // Filtros
   const [filtroColaborador, setFiltroColaborador] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroActivo, setFiltroActivo] = useState('')
 
   // Form state
   const [nombres, setNombres] = useState('')
   const [apellidos, setApellidos] = useState('')
   const [fechaNacimiento, setFechaNacimiento] = useState('')
-  const [genero, setGenero] = useState('M')
+  const [nivelId, setNivelId] = useState('')
+  const [subnivelId, setSubnivelId] = useState('')
   const [colaboradorId, setColaboradorId] = useState('')
-  const [estado, setEstado] = useState('activo')
-  const [fechaIngreso, setFechaIngreso] = useState(new Date().toISOString().split('T')[0])
+  const [codigo, setCodigo] = useState('')
+  const [nombreEncargado, setNombreEncargado] = useState('')
+  const [telefonoEncargado, setTelefonoEncargado] = useState('')
+  const [direccionEncargado, setDireccionEncargado] = useState('')
+  const [activo, setActivo] = useState(true)
 
   useEffect(() => {
     cargarDatos()
-  }, [filtroColaborador, filtroEstado])
+  }, [filtroColaborador, filtroActivo])
+
+  useEffect(() => {
+    if (nivelId) {
+      const subs = subniveles.filter(s => s.nivel_id === nivelId)
+      setFilteredSubniveles(subs)
+      if (!subs.find(s => s.id === subnivelId)) {
+        setSubnivelId('')
+      }
+    } else {
+      setFilteredSubniveles([])
+      setSubnivelId('')
+    }
+  }, [nivelId, subniveles, subnivelId])
 
   async function cargarDatos() {
     try {
       setLoading(true)
 
-      // Cargar colaboradores (usuarios)
-      const colaboradoresRes = await fetch(`${API_URL}/usuarios`, { credentials: 'include' })
-      if (colaboradoresRes.ok) {
-        const colaboradoresData = await colaboradoresRes.json()
-        setColaboradores(colaboradoresData)
-      }
+      // Cargar colaboradores
+      const colabRes = await fetch(`${API_URL}/usuarios`, { credentials: 'include' })
+      if (colabRes.ok) setColaboradores(await colabRes.json())
 
-      // Cargar niños con filtros
+      // Cargar niveles
+      const nivRes = await fetch(`${API_URL}/niveles`, { credentials: 'include' })
+      if (nivRes.ok) setNiveles(await nivRes.json())
+
+      // Cargar subniveles
+      const subRes = await fetch(`${API_URL}/subniveles`, { credentials: 'include' })
+      if (subRes.ok) setSubniveles(await subRes.json())
+
+      // Cargar niños
       const params = new URLSearchParams()
       if (filtroColaborador) params.append('colaborador_id', filtroColaborador)
-      if (filtroEstado) params.append('estado', filtroEstado)
+      if (filtroActivo) params.append('activo', filtroActivo)
 
       const ninosUrl = `${API_URL}/ninos${params.toString() ? '?' + params.toString() : ''}`
       const ninosRes = await fetch(ninosUrl, { credentials: 'include' })
       
-      if (ninosRes.ok) {
-        setNinos(await ninosRes.json())
-      }
+      if (ninosRes.ok) setNinos(await ninosRes.json())
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -79,10 +121,14 @@ export default function Ninos() {
       setNombres(nino.nombres)
       setApellidos(nino.apellidos)
       setFechaNacimiento(nino.fecha_nacimiento)
-      setGenero(nino.genero)
+      setNivelId(nino.nivel_id || '')
+      setSubnivelId(nino.subnivel_id || '')
       setColaboradorId(nino.colaborador_id)
-      setEstado(nino.estado)
-      setFechaIngreso(nino.fecha_ingreso)
+      setCodigo(nino.codigo || '')
+      setNombreEncargado(nino.nombre_encargado || '')
+      setTelefonoEncargado(nino.telefono_encargado || '')
+      setDireccionEncargado(nino.direccion_encargado || '')
+      setActivo(nino.activo)
     } else {
       resetForm()
     }
@@ -94,37 +140,47 @@ export default function Ninos() {
     setNombres('')
     setApellidos('')
     setFechaNacimiento('')
-    setGenero('M')
+    setNivelId('')
+    setSubnivelId('')
     setColaboradorId('')
-    setEstado('activo')
-    setFechaIngreso(new Date().toISOString().split('T')[0])
+    setCodigo('')
+    setNombreEncargado('')
+    setTelefonoEncargado('')
+    setDireccionEncargado('')
+    setActivo(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !colaboradorId) {
-      alert('Completa todos los campos')
+      alert('Completa todos los campos requeridos')
       return
     }
 
     try {
       setSaving(true)
 
+      const data = {
+        nombres,
+        apellidos,
+        fecha_nacimiento: fechaNacimiento,
+        nivel_id: nivelId || null,
+        subnivel_id: subnivelId || null,
+        colaborador_id: colaboradorId,
+        codigo: codigo || null,
+        nombre_encargado: nombreEncargado || null,
+        telefono_encargado: telefonoEncargado || null,
+        direccion_encargado: direccionEncargado || null,
+        activo
+      }
+
       const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
       const res = await fetch(url, {
         method: editingId ? 'PUT' : 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombres,
-          apellidos,
-          fecha_nacimiento: fechaNacimiento,
-          genero,
-          colaborador_id: colaboradorId,
-          estado,
-          fecha_ingreso: fechaIngreso,
-        }),
+        body: JSON.stringify(data),
       })
 
       if (res.ok) {
@@ -133,8 +189,8 @@ export default function Ninos() {
         resetForm()
         cargarDatos()
       } else {
-        const data = await res.json()
-        alert(data.error || 'Error')
+        const err = await res.json()
+        alert(err.error || 'Error')
       }
     } catch (error) {
       alert('Error al guardar')
@@ -184,23 +240,18 @@ export default function Ninos() {
           <select className="select" value={filtroColaborador} onChange={(e) => setFiltroColaborador(e.target.value)}>
             <option value="">Todos los colaboradores</option>
             {colaboradores.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.nombres} {c.apellidos || ''}
-              </option>
+              <option key={c.id} value={c.id}>{c.nombres} {c.apellidos || ''}</option>
             ))}
           </select>
 
-          <select className="select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
+          <select className="select" value={filtroActivo} onChange={(e) => setFiltroActivo(e.target.value)}>
             <option value="">Todos</option>
-            <option value="activo">Activos</option>
-            <option value="inactivo">Inactivos</option>
-            <option value="egresado">Egresados</option>
+            <option value="true">Activos</option>
+            <option value="false">Inactivos</option>
           </select>
 
-          {(filtroColaborador || filtroEstado) && (
-            <button className="btn btn-ghost" onClick={() => { setFiltroColaborador(''); setFiltroEstado('') }}>
-              Limpiar
-            </button>
+          {(filtroColaborador || filtroActivo) && (
+            <button className="btn btn-ghost" onClick={() => { setFiltroColaborador(''); setFiltroActivo('') }}>Limpiar</button>
           )}
         </div>
 
@@ -216,9 +267,11 @@ export default function Ninos() {
                   <h3 style={{ marginBottom: '0.5rem' }}>{nino.nombres} {nino.apellidos}</h3>
                   <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
                     <div>Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
-                    <div>{nino.genero === 'M' ? 'Masculino' : 'Femenino'}</div>
+                    {nino.codigo && <div>Código: {nino.codigo}</div>}
                     <div>Colaborador: {nino.colaborador_nombre}</div>
-                    <div>Estado: <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', background: nino.estado === 'activo' ? '#dcfce7' : '#fee2e2', color: nino.estado === 'activo' ? '#166534' : '#991b1b' }}>{nino.estado}</span></div>
+                    {nino.nivel_nombre && <div>Nivel: {nino.nivel_nombre}</div>}
+                    {nino.nombre_encargado && <div>Encargado: {nino.nombre_encargado}</div>}
+                    <div>Estado: <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', background: nino.activo ? '#dcfce7' : '#fee2e2', color: nino.activo ? '#166534' : '#991b1b' }}>{nino.activo ? 'Activo' : 'Inactivo'}</span></div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button className="btn btn-ghost" onClick={() => abrirModal(nino)} style={{ flex: 1 }}>Editar</button>
@@ -245,23 +298,39 @@ export default function Ninos() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div><label className="label">Fecha Nac*</label><input type="date" className="input" value={fechaNacimiento} onChange={e => setFechaNacimiento(e.target.value)} required /></div>
-                <div><label className="label">Género*</label><select className="select" value={genero} onChange={e => setGenero(e.target.value)}><option value="M">Masculino</option><option value="F">Femenino</option></select></div>
+                <div><label className="label">Código</label><input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} /></div>
               </div>
-              <div>
-                <label className="label">Asignar a Colaborador*</label>
+              <div><label className="label">Colaborador*</label>
                 <select className="select" value={colaboradorId} onChange={e => setColaboradorId(e.target.value)} required>
-                  <option value="">Selecciona un colaborador</option>
-                  {colaboradores.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombres} {c.apellidos || ''}
-                    </option>
-                  ))}
+                  <option value="">Selecciona</option>
+                  {colaboradores.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos || ''}</option>)}
                 </select>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div><label className="label">Estado*</label><select className="select" value={estado} onChange={e => setEstado(e.target.value)}><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="egresado">Egresado</option></select></div>
-                <div><label className="label">Fecha Ingreso*</label><input type="date" className="input" value={fechaIngreso} onChange={e => setFechaIngreso(e.target.value)} required /></div>
+                <div><label className="label">Nivel</label>
+                  <select className="select" value={nivelId} onChange={e => setNivelId(e.target.value)}>
+                    <option value="">Ninguno</option>
+                    {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+                  </select>
+                </div>
+                <div><label className="label">Subnivel</label>
+                  <select className="select" value={subnivelId} onChange={e => setSubnivelId(e.target.value)} disabled={!nivelId}>
+                    <option value="">Ninguno</option>
+                    {filteredSubniveles.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  </select>
+                </div>
               </div>
+              <div><label className="label">Nombre Encargado</label><input className="input" value={nombreEncargado} onChange={e => setNombreEncargado(e.target.value)} /></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div><label className="label">Teléfono Encargado</label><input className="input" value={telefonoEncargado} onChange={e => setTelefonoEncargado(e.target.value)} /></div>
+                <div><label className="label">Estado</label>
+                  <select className="select" value={activo ? 'true' : 'false'} onChange={e => setActivo(e.target.value === 'true')}>
+                    <option value="true">Activo</option>
+                    <option value="false">Inactivo</option>
+                  </select>
+                </div>
+              </div>
+              <div><label className="label">Dirección Encargado</label><textarea className="textarea" value={direccionEncargado} onChange={e => setDireccionEncargado(e.target.value)} rows={2} /></div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
                 <button type="submit" className="btn" disabled={saving}>{saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar'}</button>
