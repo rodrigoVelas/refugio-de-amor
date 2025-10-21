@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { API_URL } from '../config'
 import Swal from 'sweetalert2'
 
-interface Colaborador {
+interface Maestro {
   id: string
   nombres: string
   apellidos: string
@@ -26,20 +26,20 @@ interface Nino {
   fecha_nacimiento: string
   nivel_id: string | null
   subnivel_id: string | null
-  colaborador_id: string
+  maestro_id: string
   codigo: string | null
   nombre_encargado: string | null
   telefono_encargado: string | null
   direccion_encargado: string | null
-  colaborador_nombre: string
-  colaborador_email: string
+  maestro_nombre: string
+  maestro_email: string
   nivel_nombre: string | null
   subnivel_nombre: string | null
 }
 
 export default function Ninos() {
   const [ninos, setNinos] = useState<Nino[]>([])
-  const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
+  const [maestros, setMaestros] = useState<Maestro[]>([])
   const [niveles, setNiveles] = useState<Nivel[]>([])
   const [subniveles, setSubniveles] = useState<Subnivel[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,7 +53,7 @@ export default function Ninos() {
   const [fechaNacimiento, setFechaNacimiento] = useState('')
   const [nivelId, setNivelId] = useState('')
   const [subnivelId, setSubnivelId] = useState('')
-  const [colaboradorId, setColaboradorId] = useState('')
+  const [maestroId, setMaestroId] = useState('')
   const [codigo, setCodigo] = useState('')
   const [nombreEncargado, setNombreEncargado] = useState('')
   const [telefonoEncargado, setTelefonoEncargado] = useState('')
@@ -70,17 +70,17 @@ export default function Ninos() {
       console.log('🔄 Cargando datos...')
 
       // Cargar todos los datos en paralelo
-      const [colabRes, nivRes, subRes, ninosRes] = await Promise.all([
+      const [maestrosRes, nivRes, subRes, ninosRes] = await Promise.all([
         fetch(`${API_URL}/usuarios`, { credentials: 'include' }),
         fetch(`${API_URL}/niveles`, { credentials: 'include' }),
         fetch(`${API_URL}/subniveles`, { credentials: 'include' }),
         fetch(`${API_URL}/ninos?activo=true`, { credentials: 'include' })
       ])
 
-      if (colabRes.ok) {
-        const colabData = await colabRes.json()
-        console.log('✅ Colaboradores:', colabData)
-        setColaboradores(colabData)
+      if (maestrosRes.ok) {
+        const maestrosData = await maestrosRes.json()
+        console.log('✅ Maestros:', maestrosData)
+        setMaestros(maestrosData)
       }
 
       if (nivRes.ok) {
@@ -124,7 +124,7 @@ export default function Ninos() {
       setFechaNacimiento(nino.fecha_nacimiento)
       setNivelId(nino.nivel_id || '')
       setSubnivelId(nino.subnivel_id || '')
-      setColaboradorId(nino.colaborador_id)
+      setMaestroId(nino.maestro_id)
       setCodigo(nino.codigo || '')
       setNombreEncargado(nino.nombre_encargado || '')
       setTelefonoEncargado(nino.telefono_encargado || '')
@@ -142,7 +142,7 @@ export default function Ninos() {
     setFechaNacimiento('')
     setNivelId('')
     setSubnivelId('')
-    setColaboradorId('')
+    setMaestroId('')
     setCodigo('')
     setNombreEncargado('')
     setTelefonoEncargado('')
@@ -155,7 +155,7 @@ export default function Ninos() {
     console.log('📤 Formulario enviado')
     console.log('Nivel ID:', nivelId)
     console.log('Subnivel ID:', subnivelId)
-    console.log('Colaborador ID:', colaboradorId)
+    console.log('Maestro ID:', maestroId)
 
     if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento) {
       Swal.fire({
@@ -167,11 +167,11 @@ export default function Ninos() {
       return
     }
 
-    if (!colaboradorId) {
+    if (!maestroId) {
       Swal.fire({
         icon: 'warning',
-        title: 'Falta colaborador',
-        text: 'Debes seleccionar un colaborador',
+        title: 'Falta maestro',
+        text: 'Debes seleccionar un maestro',
         confirmButtonColor: '#3b82f6'
       })
       return
@@ -186,7 +186,7 @@ export default function Ninos() {
         fecha_nacimiento: fechaNacimiento,
         nivel_id: nivelId || null,
         subnivel_id: subnivelId || null,
-        colaborador_id: colaboradorId,
+        maestro_id: maestroId,
         codigo: codigo || null,
         nombre_encargado: nombreEncargado || null,
         telefono_encargado: telefonoEncargado || null,
@@ -302,7 +302,7 @@ export default function Ninos() {
   console.log('  - Nivel seleccionado:', nivelId)
   console.log('  - Subnivel seleccionado:', subnivelId)
   console.log('  - Subniveles disponibles:', subnivelesFiltrados)
-  console.log('  - Colaborador seleccionado:', colaboradorId)
+  console.log('  - Maestro seleccionado:', maestroId)
 
   return (
     <div className="content">
@@ -336,7 +336,7 @@ export default function Ninos() {
                   <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
                     <div>📅 Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
                     {nino.codigo && <div>🔢 Código: {nino.codigo}</div>}
-                    <div>👨‍🏫 Colaborador: {nino.colaborador_nombre || nino.colaborador_email}</div>
+                    <div>👨‍🏫 Maestro: {nino.maestro_nombre || nino.maestro_email}</div>
                     {nino.nivel_nombre && <div>📚 Nivel: {nino.nivel_nombre}</div>}
                     {nino.subnivel_nombre && <div>📖 Subnivel: {nino.subnivel_nombre}</div>}
                     {nino.nombre_encargado && <div>👤 Encargado: {nino.nombre_encargado}</div>}
@@ -411,26 +411,26 @@ export default function Ninos() {
               </div>
 
               <div>
-                <label className="label">Asignar a Colaborador (Maestro)*</label>
+                <label className="label">Asignar a Maestro/a*</label>
                 <select 
                   className="select" 
-                  value={colaboradorId} 
+                  value={maestroId} 
                   onChange={e => {
-                    console.log('Colaborador cambiado a:', e.target.value)
-                    setColaboradorId(e.target.value)
+                    console.log('Maestro cambiado a:', e.target.value)
+                    setMaestroId(e.target.value)
                   }} 
                   required
                 >
-                  <option value="">-- Selecciona un colaborador --</option>
-                  {colaboradores.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombres} {c.apellidos || ''}
+                  <option value="">-- Selecciona un maestro/a --</option>
+                  {maestros.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.nombres} {m.apellidos || ''}
                     </option>
                   ))}
                 </select>
-                {colaboradores.length === 0 && (
+                {maestros.length === 0 && (
                   <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-                    No hay colaboradores disponibles
+                    No hay maestros disponibles
                   </small>
                 )}
               </div>

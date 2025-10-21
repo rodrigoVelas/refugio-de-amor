@@ -10,7 +10,7 @@ const router = Router()
 async function esDirectora(userId: string): Promise<boolean> {
   try {
     const result = await pool.query(
-      `SELECT r.id, r.nombre 
+      `SELECT u.rol_id, r.nombre as rol_nombre 
        FROM usuarios u 
        INNER JOIN roles r ON u.rol_id = r.id 
        WHERE u.id = $1`,
@@ -22,76 +22,78 @@ async function esDirectora(userId: string): Promise<boolean> {
       return false
     }
     
-    const rolId = result.rows[0].id
-    const rolNombre = result.rows[0].nombre
+    const rolId = String(result.rows[0].rol_id)
+    const rolNombre = result.rows[0].rol_nombre
     
-    console.log(`[esDirectora] Usuario ${userId} → Rol: "${rolNombre}" (ID: ${rolId})`)
+    console.log(`[esDirectora] Usuario ${userId} → Rol: ${rolNombre} (ID: ${rolId})`)
     
-    // El rol_id 1 es directora
-    const esDirectora = String(rolId) === '1'
+    const esDir = rolId === '1' || result.rows[0].rol_id === 1
     
-    console.log(`[esDirectora] ¿Es directora? ${esDirectora}`)
+    console.log(`[esDirectora] ¿Es directora? ${esDir}`)
     
-    return esDirectora
+    return esDir
   } catch (error) {
     console.error('[esDirectora] ❌ Error:', error)
     return false
   }
 }
 
-// GET /ninos - Listar niños con filtros
+// GET /ninos - Listar niños
 router.get('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { activo } = req.query
     const userId = req.user.id
 
-    console.log(`\n========== GET /ninos ==========`)
-    console.log(`[ninos/list] 👤 Usuario: ${userId}`)
+    console.log(`\n${'='.repeat(60)}`)
+    console.log(`GET /ninos`)
+    console.log(`Usuario: ${userId}`)
 
     const esDir = await esDirectora(userId)
 
+    // IGUAL QUE ASISTENCIA.TS - usar maestro_id
     let query = `
       SELECT 
-        n.*,
-        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre,
+        n.id,
+        n.codigo,
+        n.nombres,
+        n.apellidos,
+        n.fecha_nacimiento,
+        n.maestro_id,
+        n.colaborador_id,
+        n.activo,
+        u.email as maestro_email,
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
         nv.nombre as nivel_nombre,
         sn.nombre as subnivel_nombre
       FROM ninos n
-      LEFT JOIN usuarios u ON n.colaborador_id = u.id
+      LEFT JOIN usuarios u ON n.maestro_id = u.id
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
-      WHERE 1=1
+      WHERE n.activo = true
     `
     const params: any[] = []
 
-    // CRÍTICO: Si NO es directora, solo ve sus niños
+    // CRÍTICO: Usar maestro_id igual que asistencia.ts
     if (!esDir) {
       params.push(userId)
-      query += ` AND n.colaborador_id = $${params.length}`
-      console.log(`[ninos/list] 🔒 COLABORADOR → Solo niños con colaborador_id = ${userId}`)
+      query += ` AND n.maestro_id = $1`
+      console.log(`🔒 COLABORADOR → Filtrando por maestro_id = ${userId}`)
     } else {
-      console.log(`[ninos/list] 👑 DIRECTORA → Ve TODOS los niños`)
-    }
-
-    // Filtro de activo
-    if (activo !== undefined) {
-      params.push(activo === 'true')
-      query += ` AND n.activo = $${params.length}`
-      console.log(`[ninos/list] Filtro activo = ${activo}`)
+      console.log(`👑 DIRECTORA → Ve todos los niños`)
     }
 
     query += ' ORDER BY n.apellidos, n.nombres'
 
-    console.log(`[ninos/list] 📝 Query final:`, query)
-    console.log(`[ninos/list] 📝 Params:`, params)
+    console.log(`Query:`, query)
+    console.log(`Params:`, params)
 
     const result = await pool.query(query, params)
-    console.log(`[ninos/list] ✅ Retornando ${result.rows.length} niños`)
-    console.log(`================================\n`)
-    
+
+    console.log(`✅ Resultado: ${result.rows.length} niños encontrados`)
+    console.log(`${'='.repeat(60)}\n`)
+
     res.json(result.rows)
   } catch (error: any) {
-    console.error('[ninos/list] ❌ Error:', error)
+    console.error('[ninos/list] Error:', error)
     res.status(500).json({ error: 'Error al listar niños' })
   }
 })
@@ -102,226 +104,180 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
     const { id } = req.params
     const userId = req.user.id
 
-    console.log(`[ninos/get] Usuario ${userId} consultando niño ${id}`)
-
     const esDir = await esDirectora(userId)
 
     let query = `
       SELECT 
         n.*,
-        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre,
-        nv.nombre as nivel_nombre,
-        sn.nombre as subnivel_nombre
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre
       FROM ninos n
-      LEFT JOIN usuarios u ON n.colaborador_id = u.id
-      LEFT JOIN niveles nv ON n.nivel_id = nv.id
-      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      LEFT JOIN usuarios u ON n.maestro_id = u.id
       WHERE n.id = $1
     `
     const params: any[] = [id]
 
     if (!esDir) {
       params.push(userId)
-      query += ` AND n.colaborador_id = $${params.length}`
-      console.log(`[ninos/get] Verificando acceso del colaborador`)
+      query += ` AND n.maestro_id = $2`
     }
 
     const result = await pool.query(query, params)
 
     if (result.rows.length === 0) {
-      console.log(`[ninos/get] ❌ Niño no encontrado o sin acceso`)
       return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
     }
 
-    console.log(`[ninos/get] ✅ Niño encontrado`)
     res.json(result.rows[0])
   } catch (error: any) {
-    console.error('[ninos/get] ❌ Error:', error)
+    console.error('[ninos/get] Error:', error)
     res.status(500).json({ error: 'Error al obtener niño' })
   }
 })
 
-// POST /ninos - Crear nuevo niño
-router.post(
-  '/',
-  authMiddleware,
-  requirePerms(['ninos_crear']),
-  async (req: any, res: any) => {
-    try {
-      const { 
+// POST /ninos - Crear niño
+router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any, res: any) => {
+  try {
+    const { 
+      nombres, 
+      apellidos, 
+      fecha_nacimiento, 
+      nivel_id, 
+      subnivel_id, 
+      maestro_id, // USAR maestro_id
+      codigo, 
+      nombre_encargado, 
+      telefono_encargado, 
+      direccion_encargado 
+    } = req.body
+
+    console.log(`\n=== POST /ninos ===`)
+    console.log(`Maestro ID recibido: ${maestro_id}`)
+
+    if (!nombres || !apellidos || !fecha_nacimiento || !maestro_id) {
+      return res.status(400).json({ error: 'Faltan campos requeridos: nombres, apellidos, fecha_nacimiento, maestro_id' })
+    }
+
+    const result = await pool.query(
+      `INSERT INTO ninos 
+        (nombres, apellidos, fecha_nacimiento, nivel_id, subnivel_id, maestro_id, 
+         activo, codigo, nombre_encargado, telefono_encargado, direccion_encargado, creado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, NOW())
+      RETURNING *`,
+      [
         nombres, 
         apellidos, 
         fecha_nacimiento, 
-        nivel_id, 
-        subnivel_id, 
-        maestro_id,
-        colaborador_id,
-        codigo,
-        nombre_encargado,
-        telefono_encargado,
-        direccion_encargado
-      } = req.body
+        nivel_id || null, 
+        subnivel_id || null, 
+        maestro_id, // USAR maestro_id
+        codigo || null, 
+        nombre_encargado || null, 
+        telefono_encargado || null, 
+        direccion_encargado || null
+      ]
+    )
 
-      console.log(`[ninos/create] 📝 Creando niño: ${nombres} ${apellidos}`)
-      console.log(`[ninos/create] Colaborador asignado: ${colaborador_id}`)
+    console.log(`✅ Niño creado: ${result.rows[0].id}`)
+    console.log(`   maestro_id: ${result.rows[0].maestro_id}`)
+    console.log(`==================\n`)
 
-      if (!nombres || !apellidos || !fecha_nacimiento || !colaborador_id) {
-        return res.status(400).json({ error: 'Faltan campos requeridos: nombres, apellidos, fecha_nacimiento, colaborador_id' })
-      }
-
-      const result = await pool.query(
-        `
-        INSERT INTO ninos 
-          (nombres, apellidos, fecha_nacimiento, nivel_id, subnivel_id, maestro_id, colaborador_id, 
-           activo, codigo, nombre_encargado, telefono_encargado, direccion_encargado, creado_en)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-        RETURNING *
-        `,
-        [
-          nombres,
-          apellidos,
-          fecha_nacimiento,
-          nivel_id || null,
-          subnivel_id || null,
-          maestro_id || null,
-          colaborador_id,
-          true,
-          codigo || null,
-          nombre_encargado || null,
-          telefono_encargado || null,
-          direccion_encargado || null
-        ]
-      )
-
-      console.log('[ninos/create] ✅ Niño creado con ID:', result.rows[0].id)
-      res.json({ ok: true, nino: result.rows[0] })
-    } catch (error: any) {
-      console.error('[ninos/create] ❌ ERROR:', error.message)
-      res.status(500).json({ error: error.message })
-    }
+    res.json({ ok: true, nino: result.rows[0] })
+  } catch (error: any) {
+    console.error('[ninos/create] Error:', error.message)
+    res.status(500).json({ error: error.message })
   }
-)
+})
 
 // PUT /ninos/:id - Actualizar niño
-router.put(
-  '/:id',
-  authMiddleware,
-  requirePerms(['ninos_editar']),
-  async (req: any, res: any) => {
-    try {
-      const { id } = req.params
-      const userId = req.user.id
-      const { 
-        nombres, 
-        apellidos, 
-        fecha_nacimiento, 
-        nivel_id, 
-        subnivel_id, 
-        maestro_id,
-        colaborador_id,
-        activo,
-        codigo,
-        nombre_encargado,
-        telefono_encargado,
-        direccion_encargado,
-        fecha_baja
-      } = req.body
+router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+    const { 
+      nombres, 
+      apellidos, 
+      fecha_nacimiento, 
+      nivel_id, 
+      subnivel_id, 
+      maestro_id,
+      codigo, 
+      nombre_encargado, 
+      telefono_encargado, 
+      direccion_encargado 
+    } = req.body
 
-      console.log(`[ninos/update] Usuario ${userId} actualizando niño ${id}`)
+    if (!nombres || !apellidos || !fecha_nacimiento || !maestro_id) {
+      return res.status(400).json({ error: 'Faltan campos requeridos' })
+    }
 
-      if (!nombres || !apellidos || !fecha_nacimiento || !colaborador_id) {
-        return res.status(400).json({ error: 'Faltan campos requeridos' })
-      }
+    const esDir = await esDirectora(userId)
 
-      const esDir = await esDirectora(userId)
-
-      // Si NO es directora, verificar que el niño le pertenezca
-      if (!esDir) {
-        const ninoCheck = await pool.query(
-          'SELECT * FROM ninos WHERE id = $1 AND colaborador_id = $2',
-          [id, userId]
-        )
-
-        if (ninoCheck.rows.length === 0) {
-          console.log(`[ninos/update] ❌ Colaborador sin acceso a este niño`)
-          return res.status(403).json({ error: 'No tienes acceso a este niño' })
-        }
-      }
-
-      const result = await pool.query(
-        `
-        UPDATE ninos
-        SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, nivel_id = $4, 
-            subnivel_id = $5, maestro_id = $6, colaborador_id = $7, activo = $8,
-            codigo = $9, nombre_encargado = $10, telefono_encargado = $11, 
-            direccion_encargado = $12, fecha_baja = $13, modificado_en = NOW(),
-            modificado_por = $14
-        WHERE id = $15
-        RETURNING *
-        `,
-        [
-          nombres, apellidos, fecha_nacimiento, nivel_id || null, subnivel_id || null,
-          maestro_id || null, colaborador_id, activo !== undefined ? activo : true,
-          codigo || null, nombre_encargado || null, telefono_encargado || null,
-          direccion_encargado || null, fecha_baja || null, userId, id
-        ]
+    if (!esDir) {
+      const check = await pool.query(
+        'SELECT id FROM ninos WHERE id = $1 AND maestro_id = $2',
+        [id, userId]
       )
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Niño no encontrado' })
+      if (check.rows.length === 0) {
+        return res.status(403).json({ error: 'No tienes acceso a este niño' })
       }
-
-      console.log('[ninos/update] ✅ Niño actualizado')
-      res.json({ ok: true, nino: result.rows[0] })
-    } catch (error: any) {
-      console.error('[ninos/update] ❌ Error:', error)
-      res.status(500).json({ error: 'Error al actualizar niño' })
     }
+
+    const result = await pool.query(
+      `UPDATE ninos
+      SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, nivel_id = $4, 
+          subnivel_id = $5, maestro_id = $6, codigo = $7, nombre_encargado = $8, 
+          telefono_encargado = $9, direccion_encargado = $10, modificado_en = NOW(), modificado_por = $11
+      WHERE id = $12
+      RETURNING *`,
+      [
+        nombres, apellidos, fecha_nacimiento, nivel_id || null, subnivel_id || null, 
+        maestro_id, codigo || null, nombre_encargado || null, telefono_encargado || null, 
+        direccion_encargado || null, userId, id
+      ]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Niño no encontrado' })
+    }
+
+    res.json({ ok: true, nino: result.rows[0] })
+  } catch (error: any) {
+    console.error('[ninos/update] Error:', error)
+    res.status(500).json({ error: 'Error al actualizar niño' })
   }
-)
+})
 
 // DELETE /ninos/:id - Eliminar niño
-router.delete(
-  '/:id',
-  authMiddleware,
-  requirePerms(['ninos_eliminar']),
-  async (req: any, res: any) => {
-    try {
-      const { id } = req.params
-      const userId = req.user.id
+router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
 
-      console.log(`[ninos/delete] 🗑️ Usuario ${userId} eliminando niño ${id}`)
+    const esDir = await esDirectora(userId)
 
-      const esDir = await esDirectora(userId)
+    let checkQuery = 'SELECT id FROM ninos WHERE id = $1'
+    const checkParams: any[] = [id]
 
-      let checkQuery = 'SELECT id, colaborador_id FROM ninos WHERE id = $1'
-      const checkParams: any[] = [id]
-
-      if (!esDir) {
-        checkParams.push(userId)
-        checkQuery += ' AND colaborador_id = $2'
-      }
-
-      const check = await pool.query(checkQuery, checkParams)
-
-      if (check.rows.length === 0) {
-        console.log(`[ninos/delete] ❌ Niño no encontrado o sin acceso`)
-        return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
-      }
-
-      console.log(`[ninos/delete] Eliminando asistencias...`)
-      await pool.query('DELETE FROM asistencia WHERE nino_id = $1', [id])
-      
-      console.log(`[ninos/delete] Eliminando niño...`)
-      await pool.query('DELETE FROM ninos WHERE id = $1', [id])
-      
-      console.log('[ninos/delete] ✅ Niño eliminado exitosamente')
-      res.json({ ok: true })
-    } catch (error: any) {
-      console.error('[ninos/delete] ❌ ERROR:', error.message)
-      res.status(500).json({ error: error.message })
+    if (!esDir) {
+      checkParams.push(userId)
+      checkQuery += ' AND maestro_id = $2'
     }
+
+    const check = await pool.query(checkQuery, checkParams)
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
+    }
+
+    await pool.query('DELETE FROM asistencia WHERE nino_id = $1', [id])
+    await pool.query('DELETE FROM ninos WHERE id = $1', [id])
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('[ninos/delete] Error:', error.message)
+    res.status(500).json({ error: error.message })
   }
-)
+})
 
 export default router
