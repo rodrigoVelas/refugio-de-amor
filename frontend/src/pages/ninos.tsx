@@ -47,6 +47,9 @@ export default function Ninos() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Búsqueda
+  const [busqueda, setBusqueda] = useState('')
+
   // Form state
   const [nombres, setNombres] = useState('')
   const [apellidos, setApellidos] = useState('')
@@ -61,55 +64,35 @@ export default function Ninos() {
 
   useEffect(() => {
     cargarDatos()
-  }, [])
+  }, [busqueda]) // Recargar cuando cambie la búsqueda
 
   async function cargarDatos() {
     try {
       setLoading(true)
 
-      console.log('🔄 Cargando datos...')
-
-      // Cargar todos los datos en paralelo
-      const [maestrosRes, nivRes, subRes, ninosRes] = await Promise.all([
+      // Cargar maestros, niveles y subniveles
+      const [maestrosRes, nivRes, subRes] = await Promise.all([
         fetch(`${API_URL}/usuarios`, { credentials: 'include' }),
         fetch(`${API_URL}/niveles`, { credentials: 'include' }),
-        fetch(`${API_URL}/subniveles`, { credentials: 'include' }),
-        fetch(`${API_URL}/ninos?activo=true`, { credentials: 'include' })
+        fetch(`${API_URL}/subniveles`, { credentials: 'include' })
       ])
 
-      if (maestrosRes.ok) {
-        const maestrosData = await maestrosRes.json()
-        console.log('✅ Maestros:', maestrosData)
-        setMaestros(maestrosData)
-      }
+      if (maestrosRes.ok) setMaestros(await maestrosRes.json())
+      if (nivRes.ok) setNiveles(await nivRes.json())
+      if (subRes.ok) setSubniveles(await subRes.json())
 
-      if (nivRes.ok) {
-        const nivData = await nivRes.json()
-        console.log('✅ Niveles:', nivData)
-        setNiveles(nivData)
-      }
+      // Cargar niños con búsqueda
+      const params = new URLSearchParams()
+      if (busqueda.trim()) params.append('buscar', busqueda.trim())
 
-      if (subRes.ok) {
-        const subData = await subRes.json()
-        console.log('✅ Subniveles:', subData)
-        setSubniveles(subData)
-      }
-
+      const ninosUrl = `${API_URL}/ninos?${params.toString()}`
+      const ninosRes = await fetch(ninosUrl, { credentials: 'include' })
+      
       if (ninosRes.ok) {
-        const ninosData = await ninosRes.json()
-        console.log('✅ Niños:', ninosData)
-        setNinos(ninosData)
-      } else {
-        console.error('❌ Error cargando niños:', ninosRes.status)
+        setNinos(await ninosRes.json())
       }
     } catch (error) {
-      console.error('❌ Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al cargar los datos',
-        confirmButtonColor: '#3b82f6'
-      })
+      console.error('Error:', error)
     } finally {
       setLoading(false)
     }
@@ -117,7 +100,6 @@ export default function Ninos() {
 
   function abrirModal(nino?: Nino) {
     if (nino) {
-      console.log('📝 Editando niño:', nino)
       setEditingId(nino.id)
       setNombres(nino.nombres)
       setApellidos(nino.apellidos)
@@ -152,26 +134,11 @@ export default function Ninos() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    console.log('📤 Formulario enviado')
-    console.log('Nivel ID:', nivelId)
-    console.log('Subnivel ID:', subnivelId)
-    console.log('Maestro ID:', maestroId)
-
-    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento) {
+    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !maestroId) {
       Swal.fire({
         icon: 'warning',
         title: 'Campos incompletos',
-        text: 'Por favor completa nombres, apellidos y fecha de nacimiento',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
-    if (!maestroId) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Falta maestro',
-        text: 'Debes seleccionar un maestro',
+        text: 'Completa nombres, apellidos, fecha de nacimiento y maestro',
         confirmButtonColor: '#3b82f6'
       })
       return
@@ -193,8 +160,6 @@ export default function Ninos() {
         direccion_encargado: direccionEncargado || null
       }
 
-      console.log('📤 Enviando datos:', data)
-
       const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
       const res = await fetch(url, {
         method: editingId ? 'PUT' : 'POST',
@@ -203,14 +168,10 @@ export default function Ninos() {
         body: JSON.stringify(data),
       })
 
-      const responseData = await res.json()
-      console.log('📥 Respuesta del servidor:', responseData)
-
       if (res.ok) {
         await Swal.fire({
           icon: 'success',
           title: editingId ? '¡Actualizado!' : '¡Registrado!',
-          text: `El niño ha sido ${editingId ? 'actualizado' : 'registrado'} correctamente`,
           timer: 2000,
           showConfirmButton: false
         })
@@ -218,19 +179,19 @@ export default function Ninos() {
         resetForm()
         cargarDatos()
       } else {
+        const err = await res.json()
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: responseData.error || 'Error al guardar',
+          text: err.error,
           confirmButtonColor: '#3b82f6'
         })
       }
     } catch (error) {
-      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al guardar el niño',
+        text: 'Error al guardar',
         confirmButtonColor: '#3b82f6'
       })
     } finally {
@@ -241,8 +202,8 @@ export default function Ninos() {
   async function handleEliminar(id: string, nombre: string) {
     const result = await Swal.fire({
       icon: 'warning',
-      title: '¿Estás seguro?',
-      text: `¿Deseas eliminar a ${nombre}?`,
+      title: '¿Eliminar?',
+      text: `¿Eliminar a ${nombre}?`,
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
       cancelButtonColor: '#6b7280',
@@ -262,7 +223,6 @@ export default function Ninos() {
         await Swal.fire({
           icon: 'success',
           title: '¡Eliminado!',
-          text: 'El niño ha sido eliminado correctamente',
           timer: 2000,
           showConfirmButton: false
         })
@@ -272,7 +232,7 @@ export default function Ninos() {
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: err.error || 'Error al eliminar',
+          text: err.error,
           confirmButtonColor: '#3b82f6'
         })
       }
@@ -280,7 +240,7 @@ export default function Ninos() {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al eliminar el niño',
+        text: 'Error al eliminar',
         confirmButtonColor: '#3b82f6'
       })
     }
@@ -295,23 +255,38 @@ export default function Ninos() {
     return edad
   }
 
-  // Filtrar subniveles según el nivel seleccionado
   const subnivelesFiltrados = subniveles.filter(s => s.nivel_id === nivelId)
-
-  console.log('🔍 Estado actual:')
-  console.log('  - Nivel seleccionado:', nivelId)
-  console.log('  - Subnivel seleccionado:', subnivelId)
-  console.log('  - Subniveles disponibles:', subnivelesFiltrados)
-  console.log('  - Maestro seleccionado:', maestroId)
 
   return (
     <div className="content">
       <div className="card">
         <div className="card-header">
-          <h1 className="card-title">Mis Niños Asignados</h1>
+          <h1 className="card-title">Niños Asignados</h1>
           <button className="btn" onClick={() => abrirModal()}>
             Registrar Niño
           </button>
+        </div>
+
+        {/* Buscador */}
+        <div className="toolbar">
+          <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>
+              🔍
+            </span>
+            <input
+              type="text"
+              className="input"
+              placeholder="Buscar por código, nombre o apellido..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ paddingLeft: '40px' }}
+            />
+          </div>
+          {busqueda && (
+            <button className="btn btn-ghost" onClick={() => setBusqueda('')}>
+              Limpiar
+            </button>
+          )}
         </div>
 
         <div className="card-content">
@@ -320,23 +295,22 @@ export default function Ninos() {
           ) : ninos.length === 0 ? (
             <div className="alert" style={{ textAlign: 'center', padding: '2rem' }}>
               <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
-                No tienes niños asignados
-              </p>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                Haz clic en "Registrar Niño" para comenzar
+                {busqueda ? `No se encontraron resultados para "${busqueda}"` : 'No tienes niños asignados'}
               </p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
               {ninos.map(nino => (
-                <div key={nino.id} style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                  <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem' }}>
+                <div key={nino.id} style={{ padding: '1.25rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                  <h3 style={{ marginBottom: '0.75rem', fontSize: '1.125rem', fontWeight: '500' }}>
                     {nino.nombres} {nino.apellidos}
                   </h3>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.6' }}>
                     <div>📅 Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
                     {nino.codigo && <div>🔢 Código: {nino.codigo}</div>}
-                    <div>👨‍🏫 Maestro: {nino.maestro_nombre || nino.maestro_email}</div>
+                    <div style={{ fontWeight: '500', color: 'var(--text-primary)', marginTop: '0.5rem' }}>
+                      👨‍🏫 Maestro/a: {nino.maestro_nombre || nino.maestro_email || 'Sin asignar'}
+                    </div>
                     {nino.nivel_nombre && <div>📚 Nivel: {nino.nivel_nombre}</div>}
                     {nino.subnivel_nombre && <div>📖 Subnivel: {nino.subnivel_nombre}</div>}
                     {nino.nombre_encargado && <div>👤 Encargado: {nino.nombre_encargado}</div>}
@@ -368,59 +342,28 @@ export default function Ninos() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label className="label">Nombres*</label>
-                  <input 
-                    className="input" 
-                    value={nombres} 
-                    onChange={e => setNombres(e.target.value)} 
-                    placeholder="Nombres del niño"
-                    required 
-                  />
+                  <input className="input" value={nombres} onChange={e => setNombres(e.target.value)} required />
                 </div>
                 <div>
                   <label className="label">Apellidos*</label>
-                  <input 
-                    className="input" 
-                    value={apellidos} 
-                    onChange={e => setApellidos(e.target.value)} 
-                    placeholder="Apellidos del niño"
-                    required 
-                  />
+                  <input className="input" value={apellidos} onChange={e => setApellidos(e.target.value)} required />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label className="label">Fecha de Nacimiento*</label>
-                  <input 
-                    type="date" 
-                    className="input" 
-                    value={fechaNacimiento} 
-                    onChange={e => setFechaNacimiento(e.target.value)} 
-                    required 
-                  />
+                  <input type="date" className="input" value={fechaNacimiento} onChange={e => setFechaNacimiento(e.target.value)} required />
                 </div>
                 <div>
                   <label className="label">Código</label>
-                  <input 
-                    className="input" 
-                    value={codigo} 
-                    onChange={e => setCodigo(e.target.value)} 
-                    placeholder="Código opcional"
-                  />
+                  <input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Opcional" />
                 </div>
               </div>
 
               <div>
                 <label className="label">Asignar a Maestro/a*</label>
-                <select 
-                  className="select" 
-                  value={maestroId} 
-                  onChange={e => {
-                    console.log('Maestro cambiado a:', e.target.value)
-                    setMaestroId(e.target.value)
-                  }} 
-                  required
-                >
+                <select className="select" value={maestroId} onChange={e => setMaestroId(e.target.value)} required>
                   <option value="">-- Selecciona un maestro/a --</option>
                   {maestros.map(m => (
                     <option key={m.id} value={m.id}>
@@ -428,109 +371,45 @@ export default function Ninos() {
                     </option>
                   ))}
                 </select>
-                {maestros.length === 0 && (
-                  <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-                    No hay maestros disponibles
-                  </small>
-                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
-                  <label className="label">Nivel (Opcional)</label>
-                  <select 
-                    className="select" 
-                    value={nivelId} 
-                    onChange={e => {
-                      console.log('Nivel cambiado a:', e.target.value)
-                      setNivelId(e.target.value)
-                      setSubnivelId('') // Reset subnivel cuando cambia nivel
-                    }}
-                  >
-                    <option value="">-- Sin nivel --</option>
-                    {niveles.map(n => (
-                      <option key={n.id} value={n.id}>
-                        {n.nombre}
-                      </option>
-                    ))}
+                  <label className="label">Nivel</label>
+                  <select className="select" value={nivelId} onChange={e => { setNivelId(e.target.value); setSubnivelId('') }}>
+                    <option value="">Sin nivel</option>
+                    {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="label">Subnivel (Opcional)</label>
-                  <select 
-                    className="select" 
-                    value={subnivelId} 
-                    onChange={e => {
-                      console.log('Subnivel cambiado a:', e.target.value)
-                      setSubnivelId(e.target.value)
-                    }} 
-                    disabled={!nivelId || subnivelesFiltrados.length === 0}
-                  >
-                    <option value="">-- Sin subnivel --</option>
-                    {subnivelesFiltrados.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.nombre}
-                      </option>
-                    ))}
+                  <label className="label">Subnivel</label>
+                  <select className="select" value={subnivelId} onChange={e => setSubnivelId(e.target.value)} disabled={!nivelId}>
+                    <option value="">Sin subnivel</option>
+                    {subnivelesFiltrados.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                   </select>
-                  {nivelId && subnivelesFiltrados.length === 0 && (
-                    <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-                      No hay subniveles para este nivel
-                    </small>
-                  )}
-                  {!nivelId && (
-                    <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-                      Primero selecciona un nivel
-                    </small>
-                  )}
                 </div>
               </div>
 
               <div>
                 <label className="label">Nombre del Encargado</label>
-                <input 
-                  className="input" 
-                  value={nombreEncargado} 
-                  onChange={e => setNombreEncargado(e.target.value)} 
-                  placeholder="Nombre completo del encargado"
-                />
+                <input className="input" value={nombreEncargado} onChange={e => setNombreEncargado(e.target.value)} />
               </div>
 
               <div>
                 <label className="label">Teléfono del Encargado</label>
-                <input 
-                  className="input" 
-                  value={telefonoEncargado} 
-                  onChange={e => setTelefonoEncargado(e.target.value)} 
-                  placeholder="Número de teléfono"
-                />
+                <input className="input" value={telefonoEncargado} onChange={e => setTelefonoEncargado(e.target.value)} />
               </div>
 
               <div>
                 <label className="label">Dirección del Encargado</label>
-                <textarea 
-                  className="textarea" 
-                  value={direccionEncargado} 
-                  onChange={e => setDireccionEncargado(e.target.value)} 
-                  rows={2} 
-                  placeholder="Dirección completa"
-                />
+                <textarea className="textarea" value={direccionEncargado} onChange={e => setDireccionEncargado(e.target.value)} rows={2} />
               </div>
 
               <div className="modal-actions">
-                <button 
-                  type="button" 
-                  className="btn btn-ghost" 
-                  onClick={() => setShowModal(false)} 
-                  disabled={saving}
-                >
+                <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={saving}>
                   Cancelar
                 </button>
-                <button 
-                  type="submit" 
-                  className="btn" 
-                  disabled={saving}
-                >
+                <button type="submit" className="btn" disabled={saving}>
                   {saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar'}
                 </button>
               </div>
