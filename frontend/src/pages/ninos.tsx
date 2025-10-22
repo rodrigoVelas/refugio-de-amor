@@ -64,13 +64,12 @@ export default function Ninos() {
 
   useEffect(() => {
     cargarDatos()
-  }, [busqueda]) // Recargar cuando cambie la búsqueda
+  }, [busqueda])
 
   async function cargarDatos() {
     try {
       setLoading(true)
 
-      // Cargar maestros, niveles y subniveles
       const [maestrosRes, nivRes, subRes] = await Promise.all([
         fetch(`${API_URL}/usuarios`, { credentials: 'include' }),
         fetch(`${API_URL}/niveles`, { credentials: 'include' }),
@@ -81,7 +80,6 @@ export default function Ninos() {
       if (nivRes.ok) setNiveles(await nivRes.json())
       if (subRes.ok) setSubniveles(await subRes.json())
 
-      // Cargar niños con búsqueda
       const params = new URLSearchParams()
       if (busqueda.trim()) params.append('buscar', busqueda.trim())
 
@@ -255,7 +253,40 @@ export default function Ninos() {
     return edad
   }
 
+  function formatearFecha(fecha: string): string {
+    const [año, mes, dia] = fecha.split('-')
+    return `${dia}/${mes}/${año}`
+  }
+
+  function esCumpleañeroDelMes(fechaNac: string): boolean {
+    const hoy = new Date()
+    const nac = new Date(fechaNac)
+    return nac.getMonth() === hoy.getMonth()
+  }
+
+  function diasParaCumple(fechaNac: string): number {
+    const hoy = new Date()
+    const nac = new Date(fechaNac)
+    const cumpleEsteAño = new Date(hoy.getFullYear(), nac.getMonth(), nac.getDate())
+    
+    if (cumpleEsteAño < hoy) {
+      cumpleEsteAño.setFullYear(hoy.getFullYear() + 1)
+    }
+    
+    const diff = cumpleEsteAño.getTime() - hoy.getTime()
+    return Math.ceil(diff / (1000 * 60 * 60 * 24))
+  }
+
   const subnivelesFiltrados = subniveles.filter(s => s.nivel_id === nivelId)
+  
+  // Filtrar cumpleañeros del mes
+  const cumpleañerosDelMes = ninos
+    .filter(nino => esCumpleañeroDelMes(nino.fecha_nacimiento))
+    .sort((a, b) => {
+      const diaA = new Date(a.fecha_nacimiento).getDate()
+      const diaB = new Date(b.fecha_nacimiento).getDate()
+      return diaA - diaB
+    })
 
   return (
     <div className="content">
@@ -306,7 +337,13 @@ export default function Ninos() {
                     {nino.nombres} {nino.apellidos}
                   </h3>
                   <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.6' }}>
+                    <div>🎂 Fecha Nac: {formatearFecha(nino.fecha_nacimiento)}</div>
                     <div>📅 Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
+                    {esCumpleañeroDelMes(nino.fecha_nacimiento) && (
+                      <div style={{ color: '#f59e0b', fontWeight: '500', marginTop: '0.25rem' }}>
+                        🎉 ¡Cumpleaños este mes! (Falta{diasParaCumple(nino.fecha_nacimiento) === 0 ? 'n 0 días - HOY' : `n ${diasParaCumple(nino.fecha_nacimiento)} día${diasParaCumple(nino.fecha_nacimiento) !== 1 ? 's' : ''}`})
+                      </div>
+                    )}
                     {nino.codigo && <div>🔢 Código: {nino.codigo}</div>}
                     <div style={{ fontWeight: '500', color: 'var(--text-primary)', marginTop: '0.5rem' }}>
                       👨‍🏫 Maestro/a: {nino.maestro_nombre || nino.maestro_email || 'Sin asignar'}
@@ -330,6 +367,56 @@ export default function Ninos() {
           )}
         </div>
       </div>
+
+      {/* Sección de Cumpleañeros del Mes */}
+      {!loading && cumpleañerosDelMes.length > 0 && (
+        <div className="card" style={{ marginTop: '1.5rem' }}>
+          <div className="card-header" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+            <h2 className="card-title" style={{ color: 'white' }}>
+              🎉 Cumpleañeros de {new Date().toLocaleString('es', { month: 'long' }).charAt(0).toUpperCase() + new Date().toLocaleString('es', { month: 'long' }).slice(1)}
+            </h2>
+            <span style={{ background: 'rgba(255,255,255,0.2)', padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.875rem' }}>
+              {cumpleañerosDelMes.length} niño{cumpleañerosDelMes.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="card-content">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+              {cumpleañerosDelMes.map(nino => {
+                const dias = diasParaCumple(nino.fecha_nacimiento)
+                const esHoy = dias === 0
+                return (
+                  <div 
+                    key={nino.id} 
+                    style={{ 
+                      padding: '1rem', 
+                      background: esHoy ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : 'var(--surface-elevated)', 
+                      borderRadius: 'var(--radius)', 
+                      border: esHoy ? '2px solid #f59e0b' : '1px solid var(--border)',
+                      position: 'relative'
+                    }}
+                  >
+                    {esHoy && (
+                      <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', fontSize: '1.5rem' }}>
+                        🎂
+                      </div>
+                    )}
+                    <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem', fontWeight: '500', color: esHoy ? '#78350f' : 'inherit' }}>
+                      {nino.nombres} {nino.apellidos}
+                    </h4>
+                    <div style={{ fontSize: '0.875rem', color: esHoy ? '#92400e' : 'var(--text-secondary)' }}>
+                      <div>🎂 {formatearFecha(nino.fecha_nacimiento)}</div>
+                      <div>📅 Cumple {calcularEdad(nino.fecha_nacimiento) + 1} años</div>
+                      <div style={{ fontWeight: '500', marginTop: '0.25rem', color: esHoy ? '#78350f' : '#f59e0b' }}>
+                        {esHoy ? '🎉 ¡ES HOY!' : `Faltan ${dias} día${dias !== 1 ? 's' : ''}`}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
