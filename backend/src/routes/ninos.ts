@@ -16,9 +16,9 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     console.log('='.repeat(70))
     console.log('1. Usuario ID:', userId)
 
-    // Obtener info del usuario
+    // Obtener info del usuario (usando 'rol' no 'rol_id')
     const userResult = await pool.query(
-      'SELECT id, email, nombres, rol_id FROM usuarios WHERE id = $1',
+      'SELECT id, email, nombres, rol FROM usuarios WHERE id = $1',
       [userId]
     )
 
@@ -31,21 +31,12 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     console.log('2. Usuario encontrado:')
     console.log('   - Email:', usuario.email)
     console.log('   - Nombres:', usuario.nombres)
-    console.log('   - rol_id:', usuario.rol_id, '(tipo:', typeof usuario.rol_id, ')')
+    console.log('   - rol:', usuario.rol, '(tipo:', typeof usuario.rol, ')')
 
-    // Obtener el nombre del rol
-    const rolResult = await pool.query(
-      'SELECT id, nombre FROM roles WHERE id = $1',
-      [usuario.rol_id]
-    )
-
-    const rolNombre = rolResult.rows[0]?.nombre || 'desconocido'
-    console.log('3. Rol del usuario:', rolNombre)
-
-    // Determinar si es directora (rol_id = 1)
-    const esDirectora = String(usuario.rol_id) === '1'
-    console.log('4. ¿Es directora?:', esDirectora)
-    console.log('   - Comparación: rol_id', usuario.rol_id, '=== "1"?', String(usuario.rol_id) === '1')
+    // Determinar si es directora (rol = '1' o rol = 1)
+    const esDirectora = String(usuario.rol) === '1' || usuario.rol === 1
+    console.log('3. ¿Es directora?:', esDirectora)
+    console.log('   - Comparación: rol', usuario.rol, '=== "1" o === 1?')
 
     // Construir query
     let query = `
@@ -56,11 +47,17 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
         n.apellidos,
         n.fecha_nacimiento,
         n.maestro_id,
+        n.nivel_id,
+        n.subnivel_id,
         n.activo,
         u.email as maestro_email,
-        u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
+        nv.nombre as nivel_nombre,
+        sn.nombre as subnivel_nombre
       FROM ninos n
       LEFT JOIN usuarios u ON n.maestro_id = u.id
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
       WHERE n.activo = true
     `
     const params: any[] = []
@@ -68,34 +65,33 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     if (!esDirectora) {
       params.push(userId)
       query += ` AND n.maestro_id = $1`
-      console.log('5. 🔒 FILTRO APLICADO: maestro_id = $1')
+      console.log('4. 🔒 FILTRO APLICADO: maestro_id = $1')
       console.log('   - userId que se usará:', userId)
     } else {
-      console.log('5. 👑 SIN FILTRO: Es directora, verá todos los niños')
+      console.log('4. 👑 SIN FILTRO: Es directora, verá todos los niños')
     }
 
     query += ' ORDER BY n.apellidos, n.nombres'
 
-    console.log('\n6. Query SQL completa:')
+    console.log('\n5. Query SQL completa:')
     console.log(query)
-    console.log('\n7. Parámetros:')
-    console.log(params)
+    console.log('\n6. Parámetros:', params)
 
     // Ejecutar query
     const result = await pool.query(query, params)
 
-    console.log('\n8. ✅ Resultado de la query:')
+    console.log('\n7. ✅ Resultado:')
     console.log('   - Niños encontrados:', result.rows.length)
     
     if (result.rows.length > 0) {
-      console.log('\n9. Primeros 3 niños:')
+      console.log('\n8. Primeros 3 niños:')
       result.rows.slice(0, 3).forEach((nino, i) => {
         console.log(`   ${i + 1}. ${nino.nombres} ${nino.apellidos}`)
         console.log(`      - maestro_id: ${nino.maestro_id}`)
         console.log(`      - maestro_email: ${nino.maestro_email}`)
       })
     } else {
-      console.log('   ⚠️ No se encontraron niños')
+      console.log('   ⚠️ No se encontraron niños con este filtro')
     }
 
     console.log('='.repeat(70) + '\n')
@@ -115,18 +111,22 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
     const userId = req.user.id
 
     const userResult = await pool.query(
-      'SELECT rol_id FROM usuarios WHERE id = $1',
+      'SELECT rol FROM usuarios WHERE id = $1',
       [userId]
     )
 
-    const esDirectora = String(userResult.rows[0]?.rol_id) === '1'
+    const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
 
     let query = `
       SELECT 
         n.*,
-        u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
+        nv.nombre as nivel_nombre,
+        sn.nombre as subnivel_nombre
       FROM ninos n
       LEFT JOIN usuarios u ON n.maestro_id = u.id
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
       WHERE n.id = $1
     `
     const params: any[] = [id]
@@ -170,12 +170,28 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
     console.log('  - nombres:', nombres)
     console.log('  - apellidos:', apellidos)
     console.log('  - maestro_id:', maestro_id)
+    console.log('  - nivel_id:', nivel_id)
+    console.log('  - subnivel_id:', subnivel_id)
 
     if (!nombres || !apellidos || !fecha_nacimiento || !maestro_id) {
+      console.log('❌ Faltan campos requeridos')
       return res.status(400).json({ 
         error: 'Faltan campos requeridos: nombres, apellidos, fecha_nacimiento, maestro_id' 
       })
     }
+
+    // Verificar que el maestro existe
+    const maestroCheck = await pool.query(
+      'SELECT id, email FROM usuarios WHERE id = $1',
+      [maestro_id]
+    )
+
+    if (maestroCheck.rows.length === 0) {
+      console.log('❌ Maestro no existe:', maestro_id)
+      return res.status(400).json({ error: 'El maestro seleccionado no existe' })
+    }
+
+    console.log('✅ Maestro verificado:', maestroCheck.rows[0].email)
 
     const result = await pool.query(
       `INSERT INTO ninos 
@@ -197,13 +213,14 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
       ]
     )
 
-    console.log('✅ Niño creado:', result.rows[0].id)
-    console.log('   maestro_id guardado:', result.rows[0].maestro_id)
+    console.log('✅ Niño creado exitosamente:')
+    console.log('   - ID:', result.rows[0].id)
+    console.log('   - maestro_id guardado:', result.rows[0].maestro_id)
     console.log('===================\n')
 
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
-    console.error('Error:', error.message)
+    console.error('❌ Error al crear niño:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
@@ -231,11 +248,11 @@ router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: a
     }
 
     const userResult = await pool.query(
-      'SELECT rol_id FROM usuarios WHERE id = $1',
+      'SELECT rol FROM usuarios WHERE id = $1',
       [userId]
     )
 
-    const esDirectora = String(userResult.rows[0]?.rol_id) === '1'
+    const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
 
     if (!esDirectora) {
       const check = await pool.query(
@@ -280,11 +297,11 @@ router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (r
     const userId = req.user.id
 
     const userResult = await pool.query(
-      'SELECT rol_id FROM usuarios WHERE id = $1',
+      'SELECT rol FROM usuarios WHERE id = $1',
       [userId]
     )
 
-    const esDirectora = String(userResult.rows[0]?.rol_id) === '1'
+    const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
 
     let checkQuery = 'SELECT id FROM ninos WHERE id = $1'
     const checkParams: any[] = [id]
@@ -300,12 +317,14 @@ router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (r
       return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
     }
 
+    // Primero eliminar asistencias
     await pool.query('DELETE FROM asistencia WHERE nino_id = $1', [id])
+    // Luego eliminar niño
     await pool.query('DELETE FROM ninos WHERE id = $1', [id])
 
     res.json({ ok: true })
   } catch (error: any) {
-    console.error('Error:', error.message)
+    console.error('Error al eliminar:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
