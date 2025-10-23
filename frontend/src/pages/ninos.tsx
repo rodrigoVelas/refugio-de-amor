@@ -89,7 +89,6 @@ export default function Ninos() {
       setEditingId(nino.id)
       setNombres(nino.nombres)
       setApellidos(nino.apellidos)
-      // Extraer solo la fecha (YYYY-MM-DD) sin la parte del tiempo
       const fechaSolo = nino.fecha_nacimiento.split('T')[0]
       setFechaNacimiento(fechaSolo)
       setNivelId(nino.nivel_id || '')
@@ -117,6 +116,32 @@ export default function Ninos() {
     setDireccionEncargado('')
   }
 
+  function verInfo(nino: Nino) {
+    const edad = calcularEdad(nino.fecha_nacimiento)
+    const infoHTML = `
+      <div style="text-align: left; padding: 1rem;">
+        <p style="margin: 0.5rem 0;"><strong>👤 Nombre:</strong> ${nino.nombres} ${nino.apellidos}</p>
+        <p style="margin: 0.5rem 0;"><strong>🎂 Fecha de Nacimiento:</strong> ${formatearFecha(nino.fecha_nacimiento)}</p>
+        <p style="margin: 0.5rem 0;"><strong>📅 Edad:</strong> ${edad} años</p>
+        ${nino.codigo ? `<p style="margin: 0.5rem 0;"><strong>🔢 Código:</strong> ${nino.codigo}</p>` : ''}
+        <p style="margin: 0.5rem 0;"><strong>👨‍🏫 Maestro/a:</strong> ${nino.maestro_nombre || nino.maestro_email || 'Sin asignar'}</p>
+        ${nino.nivel_nombre ? `<p style="margin: 0.5rem 0;"><strong>📚 Nivel:</strong> ${nino.nivel_nombre}</p>` : ''}
+        ${nino.nombre_encargado ? `<p style="margin: 0.5rem 0;"><strong>👤 Encargado:</strong> ${nino.nombre_encargado}</p>` : ''}
+        ${nino.telefono_encargado ? `<p style="margin: 0.5rem 0;"><strong>📱 Teléfono:</strong> ${nino.telefono_encargado}</p>` : ''}
+        ${nino.direccion_encargado ? `<p style="margin: 0.5rem 0;"><strong>🏠 Dirección:</strong> ${nino.direccion_encargado}</p>` : ''}
+      </div>
+    `
+    
+    Swal.fire({
+      title: 'Información del Niño',
+      html: infoHTML,
+      icon: 'info',
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#3b82f6',
+      width: '500px'
+    })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
@@ -138,7 +163,7 @@ export default function Ninos() {
         apellidos,
         fecha_nacimiento: fechaNacimiento,
         nivel_id: nivelId || null,
-        subnivel_id: null, // Siempre null por ahora
+        subnivel_id: null,
         maestro_id: maestroId,
         codigo: codigo || null,
         nombre_encargado: nombreEncargado || null,
@@ -234,7 +259,6 @@ export default function Ninos() {
 
   function calcularEdad(fechaNac: string): number {
     const hoy = new Date()
-    // Extraer solo la parte de la fecha (sin tiempo)
     const fechaSolo = fechaNac.split('T')[0]
     const [año, mes, dia] = fechaSolo.split('-').map(Number)
     const nac = new Date(año, mes - 1, dia)
@@ -246,7 +270,6 @@ export default function Ninos() {
   }
 
   function formatearFecha(fecha: string): string {
-    // Extraer solo la parte de la fecha (antes de la T)
     const fechaSolo = fecha.split('T')[0]
     const [año, mes, dia] = fechaSolo.split('-')
     return `${dia}/${mes}/${año}`
@@ -258,21 +281,6 @@ export default function Ninos() {
     const [año, mes, dia] = fechaSolo.split('-').map(Number)
     const nac = new Date(año, mes - 1, dia)
     return nac.getMonth() === hoy.getMonth()
-  }
-
-  function diasParaCumple(fechaNac: string): number {
-    const hoy = new Date()
-    const fechaSolo = fechaNac.split('T')[0]
-    const [año, mes, dia] = fechaSolo.split('-').map(Number)
-    const nac = new Date(año, mes - 1, dia)
-    const cumpleEsteAño = new Date(hoy.getFullYear(), nac.getMonth(), nac.getDate())
-    
-    if (cumpleEsteAño < hoy) {
-      cumpleEsteAño.setFullYear(hoy.getFullYear() + 1)
-    }
-    
-    const diff = cumpleEsteAño.getTime() - hoy.getTime()
-    return Math.ceil(diff / (1000 * 60 * 60 * 24))
   }
 
   // Filtrar cumpleañeros del mes
@@ -339,7 +347,7 @@ export default function Ninos() {
                     <div>📅 Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
                     {esCumpleañeroDelMes(nino.fecha_nacimiento) && (
                       <div style={{ color: '#f59e0b', fontWeight: '500', marginTop: '0.25rem' }}>
-                        🎉 ¡Cumpleaños este mes! (Falta{diasParaCumple(nino.fecha_nacimiento) === 0 ? 'n 0 días - HOY' : `n ${diasParaCumple(nino.fecha_nacimiento)} día${diasParaCumple(nino.fecha_nacimiento) !== 1 ? 's' : ''}`})
+                        🎉 ¡Cumpleaños este mes!
                       </div>
                     )}
                     {nino.codigo && <div>🔢 Código: {nino.codigo}</div>}
@@ -350,11 +358,14 @@ export default function Ninos() {
                     {nino.nombre_encargado && <div>👤 Encargado: {nino.nombre_encargado}</div>}
                     {nino.telefono_encargado && <div>📱 Tel: {nino.telefono_encargado}</div>}
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-ghost" onClick={() => abrirModal(nino)} style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button className="btn btn-ghost" onClick={() => verInfo(nino)} style={{ flex: '1 1 auto' }}>
+                      Ver Info
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => abrirModal(nino)} style={{ flex: '1 1 auto' }}>
                       Editar
                     </button>
-                    <button className="btn btn-danger" onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} style={{ flex: 1 }}>
+                    <button className="btn btn-danger" onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} style={{ flex: '1 1 auto' }}>
                       Eliminar
                     </button>
                   </div>
@@ -378,38 +389,28 @@ export default function Ninos() {
           </div>
           <div className="card-content">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-              {cumpleañerosDelMes.map(nino => {
-                const dias = diasParaCumple(nino.fecha_nacimiento)
-                const esHoy = dias === 0
-                return (
-                  <div 
-                    key={nino.id} 
-                    style={{ 
-                      padding: '1rem', 
-                      background: esHoy ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : 'var(--surface-elevated)', 
-                      borderRadius: 'var(--radius)', 
-                      border: esHoy ? '2px solid #f59e0b' : '1px solid var(--border)',
-                      position: 'relative'
-                    }}
-                  >
-                    {esHoy && (
-                      <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', fontSize: '1.5rem' }}>
-                        🎂
-                      </div>
-                    )}
-                    <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem', fontWeight: '500', color: esHoy ? '#78350f' : 'inherit' }}>
-                      {nino.nombres} {nino.apellidos}
-                    </h4>
-                    <div style={{ fontSize: '0.875rem', color: esHoy ? '#92400e' : 'var(--text-secondary)' }}>
-                      <div>🎂 {formatearFecha(nino.fecha_nacimiento)}</div>
-                      <div>📅 Cumple {calcularEdad(nino.fecha_nacimiento) + 1} años</div>
-                      <div style={{ fontWeight: '500', marginTop: '0.25rem', color: esHoy ? '#78350f' : '#f59e0b' }}>
-                        {esHoy ? '🎉 ¡ES HOY!' : `Faltan ${dias} día${dias !== 1 ? 's' : ''}`}
-                      </div>
+              {cumpleañerosDelMes.map(nino => (
+                <div 
+                  key={nino.id} 
+                  style={{ 
+                    padding: '1rem', 
+                    background: 'var(--surface-elevated)', 
+                    borderRadius: 'var(--radius)', 
+                    border: '1px solid var(--border)'
+                  }}
+                >
+                  <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem', fontWeight: '500' }}>
+                    {nino.nombres} {nino.apellidos}
+                  </h4>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                    <div>🎂 {formatearFecha(nino.fecha_nacimiento)}</div>
+                    <div>📅 Cumple {calcularEdad(nino.fecha_nacimiento) + 1} años</div>
+                    <div style={{ fontWeight: '500', marginTop: '0.25rem', color: '#f59e0b' }}>
+                      🎉 ¡Cumpleaños este mes!
                     </div>
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
           </div>
         </div>
