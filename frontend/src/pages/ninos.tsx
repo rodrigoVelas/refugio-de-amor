@@ -298,7 +298,7 @@ export default function Ninos() {
     <div className="content">
       <div className="card">
         <div className="card-header">
-          <h1 className="card-title">Niños Asignados</h1>
+          <h1 className="card-title">Listado Oficial de Niños</h1>
           <button className="btn" onClick={() => abrirModal()}>
             Registrar Niño
           </button>
@@ -332,7 +332,7 @@ export default function Ninos() {
           ) : ninos.length === 0 ? (
             <div className="alert" style={{ textAlign: 'center', padding: '2rem' }}>
               <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
-                {busqueda ? `No se encontraron resultados para "${busqueda}"` : 'No tienes niños asignados'}
+                {busqueda ? `No se encontraron resultados para "${busqueda}"` : 'No se encontraron los niños'}
               </p>
             </div>
           ) : (
