@@ -118,7 +118,7 @@ export default function Asistencia(){
       </div>
 
       <table className="table">
-        <thead><tr><th>Fecha</th><th>hora</th><th>Presentes</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Hora</th><th>Presentes</th><th>Acciones</th></tr></thead>
         <tbody>
           {rows.map(s=>(
             <tr key={s.id}>

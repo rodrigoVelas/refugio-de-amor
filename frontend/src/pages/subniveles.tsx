@@ -86,7 +86,7 @@ export default function Subniveles(){
 
   return (
     <div>
-      <h1>subniveles</h1>
+      <h1>Subniveles</h1>
 
       <div style={{display:'flex', gap:8, marginBottom:8}}>
         <button className="btn" onClick={abrirNuevo}>Nuevo subnivel</button>

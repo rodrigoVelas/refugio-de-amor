@@ -13,19 +13,12 @@ interface Nivel {
   nombre: string
 }
 
-interface Subnivel {
-  id: string
-  nombre: string
-  nivel_id: string
-}
-
 interface Nino {
   id: string
   nombres: string
   apellidos: string
   fecha_nacimiento: string
   nivel_id: string | null
-  subnivel_id: string | null
   maestro_id: string
   codigo: string | null
   nombre_encargado: string | null
@@ -34,14 +27,12 @@ interface Nino {
   maestro_nombre: string
   maestro_email: string
   nivel_nombre: string | null
-  subnivel_nombre: string | null
 }
 
 export default function Ninos() {
   const [ninos, setNinos] = useState<Nino[]>([])
   const [maestros, setMaestros] = useState<Maestro[]>([])
   const [niveles, setNiveles] = useState<Nivel[]>([])
-  const [subniveles, setSubniveles] = useState<Subnivel[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -55,7 +46,6 @@ export default function Ninos() {
   const [apellidos, setApellidos] = useState('')
   const [fechaNacimiento, setFechaNacimiento] = useState('')
   const [nivelId, setNivelId] = useState('')
-  const [subnivelId, setSubnivelId] = useState('')
   const [maestroId, setMaestroId] = useState('')
   const [codigo, setCodigo] = useState('')
   const [nombreEncargado, setNombreEncargado] = useState('')
@@ -70,15 +60,13 @@ export default function Ninos() {
     try {
       setLoading(true)
 
-      const [maestrosRes, nivRes, subRes] = await Promise.all([
+      const [maestrosRes, nivRes] = await Promise.all([
         fetch(`${API_URL}/usuarios`, { credentials: 'include' }),
-        fetch(`${API_URL}/niveles`, { credentials: 'include' }),
-        fetch(`${API_URL}/subniveles`, { credentials: 'include' })
+        fetch(`${API_URL}/niveles`, { credentials: 'include' })
       ])
 
       if (maestrosRes.ok) setMaestros(await maestrosRes.json())
       if (nivRes.ok) setNiveles(await nivRes.json())
-      if (subRes.ok) setSubniveles(await subRes.json())
 
       const params = new URLSearchParams()
       if (busqueda.trim()) params.append('buscar', busqueda.trim())
@@ -101,9 +89,10 @@ export default function Ninos() {
       setEditingId(nino.id)
       setNombres(nino.nombres)
       setApellidos(nino.apellidos)
-      setFechaNacimiento(nino.fecha_nacimiento)
+      // Extraer solo la fecha (YYYY-MM-DD) sin la parte del tiempo
+      const fechaSolo = nino.fecha_nacimiento.split('T')[0]
+      setFechaNacimiento(fechaSolo)
       setNivelId(nino.nivel_id || '')
-      setSubnivelId(nino.subnivel_id || '')
       setMaestroId(nino.maestro_id)
       setCodigo(nino.codigo || '')
       setNombreEncargado(nino.nombre_encargado || '')
@@ -121,7 +110,6 @@ export default function Ninos() {
     setApellidos('')
     setFechaNacimiento('')
     setNivelId('')
-    setSubnivelId('')
     setMaestroId('')
     setCodigo('')
     setNombreEncargado('')
@@ -150,7 +138,7 @@ export default function Ninos() {
         apellidos,
         fecha_nacimiento: fechaNacimiento,
         nivel_id: nivelId || null,
-        subnivel_id: subnivelId || null,
+        subnivel_id: null, // Siempre null por ahora
         maestro_id: maestroId,
         codigo: codigo || null,
         nombre_encargado: nombreEncargado || null,
@@ -246,7 +234,11 @@ export default function Ninos() {
 
   function calcularEdad(fechaNac: string): number {
     const hoy = new Date()
-    const nac = new Date(fechaNac)
+    // Extraer solo la parte de la fecha (sin tiempo)
+    const fechaSolo = fechaNac.split('T')[0]
+    const [año, mes, dia] = fechaSolo.split('-').map(Number)
+    const nac = new Date(año, mes - 1, dia)
+    
     let edad = hoy.getFullYear() - nac.getFullYear()
     const m = hoy.getMonth() - nac.getMonth()
     if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--
@@ -254,19 +246,25 @@ export default function Ninos() {
   }
 
   function formatearFecha(fecha: string): string {
-    const [año, mes, dia] = fecha.split('-')
+    // Extraer solo la parte de la fecha (antes de la T)
+    const fechaSolo = fecha.split('T')[0]
+    const [año, mes, dia] = fechaSolo.split('-')
     return `${dia}/${mes}/${año}`
   }
 
   function esCumpleañeroDelMes(fechaNac: string): boolean {
     const hoy = new Date()
-    const nac = new Date(fechaNac)
+    const fechaSolo = fechaNac.split('T')[0]
+    const [año, mes, dia] = fechaSolo.split('-').map(Number)
+    const nac = new Date(año, mes - 1, dia)
     return nac.getMonth() === hoy.getMonth()
   }
 
   function diasParaCumple(fechaNac: string): number {
     const hoy = new Date()
-    const nac = new Date(fechaNac)
+    const fechaSolo = fechaNac.split('T')[0]
+    const [año, mes, dia] = fechaSolo.split('-').map(Number)
+    const nac = new Date(año, mes - 1, dia)
     const cumpleEsteAño = new Date(hoy.getFullYear(), nac.getMonth(), nac.getDate())
     
     if (cumpleEsteAño < hoy) {
@@ -277,14 +275,14 @@ export default function Ninos() {
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
   }
 
-  const subnivelesFiltrados = subniveles.filter(s => s.nivel_id === nivelId)
-  
   // Filtrar cumpleañeros del mes
   const cumpleañerosDelMes = ninos
     .filter(nino => esCumpleañeroDelMes(nino.fecha_nacimiento))
     .sort((a, b) => {
-      const diaA = new Date(a.fecha_nacimiento).getDate()
-      const diaB = new Date(b.fecha_nacimiento).getDate()
+      const fechaA = a.fecha_nacimiento.split('T')[0]
+      const fechaB = b.fecha_nacimiento.split('T')[0]
+      const diaA = new Date(fechaA).getDate()
+      const diaB = new Date(fechaB).getDate()
       return diaA - diaB
     })
 
@@ -349,7 +347,6 @@ export default function Ninos() {
                       👨‍🏫 Maestro/a: {nino.maestro_nombre || nino.maestro_email || 'Sin asignar'}
                     </div>
                     {nino.nivel_nombre && <div>📚 Nivel: {nino.nivel_nombre}</div>}
-                    {nino.subnivel_nombre && <div>📖 Subnivel: {nino.subnivel_nombre}</div>}
                     {nino.nombre_encargado && <div>👤 Encargado: {nino.nombre_encargado}</div>}
                     {nino.telefono_encargado && <div>📱 Tel: {nino.telefono_encargado}</div>}
                   </div>
@@ -420,7 +417,7 @@ export default function Ninos() {
 
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <h2>{editingId ? 'Editar' : 'Registrar'} Niño</h2>
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>✕</button>
@@ -460,21 +457,12 @@ export default function Ninos() {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="label">Nivel</label>
-                  <select className="select" value={nivelId} onChange={e => { setNivelId(e.target.value); setSubnivelId('') }}>
-                    <option value="">Sin nivel</option>
-                    {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Subnivel</label>
-                  <select className="select" value={subnivelId} onChange={e => setSubnivelId(e.target.value)} disabled={!nivelId}>
-                    <option value="">Sin subnivel</option>
-                    {subnivelesFiltrados.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="label">Nivel (Opcional)</label>
+                <select className="select" value={nivelId} onChange={e => setNivelId(e.target.value)}>
+                  <option value="">Sin nivel</option>
+                  {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+                </select>
               </div>
 
               <div>

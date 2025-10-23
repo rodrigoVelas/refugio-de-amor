@@ -47,7 +47,7 @@ export default function Niveles(){
 
   return (
     <div>
-      <h1>niveles</h1>
+      <h1>Niveles</h1>
 
       <form className="form" onSubmit={crear}>
         <input className="input" placeholder="nombre" value={f.nombre} onChange={e=>setF({...f,nombre:e.target.value})} required />
@@ -56,7 +56,7 @@ export default function Niveles(){
       </form>
 
       <table className="table" style={{marginTop:12}}>
-        <thead><tr><th>nombre</th><th>descripcion</th><th>acciones</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Descripcion</th><th>Acciones</th></tr></thead>
         <tbody>
           {rows.map(r=>(
             <tr key={r.id}>
@@ -78,9 +78,9 @@ export default function Niveles(){
         </>}>
         {edit && (
           <div className="form">
-            <label>nombre</label>
+            <label>Nombre</label>
             <input className="input" value={edit.nombre} onChange={e=>setEdit({...edit!, nombre:e.target.value})} />
-            <label>descripcion</label>
+            <label>Descripcion</label>
             <input className="input" value={edit.descripcion||''} onChange={e=>setEdit({...edit!, descripcion:e.target.value})} />
           </div>
         )}

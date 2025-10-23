@@ -93,10 +93,10 @@ export default function Usuarios(){
 
   return (
     <div>
-      <h1>usuarios</h1>
+      <h1>Usuarios</h1>
 
       <div style={{display:'flex', gap:8, marginBottom:8}}>
-        <input className="input" placeholder="buscar por nombre o email" value={q} onChange={e=>setQ(e.target.value)} />
+        <input className="input" placeholder="Buscar por nombre o email" value={q} onChange={e=>setQ(e.target.value)} />
         {puedeEditar && <button className="btn" onClick={abrirNuevo}>Nuevo usuario</button>}
       </div>
 
