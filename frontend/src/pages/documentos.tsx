@@ -19,7 +19,7 @@ interface Usuario {
   id: string
   email: string
   nombres: string
-  rol: string
+  rol: string | number
 }
 
 export default function Documentos() {
@@ -42,12 +42,22 @@ export default function Documentos() {
     try {
       setLoading(true)
 
+      console.log('🔄 Cargando datos de usuario...')
+
       // Obtener usuario actual
       const userRes = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
+      
+      console.log('📡 Response status:', userRes.status)
+
       if (userRes.ok) {
         const userData = await userRes.json()
+        console.log('✅ Usuario cargado:', userData)
+        console.log('   Email:', userData.email)
+        console.log('   Rol:', userData.rol)
+        console.log('   Tipo de rol:', typeof userData.rol)
         setUsuario(userData)
-        console.log('👤 Usuario:', userData.email, '| Rol:', userData.rol)
+      } else {
+        console.error('❌ Error al cargar usuario:', userRes.status)
       }
 
       // Obtener documentos
@@ -59,15 +69,24 @@ export default function Documentos() {
         setDocumentos(data)
       }
     } catch (error) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const esDirectora = String(usuario?.rol) === '1'
+  // Determinar si es directora
+  const esDirectora = usuario ? (String(usuario.rol) === '1' || usuario.rol === 1) : false
+
+  console.log('🔍 Estado actual:')
+  console.log('   Usuario:', usuario?.email)
+  console.log('   Rol:', usuario?.rol)
+  console.log('   ¿Es directora?:', esDirectora)
 
   function abrirModal() {
+    console.log('📂 Intentando abrir modal...')
+    console.log('   ¿Es directora?:', esDirectora)
+
     if (!esDirectora) {
       Swal.fire({
         icon: 'error',
@@ -105,7 +124,6 @@ export default function Documentos() {
       return
     }
 
-    // Validar tamaño (10MB)
     if (archivo.size > 10 * 1024 * 1024) {
       Swal.fire({
         icon: 'error',
@@ -124,7 +142,7 @@ export default function Documentos() {
       if (descripcion.trim()) formData.append('descripcion', descripcion.trim())
       formData.append('archivo', archivo)
 
-      console.log('📤 Subiendo:', archivo.name, '(', (archivo.size / 1024).toFixed(2), 'KB)')
+      console.log('📤 Subiendo:', archivo.name)
 
       const res = await fetch(`${API_URL}/documentos`, {
         method: 'POST',
@@ -166,15 +184,11 @@ export default function Documentos() {
 
   async function descargarDocumento(id: string, nombreArchivo: string) {
     try {
-      console.log('📥 Descargando:', id)
-
       const res = await fetch(`${API_URL}/documentos/${id}/descargar`, {
         credentials: 'include'
       })
 
-      if (!res.ok) {
-        throw new Error('Error al descargar')
-      }
+      if (!res.ok) throw new Error('Error al descargar')
 
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
@@ -185,10 +199,7 @@ export default function Documentos() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-
-      console.log('✅ Descargado')
     } catch (error) {
-      console.error('Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -200,19 +211,14 @@ export default function Documentos() {
 
   async function verDocumento(doc: Documento) {
     try {
-      console.log('👁️ Viendo:', doc.id)
-
       const res = await fetch(`${API_URL}/documentos/${doc.id}`, {
         credentials: 'include'
       })
 
-      if (!res.ok) {
-        throw new Error('Error al cargar')
-      }
+      if (!res.ok) throw new Error('Error al cargar')
 
       const data = await res.json()
 
-      // Si es imagen, mostrar en modal
       if (doc.tipo === 'imagen') {
         const base64Img = `data:${data.mime_type};base64,${data.contenido_base64}`
         Swal.fire({
@@ -223,11 +229,9 @@ export default function Documentos() {
           confirmButtonColor: '#3b82f6'
         })
       } else {
-        // Para PDF y otros, descargar directamente
         descargarDocumento(doc.id, doc.nombre_archivo)
       }
     } catch (error) {
-      console.error('Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -325,7 +329,6 @@ export default function Documentos() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
-      console.log('📎 Seleccionado:', file.name, formatearTamano(file.size))
       setArchivo(file)
     }
   }
@@ -336,16 +339,20 @@ export default function Documentos() {
         <div className="card-header">
           <div>
             <h1 className="card-title">Documentos</h1>
-            {!esDirectora && (
+            {usuario && (
               <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                Puedes ver y descargar documentos
+                {esDirectora ? '👑 Directora - Puedes subir y eliminar' : '👤 Puedes ver y descargar documentos'}
               </p>
             )}
           </div>
-          {esDirectora && (
+          {esDirectora ? (
             <button className="btn" onClick={abrirModal}>
               Subir Documento
             </button>
+          ) : (
+            <div style={{ padding: '0.5rem 1rem', background: 'var(--surface-elevated)', borderRadius: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Solo lectura
+            </div>
           )}
         </div>
 
@@ -414,7 +421,7 @@ export default function Documentos() {
         </div>
       </div>
 
-      {showModal && esDirectora && (
+      {showModal && (
         <div className="modal-backdrop" onClick={() => !uploading && setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="modal-header">
