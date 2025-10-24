@@ -1,6 +1,5 @@
 // src/routes/documentos.ts
 import { Router } from 'express'
-import { authMiddleware } from '../core/auth_middleware'
 import { requirePerms } from '../core/perm_middleware'
 import { pool } from '../core/db'
 import multer from 'multer'
@@ -57,10 +56,10 @@ function detectarTipo(mimetype: string): string {
 }
 
 // GET /documentos - Listar documentos (TODOS pueden ver)
-router.get('/', authMiddleware, async (req: any, res: any) => {
+router.get('/', async (req: any, res: any) => {
   try {
     console.log('\n=== GET /documentos ===')
-    console.log('Usuario:', req.user.id)
+    console.log('Usuario:', req.user?.id)
 
     // TODOS ven TODOS los documentos
     const query = `
@@ -94,14 +93,18 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 })
 
 // POST /documentos - Subir documento (SOLO DIRECTORA)
-router.post('/', authMiddleware, upload.single('archivo'), async (req: any, res: any) => {
+router.post('/', upload.single('archivo'), async (req: any, res: any) => {
   try {
     const { titulo, descripcion } = req.body
-    const userId = req.user.id
+    const userId = req.user?.id
     const file = req.file
 
     console.log('\n=== POST /documentos ===')
     console.log('Usuario:', userId)
+
+    if (!userId) {
+      return res.status(401).json({ error: 'No autenticado' })
+    }
 
     // Verificar que sea directora
     const esDir = await esDirectora(userId)
@@ -159,7 +162,7 @@ router.post('/', authMiddleware, upload.single('archivo'), async (req: any, res:
 })
 
 // GET /documentos/:id - Ver documento específico (TODOS pueden ver)
-router.get('/:id', authMiddleware, async (req: any, res: any) => {
+router.get('/:id', async (req: any, res: any) => {
   try {
     const { id } = req.params
 
@@ -186,7 +189,7 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
 })
 
 // GET /documentos/:id/descargar - Descargar archivo (TODOS pueden descargar)
-router.get('/:id/descargar', authMiddleware, async (req: any, res: any) => {
+router.get('/:id/descargar', async (req: any, res: any) => {
   try {
     const { id } = req.params
 
@@ -221,10 +224,14 @@ router.get('/:id/descargar', authMiddleware, async (req: any, res: any) => {
 })
 
 // DELETE /documentos/:id - Eliminar documento (SOLO DIRECTORA)
-router.delete('/:id', authMiddleware, async (req: any, res: any) => {
+router.delete('/:id', async (req: any, res: any) => {
   try {
     const { id } = req.params
-    const userId = req.user.id
+    const userId = req.user?.id
+
+    if (!userId) {
+      return res.status(401).json({ error: 'No autenticado' })
+    }
 
     // Verificar que sea directora
     const esDir = await esDirectora(userId)
