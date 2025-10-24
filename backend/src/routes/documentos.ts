@@ -39,7 +39,11 @@ const upload = multer({
 // Helper: Verificar si es directora
 async function esDirectora(userId: string): Promise<boolean> {
   const result = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [userId])
-  return String(result.rows[0]?.rol) === '1'
+  const rol = String(result.rows[0]?.rol).toLowerCase()
+  
+  console.log('[esDirectora] Usuario:', userId, '| Rol:', rol)
+  
+  return rol === 'directora' || rol === '1'
 }
 
 // Helper: Determinar tipo de archivo

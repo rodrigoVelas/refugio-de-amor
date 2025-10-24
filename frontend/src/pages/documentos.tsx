@@ -19,7 +19,7 @@ interface Usuario {
   id: string
   email: string
   nombres: string
-  rol: string | number
+  rol: string
 }
 
 export default function Documentos() {
@@ -75,12 +75,13 @@ export default function Documentos() {
     }
   }
 
-  // Determinar si es directora
-  const esDirectora = usuario ? (String(usuario.rol) === '1' || usuario.rol === 1) : false
+  // Detectar si es directora (solo por texto)
+  const esDirectora = usuario ? String(usuario.rol).toLowerCase() === 'directora' : false
 
   console.log('🔍 Estado actual:')
   console.log('   Usuario:', usuario?.email)
   console.log('   Rol:', usuario?.rol)
+  console.log('   Rol lowercase:', String(usuario?.rol).toLowerCase())
   console.log('   ¿Es directora?:', esDirectora)
 
   function abrirModal() {
@@ -199,7 +200,10 @@ export default function Documentos() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
+
+      console.log('✅ Descargado:', nombreArchivo)
     } catch (error) {
+      console.error('Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -232,6 +236,7 @@ export default function Documentos() {
         descargarDocumento(doc.id, doc.nombre_archivo)
       }
     } catch (error) {
+      console.error('Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -329,6 +334,7 @@ export default function Documentos() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
+      console.log('📎 Archivo seleccionado:', file.name, '-', formatearTamano(file.size))
       setArchivo(file)
     }
   }
