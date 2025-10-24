@@ -1,11 +1,9 @@
 // src/routes/documentos.ts
-import { Router, Request, Response } from 'express'
+import { Router } from 'express'
 import { authMiddleware } from '../core/auth_middleware'
 import { requirePerms } from '../core/perm_middleware'
 import { pool } from '../core/db'
 import multer from 'multer'
-import cloudinary from '../lib/cloudinary'
-import { Readable } from 'stream'
 
 const router = Router()
 
@@ -14,104 +12,163 @@ const storage = multer.memoryStorage()
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB máximo
+    fileSize: 10 * 1024 * 1024 // 10MB máximo
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/gif',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain'
     ]
     
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true)
     } else {
-      cb(new Error('Tipo de archivo no permitido. Solo PDF, Word y Excel.'))
+      cb(new Error('Tipo de archivo no permitido'))
     }
-  },
+  }
 })
 
-// Helper: subir a Cloudinary
-async function uploadToCloudinary(buffer: Buffer, filename: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'refugio_documentos',
-        resource_type: 'raw',
-        public_id: `${Date.now()}_${filename.replace(/\.[^/.]+$/, '')}`,
-      },
-      (error, result) => {
-        if (error) {
-          console.error('[uploadToCloudinary] Error:', error)
-          reject(error)
-        } else {
-          console.log('[uploadToCloudinary] Success:', result?.secure_url)
-          resolve(result)
-        }
-      }
-    )
-
-    const readableStream = new Readable()
-    readableStream.push(buffer)
-    readableStream.push(null)
-    readableStream.pipe(uploadStream)
-  })
+// Helper: Verificar si es directora
+async function esDirectora(userId: string): Promise<boolean> {
+  const result = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [userId])
+  return String(result.rows[0]?.rol) === '1'
 }
 
-// GET /documentos - Listar todos los documentos (todos pueden ver)
+// Helper: Determinar tipo de archivo
+function detectarTipo(mimetype: string): string {
+  if (mimetype === 'application/pdf') return 'pdf'
+  if (mimetype.startsWith('image/')) return 'imagen'
+  if (mimetype.includes('word')) return 'word'
+  if (mimetype.includes('excel') || mimetype.includes('spreadsheet')) return 'excel'
+  if (mimetype === 'text/plain') return 'texto'
+  return 'otro'
+}
+
+// GET /documentos - Listar documentos (TODOS pueden ver)
 router.get('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { mes, anio } = req.query
+    console.log('\n=== GET /documentos ===')
+    console.log('Usuario:', req.user.id)
 
-    let query = `
+    // TODOS ven TODOS los documentos
+    const query = `
       SELECT 
-        d.*,
+        d.id,
+        d.titulo,
+        d.descripcion,
+        d.tipo,
+        d.nombre_archivo,
+        d.tamano_bytes,
+        d.mime_type,
+        d.subido_por,
+        d.creado_en,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as subido_por_nombre
-      FROM documentos_mensuales d
+      FROM documentos d
       LEFT JOIN usuarios u ON d.subido_por = u.id
-      WHERE 1=1
+      WHERE d.activo = true
+      ORDER BY d.creado_en DESC
     `
-    const params: any[] = []
 
-    if (mes) {
-      params.push(mes)
-      query += ` AND d.mes = $${params.length}`
-    }
+    const result = await pool.query(query)
 
-    if (anio) {
-      params.push(anio)
-      query += ` AND d.anio = $${params.length}`
-    }
+    console.log('✅ Documentos encontrados:', result.rows.length)
+    console.log('===================\n')
 
-    query += ' ORDER BY d.anio DESC, d.mes DESC, d.fecha_subida DESC'
-
-    const result = await pool.query(query, params)
-    console.log(`[documentos/list] Encontrados: ${result.rows.length}`)
     res.json(result.rows)
   } catch (error: any) {
-    console.error('[documentos/list] Error:', error)
+    console.error('❌ Error:', error.message)
     res.status(500).json({ error: 'Error al listar documentos' })
   }
 })
 
-// GET /documentos/:id - Ver un documento específico
+// POST /documentos - Subir documento (SOLO DIRECTORA)
+router.post('/', authMiddleware, upload.single('archivo'), async (req: any, res: any) => {
+  try {
+    const { titulo, descripcion } = req.body
+    const userId = req.user.id
+    const file = req.file
+
+    console.log('\n=== POST /documentos ===')
+    console.log('Usuario:', userId)
+
+    // Verificar que sea directora
+    const esDir = await esDirectora(userId)
+    if (!esDir) {
+      console.log('❌ Acceso denegado - No es directora')
+      return res.status(403).json({ error: 'Solo la directora puede subir documentos' })
+    }
+
+    console.log('✅ Usuario es directora')
+
+    if (!file) {
+      return res.status(400).json({ error: 'No se recibió archivo' })
+    }
+
+    if (!titulo || !titulo.trim()) {
+      return res.status(400).json({ error: 'El título es requerido' })
+    }
+
+    console.log('📎 Archivo:', file.originalname)
+    console.log('   Tipo MIME:', file.mimetype)
+    console.log('   Tamaño:', (file.size / 1024).toFixed(2), 'KB')
+
+    const tipo = detectarTipo(file.mimetype)
+    console.log('   Tipo detectado:', tipo)
+
+    // Convertir buffer a Base64
+    const contenidoBase64 = file.buffer.toString('base64')
+
+    // Guardar en BD
+    const result = await pool.query(
+      `INSERT INTO documentos 
+        (titulo, descripcion, tipo, nombre_archivo, tamano_bytes, mime_type, contenido_base64, subido_por, activo, creado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
+      RETURNING id, titulo, tipo, nombre_archivo, tamano_bytes, creado_en`,
+      [
+        titulo.trim(),
+        descripcion?.trim() || null,
+        tipo,
+        file.originalname,
+        file.size,
+        file.mimetype,
+        contenidoBase64,
+        userId
+      ]
+    )
+
+    console.log('✅ Documento guardado:', result.rows[0].id)
+    console.log('===================\n')
+
+    res.json({ ok: true, documento: result.rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error:', error.message)
+    res.status(500).json({ error: error.message || 'Error al subir documento' })
+  }
+})
+
+// GET /documentos/:id - Ver documento específico (TODOS pueden ver)
 router.get('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
 
-    const result = await pool.query(
-      `
+    const query = `
       SELECT 
         d.*,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as subido_por_nombre
-      FROM documentos_mensuales d
+      FROM documentos d
       LEFT JOIN usuarios u ON d.subido_por = u.id
-      WHERE d.id = $1
-      `,
-      [id]
-    )
+      WHERE d.id = $1 AND d.activo = true
+    `
+
+    const result = await pool.query(query, [id])
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Documento no encontrado' })
@@ -119,140 +176,74 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
 
     res.json(result.rows[0])
   } catch (error: any) {
-    console.error('[documentos/get] Error:', error)
+    console.error('Error:', error)
     res.status(500).json({ error: 'Error al obtener documento' })
   }
 })
 
-// POST /documentos/upload - Subir nuevo documento (solo directora)
-router.post(
-  '/upload',
-  authMiddleware,
-  requirePerms(['documentos_subir']),
-  upload.single('archivo'),
-  async (req: any, res: any) => {
-    try {
-      const { titulo, descripcion, mes, anio } = req.body
-      const file = req.file
+// GET /documentos/:id/descargar - Descargar archivo (TODOS pueden descargar)
+router.get('/:id/descargar', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
 
-      if (!file) {
-        return res.status(400).json({ error: 'No se subió ningún archivo' })
-      }
+    const query = `
+      SELECT 
+        d.contenido_base64,
+        d.nombre_archivo,
+        d.mime_type
+      FROM documentos d
+      WHERE d.id = $1 AND d.activo = true
+    `
 
-      if (!titulo || !mes || !anio) {
-        return res.status(400).json({ error: 'Título, mes y año son requeridos' })
-      }
+    const result = await pool.query(query, [id])
 
-      console.log('[documentos/upload] Subiendo a Cloudinary...')
-      const cloudinaryResult = await uploadToCloudinary(file.buffer, file.originalname)
-
-      // Guardar en BD
-      const result = await pool.query(
-        `
-        INSERT INTO documentos_mensuales 
-          (titulo, descripcion, archivo_nombre, archivo_tipo, archivo_size, archivo_url, mes, anio, subido_por)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING *
-        `,
-        [
-          titulo,
-          descripcion || null,
-          file.originalname,
-          file.mimetype,
-          file.size,
-          cloudinaryResult.secure_url,
-          parseInt(mes),
-          parseInt(anio),
-          req.user.id,
-        ]
-      )
-
-      console.log('[documentos/upload] Documento guardado:', result.rows[0].id)
-      res.json({ ok: true, documento: result.rows[0] })
-    } catch (error: any) {
-      console.error('[documentos/upload] Error:', error)
-      res.status(500).json({ error: error.message || 'Error al subir documento' })
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Documento no encontrado' })
     }
+
+    const doc = result.rows[0]
+
+    // Convertir Base64 a Buffer
+    const buffer = Buffer.from(doc.contenido_base64, 'base64')
+
+    // Enviar como descarga
+    res.setHeader('Content-Type', doc.mime_type)
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.nombre_archivo)}"`)
+    res.send(buffer)
+  } catch (error: any) {
+    console.error('Error:', error)
+    res.status(500).json({ error: 'Error al descargar documento' })
   }
-)
+})
 
-// PUT /documentos/:id - Actualizar documento (solo directora)
-router.put(
-  '/:id',
-  authMiddleware,
-  requirePerms(['documentos_editar']),
-  async (req: any, res: any) => {
-    try {
-      const { id } = req.params
-      const { titulo, descripcion, mes, anio } = req.body
+// DELETE /documentos/:id - Eliminar documento (SOLO DIRECTORA)
+router.delete('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
 
-      if (!titulo || !mes || !anio) {
-        return res.status(400).json({ error: 'Título, mes y año son requeridos' })
-      }
-
-      const result = await pool.query(
-        `
-        UPDATE documentos_mensuales
-        SET titulo = $1, descripcion = $2, mes = $3, anio = $4
-        WHERE id = $5
-        RETURNING *
-        `,
-        [titulo, descripcion || null, parseInt(mes), parseInt(anio), id]
-      )
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Documento no encontrado' })
-      }
-
-      console.log('[documentos/update] Documento actualizado:', id)
-      res.json({ ok: true, documento: result.rows[0] })
-    } catch (error: any) {
-      console.error('[documentos/update] Error:', error)
-      res.status(500).json({ error: 'Error al actualizar documento' })
+    // Verificar que sea directora
+    const esDir = await esDirectora(userId)
+    if (!esDir) {
+      return res.status(403).json({ error: 'Solo la directora puede eliminar documentos' })
     }
-  }
-)
 
-// DELETE /documentos/:id - Eliminar documento (solo directora)
-router.delete(
-  '/:id',
-  authMiddleware,
-  requirePerms(['documentos_eliminar']),
-  async (req: any, res: any) => {
-    try {
-      const { id } = req.params
+    const check = await pool.query('SELECT id FROM documentos WHERE id = $1 AND activo = true', [id])
 
-      // Obtener URL del archivo
-      const doc = await pool.query('SELECT archivo_url FROM documentos_mensuales WHERE id = $1', [id])
-
-      if (doc.rows.length === 0) {
-        return res.status(404).json({ error: 'Documento no encontrado' })
-      }
-
-      // Eliminar de Cloudinary
-      const url = doc.rows[0].archivo_url
-      const publicIdMatch = url.match(/refugio_documentos\/([^/]+)/)
-
-      if (publicIdMatch) {
-        const publicId = `refugio_documentos/${publicIdMatch[1]}`
-        try {
-          await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' })
-          console.log('[documentos/delete] Archivo eliminado de Cloudinary:', publicId)
-        } catch (cloudError) {
-          console.error('[documentos/delete] Error eliminando de Cloudinary:', cloudError)
-        }
-      }
-
-      // Eliminar de BD
-      await pool.query('DELETE FROM documentos_mensuales WHERE id = $1', [id])
-
-      console.log('[documentos/delete] Documento eliminado:', id)
-      res.json({ ok: true })
-    } catch (error: any) {
-      console.error('[documentos/delete] Error:', error)
-      res.status(500).json({ error: 'Error al eliminar documento' })
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Documento no encontrado' })
     }
+
+    // Marcar como inactivo
+    await pool.query('UPDATE documentos SET activo = false WHERE id = $1', [id])
+
+    console.log('🗑️ Documento eliminado:', id)
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('Error:', error.message)
+    res.status(500).json({ error: error.message })
   }
-)
+})
 
 export default router

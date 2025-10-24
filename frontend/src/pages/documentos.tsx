@@ -1,251 +1,411 @@
 import { useState, useEffect } from 'react'
 import { API_URL } from '../config'
+import Swal from 'sweetalert2'
 
 interface Documento {
   id: string
   titulo: string
   descripcion: string | null
-  archivo_nombre: string
-  archivo_tipo: string
-  archivo_size: number
-  archivo_url: string
-  mes: number
-  anio: number
-  fecha_subida: string
+  tipo: string
+  nombre_archivo: string
+  tamano_bytes: number
+  mime_type: string
   subido_por: string
   subido_por_nombre: string
+  creado_en: string
 }
 
-const meses = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-]
+interface Usuario {
+  id: string
+  email: string
+  nombres: string
+  rol: string
+}
 
 export default function Documentos() {
   const [documentos, setDocumentos] = useState<Documento[]>([])
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [filtroMes, setFiltroMes] = useState('')
-  const [filtroAnio, setFiltroAnio] = useState('')
+
+  // Form state
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [mes, setMes] = useState(new Date().getMonth() + 1)
-  const [anio, setAnio] = useState(new Date().getFullYear())
   const [archivo, setArchivo] = useState<File | null>(null)
 
   useEffect(() => {
-    cargarDocumentos()
-  }, [filtroMes, filtroAnio])
+    cargarDatos()
+  }, [])
 
-  async function cargarDocumentos() {
+  async function cargarDatos() {
     try {
       setLoading(true)
-      const params = new URLSearchParams()
-      if (filtroMes) params.append('mes', filtroMes)
-      if (filtroAnio) params.append('anio', filtroAnio)
-      
-      const url = `${API_URL}/documentos${params.toString() ? '?' + params.toString() : ''}`
-      const res = await fetch(url, { credentials: 'include' })
+
+      // Obtener usuario actual
+      const userRes = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
+      if (userRes.ok) {
+        const userData = await userRes.json()
+        setUsuario(userData)
+        console.log('👤 Usuario:', userData.email, '| Rol:', userData.rol)
+      }
+
+      // Obtener documentos
+      const res = await fetch(`${API_URL}/documentos`, { credentials: 'include' })
       
       if (res.ok) {
         const data = await res.json()
+        console.log('📄 Documentos cargados:', data.length)
         setDocumentos(data)
       }
     } catch (error) {
-      console.error('Error cargando documentos:', error)
+      console.error('Error:', error)
     } finally {
       setLoading(false)
     }
   }
 
+  const esDirectora = String(usuario?.rol) === '1'
+
+  function abrirModal() {
+    if (!esDirectora) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Acceso denegado',
+        text: 'Solo la directora puede subir documentos',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
+    setTitulo('')
+    setDescripcion('')
+    setArchivo(null)
+    setShowModal(true)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    
-    if (!archivo) {
-      alert('Selecciona un archivo')
-      return
-    }
-    
+
     if (!titulo.trim()) {
-      alert('Ingresa un título')
+      Swal.fire({
+        icon: 'warning',
+        title: 'Título requerido',
+        confirmButtonColor: '#3b82f6'
+      })
       return
     }
-    
+
+    if (!archivo) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Archivo requerido',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
+    // Validar tamaño (10MB)
+    if (archivo.size > 10 * 1024 * 1024) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Archivo muy grande',
+        text: 'Máximo 10MB',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
     try {
       setUploading(true)
-      
+
       const formData = new FormData()
+      formData.append('titulo', titulo.trim())
+      if (descripcion.trim()) formData.append('descripcion', descripcion.trim())
       formData.append('archivo', archivo)
-      formData.append('titulo', titulo)
-      formData.append('descripcion', descripcion)
-      formData.append('mes', mes.toString())
-      formData.append('anio', anio.toString())
-      
-      const res = await fetch(`${API_URL}/documentos/upload`, {
+
+      console.log('📤 Subiendo:', archivo.name, '(', (archivo.size / 1024).toFixed(2), 'KB)')
+
+      const res = await fetch(`${API_URL}/documentos`, {
         method: 'POST',
         credentials: 'include',
-        body: formData,
+        body: formData
       })
-      
+
       const data = await res.json()
-      
+
       if (res.ok) {
-        alert('Documento subido exitosamente')
+        await Swal.fire({
+          icon: 'success',
+          title: '¡Subido!',
+          timer: 2000,
+          showConfirmButton: false
+        })
         setShowModal(false)
-        resetForm()
-        cargarDocumentos()
+        cargarDatos()
       } else {
-        alert(data.error || 'Error al subir documento')
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: data.error,
+          confirmButtonColor: '#3b82f6'
+        })
       }
     } catch (error) {
       console.error('Error:', error)
-      alert('Error al subir documento')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al subir',
+        confirmButtonColor: '#3b82f6'
+      })
     } finally {
       setUploading(false)
     }
   }
 
-  function resetForm() {
-    setTitulo('')
-    setDescripcion('')
-    setMes(new Date().getMonth() + 1)
-    setAnio(new Date().getFullYear())
-    setArchivo(null)
-  }
-
-  async function handleEliminar(id: string) {
-    if (!confirm('¿Estás seguro de eliminar este documento?')) return
-    
+  async function descargarDocumento(id: string, nombreArchivo: string) {
     try {
-      const res = await fetch(`${API_URL}/documentos/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
+      console.log('📥 Descargando:', id)
+
+      const res = await fetch(`${API_URL}/documentos/${id}/descargar`, {
+        credentials: 'include'
       })
-      
-      if (res.ok) {
-        alert('Documento eliminado')
-        cargarDocumentos()
-      } else {
-        const data = await res.json()
-        alert(data.error || 'Error al eliminar')
+
+      if (!res.ok) {
+        throw new Error('Error al descargar')
       }
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nombreArchivo
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      console.log('✅ Descargado')
     } catch (error) {
       console.error('Error:', error)
-      alert('Error al eliminar documento')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al descargar',
+        confirmButtonColor: '#3b82f6'
+      })
     }
   }
 
-  function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  async function verDocumento(doc: Documento) {
+    try {
+      console.log('👁️ Viendo:', doc.id)
+
+      const res = await fetch(`${API_URL}/documentos/${doc.id}`, {
+        credentials: 'include'
+      })
+
+      if (!res.ok) {
+        throw new Error('Error al cargar')
+      }
+
+      const data = await res.json()
+
+      // Si es imagen, mostrar en modal
+      if (doc.tipo === 'imagen') {
+        const base64Img = `data:${data.mime_type};base64,${data.contenido_base64}`
+        Swal.fire({
+          title: doc.titulo,
+          imageUrl: base64Img,
+          imageAlt: doc.titulo,
+          width: 800,
+          confirmButtonColor: '#3b82f6'
+        })
+      } else {
+        // Para PDF y otros, descargar directamente
+        descargarDocumento(doc.id, doc.nombre_archivo)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al ver documento',
+        confirmButtonColor: '#3b82f6'
+      })
+    }
   }
 
-  function getFileIcon(tipo: string): string {
-    if (tipo.includes('pdf')) return '📄'
-    if (tipo.includes('word')) return '📝'
-    if (tipo.includes('excel') || tipo.includes('spreadsheet')) return '📊'
-    return '📎'
+  async function handleEliminar(id: string, titulo: string) {
+    if (!esDirectora) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Acceso denegado',
+        text: 'Solo la directora puede eliminar documentos',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: '¿Eliminar?',
+      text: `¿Eliminar "${titulo}"?`,
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      const res = await fetch(`${API_URL}/documentos/${id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+
+      if (res.ok) {
+        await Swal.fire({
+          icon: 'success',
+          title: '¡Eliminado!',
+          timer: 2000,
+          showConfirmButton: false
+        })
+        cargarDatos()
+      } else {
+        const err = await res.json()
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: err.error,
+          confirmButtonColor: '#3b82f6'
+        })
+      }
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error al eliminar',
+        confirmButtonColor: '#3b82f6'
+      })
+    }
+  }
+
+  function getIconoTipo(tipo: string): string {
+    switch (tipo) {
+      case 'pdf': return '📄'
+      case 'imagen': return '🖼️'
+      case 'word': return '📝'
+      case 'excel': return '📊'
+      case 'texto': return '📃'
+      default: return '📎'
+    }
+  }
+
+  function formatearTamano(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+  }
+
+  function formatearFecha(fecha: string): string {
+    const date = new Date(fecha)
+    return date.toLocaleDateString('es-GT', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) {
+      console.log('📎 Seleccionado:', file.name, formatearTamano(file.size))
+      setArchivo(file)
+    }
   }
 
   return (
     <div className="content">
       <div className="card">
         <div className="card-header">
-          <h1 className="card-title">Documentos Mensuales</h1>
-          <button className="btn" onClick={() => setShowModal(true)}>
-            Subir Documento
-          </button>
-        </div>
-
-        <div className="toolbar">
-          <select 
-            className="select" 
-            value={filtroMes} 
-            onChange={(e) => setFiltroMes(e.target.value)}
-          >
-            <option value="">Todos los meses</option>
-            {meses.map((m, i) => (
-              <option key={i} value={i + 1}>{m}</option>
-            ))}
-          </select>
-
-          <select 
-            className="select" 
-            value={filtroAnio} 
-            onChange={(e) => setFiltroAnio(e.target.value)}
-          >
-            <option value="">Todos los años</option>
-            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-
-          {(filtroMes || filtroAnio) && (
-            <button 
-              className="btn btn-ghost" 
-              onClick={() => { setFiltroMes(''); setFiltroAnio('') }}
-            >
-              Limpiar filtros
+          <div>
+            <h1 className="card-title">Documentos</h1>
+            {!esDirectora && (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                Puedes ver y descargar documentos
+              </p>
+            )}
+          </div>
+          {esDirectora && (
+            <button className="btn" onClick={abrirModal}>
+              Subir Documento
             </button>
           )}
         </div>
 
         <div className="card-content">
           {loading ? (
-            <div className="loading">Cargando documentos...</div>
+            <div className="loading">Cargando...</div>
           ) : documentos.length === 0 ? (
-            <div className="alert">No hay documentos disponibles</div>
+            <div className="alert" style={{ textAlign: 'center', padding: '2rem' }}>
+              <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
+                No hay documentos
+              </p>
+              {esDirectora && (
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                  Haz clic en "Subir Documento"
+                </p>
+              )}
+            </div>
           ) : (
-            <div style={{ display: 'grid', gap: '1rem' }}>
-              {documentos.map((doc) => (
-                <div 
-                  key={doc.id} 
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '1rem',
-                    padding: '1rem',
-                    background: 'var(--surface-elevated)',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <div style={{ fontSize: '2rem' }}>
-                    {getFileIcon(doc.archivo_tipo)}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+              {documentos.map(doc => (
+                <div key={doc.id} style={{ padding: '1.25rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '2.5rem' }}>
+                      {getIconoTipo(doc.tipo)}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem', fontWeight: '500' }}>
+                        {doc.titulo}
+                      </h3>
+                      {doc.descripcion && (
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                          {doc.descripcion}
+                        </p>
+                      )}
+                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                        <div>📎 {doc.nombre_archivo}</div>
+                        <div>💾 {formatearTamano(doc.tamano_bytes)}</div>
+                        <div>📤 {doc.subido_por_nombre}</div>
+                        <div>📅 {formatearFecha(doc.creado_en)}</div>
+                      </div>
+                    </div>
                   </div>
                   
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ marginBottom: '0.25rem' }}>{doc.titulo}</h3>
-                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                      {meses[doc.mes - 1]} {doc.anio} • {formatFileSize(doc.archivo_size)}
-                    </p>
-                    {doc.descripcion && (
-                      <p className="text-sm" style={{ marginTop: '0.5rem' }}>
-                        {doc.descripcion}
-                      </p>
-                    )}
-                    <p className="text-xs" style={{ color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>
-                      Subido por {doc.subido_por_nombre} el {new Date(doc.fecha_subida).toLocaleDateString()}
-                    </p>
-                  </div>
-
-                  <div className="flex" style={{ gap: '0.5rem' }}>
-                    <a 
-                      href={doc.archivo_url.replace('/image/upload/', '/raw/upload/')} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="btn btn-ghost"
-                    >
-                      Ver Documento
-                    </a>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button 
-                      className="btn btn-danger" 
-                      onClick={() => handleEliminar(doc.id)}
+                      className="btn btn-ghost"
+                      onClick={() => verDocumento(doc)}
+                      style={{ flex: '1 1 auto' }}
                     >
-                      Eliminar
+                      {doc.tipo === 'imagen' ? 'Ver' : 'Descargar'}
                     </button>
+                    {esDirectora && (
+                      <button 
+                        className="btn btn-danger" 
+                        onClick={() => handleEliminar(doc.id, doc.titulo)}
+                        style={{ flex: '1 1 auto' }}
+                      >
+                        Eliminar
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -254,29 +414,23 @@ export default function Documentos() {
         </div>
       </div>
 
-      {showModal && (
-        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+      {showModal && esDirectora && (
+        <div className="modal-backdrop" onClick={() => !uploading && setShowModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="modal-header">
-              <h2 className="text-xl">Subir Documento</h2>
-              <button 
-                className="btn btn-ghost" 
-                onClick={() => setShowModal(false)} 
-                style={{ padding: '0.5rem' }}
-              >
-                ✕
-              </button>
+              <h2>Subir Documento</h2>
+              <button className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={uploading}>✕</button>
             </div>
-
             <form onSubmit={handleSubmit} className="form">
               <div>
                 <label className="label">Título*</label>
                 <input 
-                  type="text" 
                   className="input" 
                   value={titulo} 
-                  onChange={(e) => setTitulo(e.target.value)} 
-                  required 
+                  onChange={e => setTitulo(e.target.value)} 
+                  placeholder="Nombre del documento"
+                  required
+                  disabled={uploading}
                 />
               </div>
 
@@ -285,53 +439,31 @@ export default function Documentos() {
                 <textarea 
                   className="textarea" 
                   value={descripcion} 
-                  onChange={(e) => setDescripcion(e.target.value)} 
-                  rows={3} 
+                  onChange={e => setDescripcion(e.target.value)} 
+                  placeholder="Opcional"
+                  rows={3}
+                  disabled={uploading}
                 />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="label">Mes*</label>
-                  <select 
-                    className="select" 
-                    value={mes} 
-                    onChange={(e) => setMes(Number(e.target.value))} 
-                    required
-                  >
-                    {meses.map((m, i) => (
-                      <option key={i} value={i + 1}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="label">Año*</label>
-                  <input 
-                    type="number" 
-                    className="input" 
-                    value={anio} 
-                    onChange={(e) => setAnio(Number(e.target.value))} 
-                    min={2020} 
-                    max={2050} 
-                    required 
-                  />
-                </div>
               </div>
 
               <div>
-                <label className="label">Archivo* (PDF, Word, Excel - Max 10MB)</label>
+                <label className="label">Archivo* (máx. 10MB)</label>
                 <input 
-                  type="file" 
-                  className="input" 
-                  accept=".pdf,.doc,.docx,.xls,.xlsx" 
-                  onChange={(e) => setArchivo(e.target.files?.[0] || null)} 
-                  required 
+                  type="file"
+                  className="input"
+                  onChange={handleFileChange}
+                  accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt"
+                  required
+                  disabled={uploading}
                 />
+                <small style={{ display: 'block', marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
+                  PDF, Imágenes, Word, Excel, Texto
+                </small>
                 {archivo && (
-                  <p className="text-sm" style={{ marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
-                    {archivo.name} ({formatFileSize(archivo.size)})
-                  </p>
+                  <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: 'var(--surface-elevated)', borderRadius: '6px', fontSize: '0.875rem' }}>
+                    <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>📎 {archivo.name}</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>💾 {formatearTamano(archivo.size)}</div>
+                  </div>
                 )}
               </div>
 
@@ -339,17 +471,17 @@ export default function Documentos() {
                 <button 
                   type="button" 
                   className="btn btn-ghost" 
-                  onClick={() => setShowModal(false)} 
+                  onClick={() => setShowModal(false)}
                   disabled={uploading}
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit" 
-                  className="btn" 
+                  className="btn"
                   disabled={uploading}
                 >
-                  {uploading ? 'Subiendo...' : 'Subir Documento'}
+                  {uploading ? 'Subiendo...' : 'Subir'}
                 </button>
               </div>
             </form>
