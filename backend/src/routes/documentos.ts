@@ -8,26 +8,37 @@ import { Readable } from 'stream'
 const router = Router()
 
 // Configurar Cloudinary
+console.log('🔧 Configurando Cloudinary...')
 if (process.env.CLOUDINARY_URL) {
   cloudinary.config({
     cloudinary_url: process.env.CLOUDINARY_URL
   })
-  console.log('☁️  Cloudinary configurado para documentos')
+  console.log('✅ Cloudinary configurado')
 } else {
-  console.warn('⚠️  CLOUDINARY_URL no configurado')
+  console.error('❌ CLOUDINARY_URL NO ESTÁ CONFIGURADO')
 }
 
 // Configurar multer
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    console.log('📎 Multer recibió archivo:', file.originalname, file.mimetype)
+    cb(null, true)
+  }
 })
 
 // Helper: Subir a Cloudinary
 async function subirACloudinary(buffer: Buffer, filename: string): Promise<string> {
+  console.log('☁️  Iniciando subida a Cloudinary:', filename)
+  console.log('   Buffer size:', buffer.length, 'bytes')
+
   return new Promise((resolve, reject) => {
     const ext = filename.split('.').pop()?.toLowerCase() || ''
     const resourceType = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext) ? 'image' : 'raw'
+
+    console.log('   Extension:', ext)
+    console.log('   Resource type:', resourceType)
 
     const uploadStream = cloudinary.uploader.upload_stream(
       {
@@ -37,10 +48,10 @@ async function subirACloudinary(buffer: Buffer, filename: string): Promise<strin
       },
       (error, result) => {
         if (error) {
-          console.error('❌ Error Cloudinary:', error)
+          console.error('❌ Error en Cloudinary:', error)
           reject(error)
         } else {
-          console.log('✅ Subido:', result?.secure_url)
+          console.log('✅ Subido exitosamente:', result?.secure_url)
           resolve(result?.secure_url || '')
         }
       }
@@ -58,8 +69,10 @@ async function esDirectora(userId: string): Promise<boolean> {
   try {
     const result = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [userId])
     const rol = String(result.rows[0]?.rol).toLowerCase()
+    console.log('👑 Verificando rol - Usuario:', userId, '| Rol:', rol)
     return rol === 'directora'
   } catch (error) {
+    console.error('❌ Error verificando rol:', error)
     return false
   }
 }
@@ -104,47 +117,67 @@ router.get('/', async (req: any, res: any) => {
 
     res.json(result.rows)
   } catch (error: any) {
-    console.error('❌ Error:', error.message)
+    console.error('❌ Error en GET /documentos:', error.message)
     res.status(500).json({ error: 'Error al listar documentos' })
   }
 })
 
 // POST /documentos - Subir nuevo documento
 router.post('/', upload.single('archivo'), async (req: any, res: any) => {
+  console.log('\n\n🚀 ========== INICIO POST /documentos ==========')
+  
   try {
+    console.log('1️⃣ Request recibido')
+    console.log('   Body:', req.body)
+    console.log('   File:', req.file ? 'SÍ' : 'NO')
+    console.log('   User:', req.user?.email)
+
     const { titulo, descripcion } = req.body
     const userId = req.user?.id
     const file = req.file
 
-    console.log('\n📤 POST /documentos')
-    console.log('Usuario:', req.user?.email)
-    console.log('Archivo:', file?.originalname)
-
     if (!userId) {
+      console.log('❌ No hay userId')
       return res.status(401).json({ error: 'No autenticado' })
     }
 
+    console.log('2️⃣ Verificando si es directora...')
     const esDir = await esDirectora(userId)
+    console.log('   Resultado:', esDir)
+
     if (!esDir) {
-      console.log('❌ No es directora')
+      console.log('❌ Usuario no es directora')
       return res.status(403).json({ error: 'Solo la directora puede subir documentos' })
     }
 
     if (!file) {
+      console.log('❌ No hay archivo')
       return res.status(400).json({ error: 'No se recibió archivo' })
     }
 
+    console.log('3️⃣ Archivo recibido:')
+    console.log('   Nombre:', file.originalname)
+    console.log('   Tipo:', file.mimetype)
+    console.log('   Tamaño:', file.size, 'bytes')
+
     if (!titulo?.trim()) {
+      console.log('❌ No hay título')
       return res.status(400).json({ error: 'El título es requerido' })
     }
 
-    console.log('☁️  Subiendo a Cloudinary...')
+    console.log('4️⃣ Subiendo a Cloudinary...')
     const archivoUrl = await subirACloudinary(file.buffer, file.originalname)
+    console.log('   URL obtenida:', archivoUrl)
 
     const archivoTipo = detectarTipo(file.mimetype)
     const fechaActual = new Date()
     const mes = fechaActual.getMonth() + 1
     const anio = fechaActual.getFullYear()
+
+    console.log('5️⃣ Guardando en base de datos...')
+    console.log('   Titulo:', titulo.trim())
+    console.log('   Archivo URL:', archivoUrl)
+    console.log('   Mes/Año:', mes, '/', anio)
 
     const result = await pool.query(
       `INSERT INTO documentos_mensuales 
@@ -164,11 +197,15 @@ router.post('/', upload.single('archivo'), async (req: any, res: any) => {
       ]
     )
 
-    console.log('✅ Guardado:', result.rows[0].id)
+    console.log('✅ Documento guardado exitosamente!')
+    console.log('   ID:', result.rows[0].id)
+    console.log('🎉 ========== FIN POST /documentos ==========\n\n')
 
     res.json({ ok: true, documento: result.rows[0] })
   } catch (error: any) {
-    console.error('❌ Error:', error.message)
+    console.error('❌❌❌ ERROR CRÍTICO:', error)
+    console.error('Stack:', error.stack)
+    console.log('🔥 ========== ERROR POST /documentos ==========\n\n')
     res.status(500).json({ error: error.message || 'Error al subir documento' })
   }
 })
