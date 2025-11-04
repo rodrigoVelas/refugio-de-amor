@@ -6,13 +6,15 @@ interface Documento {
   id: string
   titulo: string
   descripcion: string | null
-  tipo: string
-  nombre_archivo: string
-  tamano_bytes: number
-  mime_type: string
+  archivo_nombre: string
+  archivo_tipo: string
+  archivo_size: number
+  archivo_url: string
+  mes: number
+  anio: number
   subido_por: string
   subido_por_nombre: string
-  creado_en: string
+  fecha_subida: string
 }
 
 interface Usuario {
@@ -42,22 +44,13 @@ export default function Documentos() {
     try {
       setLoading(true)
 
-      console.log('🔄 Cargando datos de usuario...')
-
       // Obtener usuario actual
       const userRes = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
       
-      console.log('📡 Response status:', userRes.status)
-
       if (userRes.ok) {
         const userData = await userRes.json()
-        console.log('✅ Usuario cargado:', userData)
-        console.log('   Email:', userData.email)
-        console.log('   Rol:', userData.rol)
-        console.log('   Tipo de rol:', typeof userData.rol)
+        console.log('👤 Usuario:', userData.email, '| Rol:', userData.rol)
         setUsuario(userData)
-      } else {
-        console.error('❌ Error al cargar usuario:', userRes.status)
       }
 
       // Obtener documentos
@@ -65,7 +58,7 @@ export default function Documentos() {
       
       if (res.ok) {
         const data = await res.json()
-        console.log('📄 Documentos cargados:', data.length)
+        console.log('📄 Documentos:', data.length)
         setDocumentos(data)
       }
     } catch (error) {
@@ -75,19 +68,9 @@ export default function Documentos() {
     }
   }
 
-  // Detectar si es directora (solo por texto)
   const esDirectora = usuario ? String(usuario.rol).toLowerCase() === 'directora' : false
 
-  console.log('🔍 Estado actual:')
-  console.log('   Usuario:', usuario?.email)
-  console.log('   Rol:', usuario?.rol)
-  console.log('   Rol lowercase:', String(usuario?.rol).toLowerCase())
-  console.log('   ¿Es directora?:', esDirectora)
-
   function abrirModal() {
-    console.log('📂 Intentando abrir modal...')
-    console.log('   ¿Es directora?:', esDirectora)
-
     if (!esDirectora) {
       Swal.fire({
         icon: 'error',
@@ -183,60 +166,25 @@ export default function Documentos() {
     }
   }
 
-  async function descargarDocumento(id: string, nombreArchivo: string) {
-    try {
-      const res = await fetch(`${API_URL}/documentos/${id}/descargar`, {
-        credentials: 'include'
-      })
-
-      if (!res.ok) throw new Error('Error al descargar')
-
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = nombreArchivo
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      console.log('✅ Descargado:', nombreArchivo)
-    } catch (error) {
-      console.error('Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al descargar',
-        confirmButtonColor: '#3b82f6'
-      })
-    }
-  }
-
   async function verDocumento(doc: Documento) {
     try {
-      const res = await fetch(`${API_URL}/documentos/${doc.id}`, {
-        credentials: 'include'
-      })
+      const esPDF = doc.archivo_tipo === 'application/pdf'
+      const esImagen = doc.archivo_tipo.startsWith('image/')
 
-      if (!res.ok) throw new Error('Error al cargar')
-
-      const data = await res.json()
-
-      if (doc.tipo === 'imagen') {
-        const base64Img = `data:${data.mime_type};base64,${data.contenido_base64}`
+      if (esImagen) {
         Swal.fire({
           title: doc.titulo,
-          imageUrl: base64Img,
+          imageUrl: doc.archivo_url,
           imageAlt: doc.titulo,
           width: 800,
-          confirmButtonColor: '#3b82f6'
+          confirmButtonColor: '#3b82f6',
+          showCloseButton: true
         })
       } else {
-        descargarDocumento(doc.id, doc.nombre_archivo)
+        // Abrir en nueva pestaña
+        window.open(doc.archivo_url, '_blank')
       }
     } catch (error) {
-      console.error('Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -251,7 +199,7 @@ export default function Documentos() {
       Swal.fire({
         icon: 'error',
         title: 'Acceso denegado',
-        text: 'Solo la directora puede eliminar documentos',
+        text: 'Solo la directora puede eliminar',
         confirmButtonColor: '#3b82f6'
       })
       return
@@ -304,14 +252,11 @@ export default function Documentos() {
   }
 
   function getIconoTipo(tipo: string): string {
-    switch (tipo) {
-      case 'pdf': return '📄'
-      case 'imagen': return '🖼️'
-      case 'word': return '📝'
-      case 'excel': return '📊'
-      case 'texto': return '📃'
-      default: return '📎'
-    }
+    if (tipo === 'application/pdf') return '📄'
+    if (tipo.startsWith('image/')) return '🖼️'
+    if (tipo.includes('word')) return '📝'
+    if (tipo.includes('excel') || tipo.includes('spreadsheet')) return '📊'
+    return '📎'
   }
 
   function formatearTamano(bytes: number): string {
@@ -334,7 +279,6 @@ export default function Documentos() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
-      console.log('📎 Archivo seleccionado:', file.name, '-', formatearTamano(file.size))
       setArchivo(file)
     }
   }
@@ -347,7 +291,7 @@ export default function Documentos() {
             <h1 className="card-title">Documentos</h1>
             {usuario && (
               <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                {esDirectora ? '👑 Directora - Puedes subir y eliminar' : '👤 Puedes ver y descargar documentos'}
+                {esDirectora ? '👑 Directora - Puedes subir y eliminar' : '👤 Puedes ver y descargar'}
               </p>
             )}
           </div>
@@ -382,7 +326,7 @@ export default function Documentos() {
                 <div key={doc.id} style={{ padding: '1.25rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
                     <div style={{ fontSize: '2.5rem' }}>
-                      {getIconoTipo(doc.tipo)}
+                      {getIconoTipo(doc.archivo_tipo)}
                     </div>
                     <div style={{ flex: 1 }}>
                       <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem', fontWeight: '500' }}>
@@ -394,10 +338,10 @@ export default function Documentos() {
                         </p>
                       )}
                       <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                        <div>📎 {doc.nombre_archivo}</div>
-                        <div>💾 {formatearTamano(doc.tamano_bytes)}</div>
+                        <div>📎 {doc.archivo_nombre}</div>
+                        <div>💾 {formatearTamano(doc.archivo_size)}</div>
                         <div>📤 {doc.subido_por_nombre}</div>
-                        <div>📅 {formatearFecha(doc.creado_en)}</div>
+                        <div>📅 {formatearFecha(doc.fecha_subida)}</div>
                       </div>
                     </div>
                   </div>
@@ -408,7 +352,7 @@ export default function Documentos() {
                       onClick={() => verDocumento(doc)}
                       style={{ flex: '1 1 auto' }}
                     >
-                      {doc.tipo === 'imagen' ? 'Ver' : 'Descargar'}
+                      {doc.archivo_tipo.startsWith('image/') ? 'Ver' : 'Abrir'}
                     </button>
                     {esDirectora && (
                       <button 
