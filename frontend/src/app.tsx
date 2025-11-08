@@ -17,6 +17,7 @@ import Facturas from './pages/facturas'
 import Asistencia from './pages/asistencia'
 import Actividades from './pages/actividades'
 import Documentos from './pages/documentos'
+import Reportes from './pages/reportes'
 
 
 
@@ -210,6 +211,8 @@ export default function App() {
           </div>
         } />
         <Route path="/documentos" element={<Documentos />} />
+        <Route path="/reportes" element={<Reportes />} />
+
       </Routes>
     </AppLayout>
   )

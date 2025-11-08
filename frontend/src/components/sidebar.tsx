@@ -4,6 +4,10 @@ import { can } from '../lib/permissions'
 export default function Sidebar({ user }: { user: any }) {
   const location = useLocation()
   
+  // Verificar si puede ver reportes (directora o contabilidad)
+  const puedeVerReportes = user?.rol?.toLowerCase() === 'directora' || 
+                           user?.rol?.toLowerCase() === 'contabilidad'
+  
   const menu = [
     { label: 'Inicio', route: '/inicio', perms: ['*'], icon: '' },
     { label: 'Mi perfil', route: '/perfil', perms: ['ver_perfil'], icon: '' },
@@ -14,6 +18,8 @@ export default function Sidebar({ user }: { user: any }) {
     { label: 'Facturas', route: '/facturas', perms: ['facturas_ver_propias', 'facturas_ver_todas'], icon: '' },
     { label: 'Documentos', route: '/documentos', perms: ['*'], icon: '' },
     { label: 'Actividades', route: '/actividades', perms: ['actividades_ver_calendario'], icon: '' },
+    // Reportes - solo para directora y contabilidad
+    ...(puedeVerReportes ? [{ label: 'Reportes', route: '/reportes', perms: ['*'], icon: '📊' }] : []),
     { label: 'Usuarios', route: '/admin/usuarios', perms: ['ver_usuarios'], icon: '' },
     // { label: 'Roles', route: '/admin/roles', perms: ['ver_roles'], icon: 'admin_panel_settings' },
   ]
@@ -26,7 +32,7 @@ export default function Sidebar({ user }: { user: any }) {
           return (
             <li key={i} className={isActive ? 'active' : ''}>
               <Link to={m.route} className="sidebar-link">
-                {m.icon && <i className="material-icons">{m.icon}</i>}
+                {m.icon && <span style={{ marginRight: '0.5rem' }}>{m.icon}</span>}
                 <span>{m.label}</span>
               </Link>
             </li>

@@ -16,6 +16,7 @@ import facturas from './routes/facturas'
 import asistencia from './routes/asistencia'
 import actividades from './routes/actividades'
 import documentos from './routes/documentos'
+import reportes from './routes/reportes'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -94,6 +95,7 @@ app.use('/facturas', facturas)
 app.use('/asistencia', asistencia)
 app.use('/actividades', actividades)
 app.use('/documentos', documentos)
+app.use('/reportes', reportes)
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
