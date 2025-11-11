@@ -454,5 +454,70 @@ r.get('/reportes/ninos/export.csv', verificarAcceso, async (req: any, res: any) 
     res.status(500).send('Error al exportar')
   }
 })
+// GET /reportes/ninos-inactivos/export.csv - Exportar niños inactivos a CSV
+r.get('/reportes/ninos-inactivos/export.csv', verificarAcceso, async (req: any, res: any) => {
+  try {
+    const query = `
+      SELECT 
+        n.nombres,
+        n.apellidos,
+        to_char(n.fecha_nacimiento, 'YYYY-MM-DD') as fecha_nacimiento,
+        EXTRACT(YEAR FROM AGE(n.fecha_nacimiento))::int as edad,
+        CASE WHEN n.genero = 'M' THEN 'Masculino' ELSE 'Femenino' END as genero,
+        COALESCE(nv.nombre, 'Sin nivel') as nivel,
+        COALESCE(sn.nombre, 'Sin subnivel') as subnivel,
+        n.nombre_encargado as encargado,
+        n.telefono_contacto as telefono,
+        COALESCE(n.motivo_inactividad, 'No especificado') as motivo_inactividad,
+        to_char(n.fecha_inactivacion, 'YYYY-MM-DD') as fecha_inactivacion
+      FROM ninos n
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      WHERE n.activo = false
+      ORDER BY n.fecha_inactivacion DESC NULLS LAST, n.nombres ASC
+    `
+
+    const { rows } = await pool.query(query)
+
+    // Armar CSV
+    const headers = ['nombres', 'apellidos', 'fecha_nacimiento', 'edad', 'genero', 'nivel', 'subnivel', 'encargado', 'telefono', 'motivo_inactividad', 'fecha_inactivacion']
+    const escape = (s: any) => {
+      const v = (s === null || s === undefined) ? '' : String(s)
+      return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+    }
+
+    const lines = [
+      'Nombres,Apellidos,Fecha Nacimiento,Edad,Género,Nivel,Subnivel,Encargado,Teléfono,Motivo Inactividad,Fecha Inactivación',
+      ...rows.map(r => headers.map(h => escape((r as any)[h])).join(','))
+    ]
+
+    // Agregar resumen
+    lines.push('')
+    lines.push('RESUMEN,,,,,,,,,')
+    lines.push(`Total Niños Inactivos,${rows.length},,,,,,,,`)
+    
+    // Contar por motivo si existe el campo
+    const porMotivo: any = {}
+    rows.forEach((r: any) => {
+      const motivo = r.motivo_inactividad || 'No especificado'
+      porMotivo[motivo] = (porMotivo[motivo] || 0) + 1
+    })
+    
+    lines.push('')
+    lines.push('POR MOTIVO,,,,,,,,,')
+    Object.entries(porMotivo).forEach(([motivo, count]) => {
+      lines.push(`${motivo},${count},,,,,,,,`)
+    })
+
+    const csv = lines.join('\n')
+
+    res.setHeader('content-type', 'text/csv; charset=utf-8')
+    res.setHeader('content-disposition', `attachment; filename="reporte_ninos_inactivos_${new Date().toISOString().split('T')[0]}.csv"`)
+    res.send(csv)
+  } catch (error: any) {
+    console.error('Error:', error.message)
+    res.status(500).send('Error al exportar')
+  }
+})
 
 export default r
