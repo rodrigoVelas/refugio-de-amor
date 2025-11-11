@@ -84,7 +84,7 @@ app.use('/auth', auth)
 // Middleware de autenticación para todas las rutas siguientes
 app.use(authMiddleware)
 
-// Rutas protegidas (requieren autenticación)
+
 // Rutas protegidas (requieren autenticación)
 app.use(perfil)
 app.use('/niveles', niveles)
@@ -93,10 +93,16 @@ app.use('/ninos', ninos)
 app.use('/usuarios', usuarios)
 app.use('/roles', roles)
 app.use('/facturas', facturas)
-app.use(asistencia)  // ← SIN prefijo (porque asistencia.ts ya lo tiene)
+app.use(asistencia)  // ← SIN PREFIJO - porque asistencia.ts ya lo tiene
 app.use('/actividades', actividades)
 app.use('/documentos', documentos)
-app.use('/reportes', reportes)  // ← CON prefijo (porque reportes.ts NO lo tiene)
+app.use('/reportes', reportes)  // ← CON PREFIJO
+
+// Manejo de rutas no encontradas
+app.use((req, res) => {
+  console.log('❌ 404:', req.method, req.path)
+  res.status(404).json({ error: 'Ruta no encontrada: ' + req.path })
+})
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
