@@ -1,10 +1,10 @@
-// src/routes/reportes.ts
 import { Router } from 'express'
 import { pool } from '../core/db'
+import { getUserPerms } from '../core/rbac'
 
-const router = Router()
+const r = Router()
 
-// Helper: Verificar si es directora o contabilidad
+// Helper: Verificar si puede ver reportes
 async function puedeVerReportes(userId: string): Promise<boolean> {
   try {
     const result = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [userId])
@@ -15,28 +15,19 @@ async function puedeVerReportes(userId: string): Promise<boolean> {
   }
 }
 
-// Middleware para verificar acceso
-const verificarAccesoReportes = async (req: any, res: any, next: any) => {
+// Middleware para verificar acceso a reportes
+async function verificarAcceso(req: any, res: any, next: any) {
   const userId = req.user?.id
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'No autenticado' })
-  }
+  if (!userId) return res.status(401).send('no auth')
 
   const tieneAcceso = await puedeVerReportes(userId)
-  
-  if (!tieneAcceso) {
-    return res.status(403).json({ error: 'Solo directora y contabilidad pueden acceder a reportes' })
-  }
+  if (!tieneAcceso) return res.status(403).send('solo directora y contabilidad')
 
   next()
 }
 
-// Aplicar middleware a todas las rutas
-router.use(verificarAccesoReportes)
-
-// GET /reportes/financiero - Reporte de facturas por rango de fechas
-router.get('/financiero', async (req: any, res: any) => {
+// GET /reportes/financiero - Reporte de facturas
+r.get('/reportes/financiero', verificarAcceso, async (req: any, res: any) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query
 
@@ -52,9 +43,9 @@ router.get('/financiero', async (req: any, res: any) => {
         f.monto,
         f.tipo,
         f.estado,
-        f.fecha_emision,
-        f.fecha_vencimiento,
-        f.creado_en,
+        to_char(f.fecha_emision, 'YYYY-MM-DD') as fecha_emision,
+        to_char(f.fecha_vencimiento, 'YYYY-MM-DD') as fecha_vencimiento,
+        to_char(f.creado_en, 'YYYY-MM-DD') as creado_en,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as creado_por_nombre
       FROM facturas f
       LEFT JOIN usuarios u ON f.creado_por = u.id
@@ -75,28 +66,27 @@ router.get('/financiero', async (req: any, res: any) => {
 
     query += ` ORDER BY f.creado_en DESC`
 
-    const result = await pool.query(query, params)
+    const { rows } = await pool.query(query, params)
 
     // Calcular totales
-    const ingresos = result.rows
+    const ingresos = rows
       .filter((f: any) => f.tipo === 'ingreso')
       .reduce((sum: number, f: any) => sum + parseFloat(f.monto), 0)
 
-    const egresos = result.rows
+    const egresos = rows
       .filter((f: any) => f.tipo === 'egreso')
       .reduce((sum: number, f: any) => sum + parseFloat(f.monto), 0)
 
     const balance = ingresos - egresos
 
-    console.log('✅ Facturas encontradas:', result.rows.length)
+    console.log('✅ Facturas:', rows.length)
     console.log('   Ingresos: Q', ingresos.toFixed(2))
     console.log('   Egresos: Q', egresos.toFixed(2))
-    console.log('   Balance: Q', balance.toFixed(2))
 
     res.json({
-      facturas: result.rows,
+      facturas: rows,
       resumen: {
-        total_facturas: result.rows.length,
+        total_facturas: rows.length,
         ingresos: ingresos.toFixed(2),
         egresos: egresos.toFixed(2),
         balance: balance.toFixed(2),
@@ -110,8 +100,78 @@ router.get('/financiero', async (req: any, res: any) => {
   }
 })
 
+// GET /reportes/financiero/export.csv - Exportar a CSV
+r.get('/reportes/financiero/export.csv', verificarAcceso, async (req: any, res: any) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query
+
+    let query = `
+      SELECT 
+        f.numero_factura,
+        f.descripcion,
+        f.tipo,
+        f.monto,
+        f.estado,
+        to_char(f.fecha_emision, 'YYYY-MM-DD') as fecha_emision,
+        to_char(f.fecha_vencimiento, 'YYYY-MM-DD') as fecha_vencimiento,
+        to_char(f.creado_en, 'YYYY-MM-DD HH24:MI') as fecha_subida,
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as creado_por
+      FROM facturas f
+      LEFT JOIN usuarios u ON f.creado_por = u.id
+      WHERE 1=1
+    `
+
+    const params: any[] = []
+
+    if (fecha_inicio) {
+      params.push(fecha_inicio)
+      query += ` AND f.creado_en >= $${params.length}::date`
+    }
+
+    if (fecha_fin) {
+      params.push(fecha_fin)
+      query += ` AND f.creado_en <= $${params.length}::date + INTERVAL '1 day'`
+    }
+
+    query += ` ORDER BY f.creado_en DESC`
+
+    const { rows } = await pool.query(query, params)
+
+    // Armar CSV
+    const headers = ['numero_factura', 'descripcion', 'tipo', 'monto', 'estado', 'fecha_emision', 'fecha_vencimiento', 'fecha_subida', 'creado_por']
+    const escape = (s: any) => {
+      const v = (s === null || s === undefined) ? '' : String(s)
+      return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+    }
+
+    const lines = [
+      'No. Factura,Descripción,Tipo,Monto,Estado,Fecha Emisión,Fecha Vencimiento,Fecha Subida,Creado Por',
+      ...rows.map(r => headers.map(h => escape((r as any)[h])).join(','))
+    ]
+
+    // Agregar totales al final
+    const ingresos = rows.filter((f: any) => f.tipo === 'ingreso').reduce((sum: number, f: any) => sum + parseFloat(f.monto), 0)
+    const egresos = rows.filter((f: any) => f.tipo === 'egreso').reduce((sum: number, f: any) => sum + parseFloat(f.monto), 0)
+    
+    lines.push('')
+    lines.push(`RESUMEN,,,,,,,,`)
+    lines.push(`Total Ingresos,,,Q ${ingresos.toFixed(2)},,,,,`)
+    lines.push(`Total Egresos,,,Q ${egresos.toFixed(2)},,,,,`)
+    lines.push(`Balance,,,Q ${(ingresos - egresos).toFixed(2)},,,,,`)
+
+    const csv = lines.join('\n')
+
+    res.setHeader('content-type', 'text/csv; charset=utf-8')
+    res.setHeader('content-disposition', `attachment; filename="reporte_financiero_${fecha_inicio || 'todos'}_${fecha_fin || 'todos'}.csv"`)
+    res.send(csv)
+  } catch (error: any) {
+    console.error('Error:', error.message)
+    res.status(500).send('Error al exportar')
+  }
+})
+
 // GET /reportes/asistencia - Reporte de asistencia mensual
-router.get('/asistencia', async (req: any, res: any) => {
+r.get('/reportes/asistencia', verificarAcceso, async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
 
@@ -122,7 +182,7 @@ router.get('/asistencia', async (req: any, res: any) => {
     let query = `
       SELECT 
         a.id,
-        a.fecha,
+        to_char(a.fecha, 'YYYY-MM-DD') as fecha,
         a.estado,
         n.nombres || ' ' || n.apellidos as nino_nombre,
         nv.nombre as nivel_nombre,
@@ -132,7 +192,7 @@ router.get('/asistencia', async (req: any, res: any) => {
       JOIN ninos n ON a.nino_id = n.id
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
-      LEFT JOIN usuarios u ON a.registrado_por = u.id
+      LEFT JOIN usuarios u ON a.maestro_id = u.id
       WHERE 1=1
     `
 
@@ -145,28 +205,25 @@ router.get('/asistencia', async (req: any, res: any) => {
 
     query += ` ORDER BY a.fecha DESC, n.nombres ASC`
 
-    const result = await pool.query(query, params)
+    const { rows } = await pool.query(query, params)
 
     // Calcular estadísticas
-    const total = result.rows.length
-    const presentes = result.rows.filter((a: any) => a.estado === 'presente').length
-    const ausentes = result.rows.filter((a: any) => a.estado === 'ausente').length
-    const justificados = result.rows.filter((a: any) => a.estado === 'justificado').length
+    const total = rows.length
+    const presentes = rows.filter((a: any) => a.estado === 'presente').length
+    const ausentes = rows.filter((a: any) => a.estado === 'ausente').length
+    const suplentes = rows.filter((a: any) => a.estado === 'suplente').length
 
     const porcentajeAsistencia = total > 0 ? ((presentes / total) * 100).toFixed(2) : '0'
 
-    console.log('✅ Registros encontrados:', total)
-    console.log('   Presentes:', presentes)
-    console.log('   Ausentes:', ausentes)
-    console.log('   % Asistencia:', porcentajeAsistencia)
+    console.log('✅ Registros:', total)
 
     res.json({
-      asistencias: result.rows,
+      asistencias: rows,
       resumen: {
         total_registros: total,
         presentes,
         ausentes,
-        justificados,
+        suplentes,
         porcentaje_asistencia: porcentajeAsistencia,
         mes: mes || null,
         anio: anio || null
@@ -178,26 +235,96 @@ router.get('/asistencia', async (req: any, res: any) => {
   }
 })
 
+// GET /reportes/asistencia/export.csv - Exportar asistencia a CSV
+r.get('/reportes/asistencia/export.csv', verificarAcceso, async (req: any, res: any) => {
+  try {
+    const { mes, anio } = req.query
+
+    let query = `
+      SELECT 
+        to_char(a.fecha, 'YYYY-MM-DD') as fecha,
+        n.nombres || ' ' || n.apellidos as nino,
+        COALESCE(nv.nombre, 'Sin nivel') as nivel,
+        COALESCE(sn.nombre, 'Sin subnivel') as subnivel,
+        a.estado,
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as registrado_por
+      FROM asistencia a
+      JOIN ninos n ON a.nino_id = n.id
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      LEFT JOIN usuarios u ON a.maestro_id = u.id
+      WHERE 1=1
+    `
+
+    const params: any[] = []
+
+    if (mes && anio) {
+      params.push(anio, mes)
+      query += ` AND EXTRACT(YEAR FROM a.fecha) = $1 AND EXTRACT(MONTH FROM a.fecha) = $2`
+    }
+
+    query += ` ORDER BY a.fecha DESC, n.nombres ASC`
+
+    const { rows } = await pool.query(query, params)
+
+    // Armar CSV
+    const headers = ['fecha', 'nino', 'nivel', 'subnivel', 'estado', 'registrado_por']
+    const escape = (s: any) => {
+      const v = (s === null || s === undefined) ? '' : String(s)
+      return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+    }
+
+    const lines = [
+      'Fecha,Niño,Nivel,Subnivel,Estado,Registrado Por',
+      ...rows.map(r => headers.map(h => escape((r as any)[h])).join(','))
+    ]
+
+    // Agregar resumen
+    const total = rows.length
+    const presentes = rows.filter((a: any) => a.estado === 'presente').length
+    const ausentes = rows.filter((a: any) => a.estado === 'ausente').length
+    const suplentes = rows.filter((a: any) => a.estado === 'suplente').length
+    const porcentaje = total > 0 ? ((presentes / total) * 100).toFixed(2) : '0'
+
+    lines.push('')
+    lines.push('RESUMEN,,,,,')
+    lines.push(`Total Registros,${total},,,,`)
+    lines.push(`Presentes,${presentes},,,,`)
+    lines.push(`Ausentes,${ausentes},,,,`)
+    lines.push(`Suplentes,${suplentes},,,,`)
+    lines.push(`% Asistencia,${porcentaje}%,,,,`)
+
+    const csv = lines.join('\n')
+
+    res.setHeader('content-type', 'text/csv; charset=utf-8')
+    res.setHeader('content-disposition', `attachment; filename="reporte_asistencia_${mes || 'todos'}_${anio || 'todos'}.csv"`)
+    res.send(csv)
+  } catch (error: any) {
+    console.error('Error:', error.message)
+    res.status(500).send('Error al exportar')
+  }
+})
+
 // GET /reportes/ninos - Reporte estadístico de niños
-router.get('/ninos', async (req: any, res: any) => {
+r.get('/reportes/ninos', verificarAcceso, async (req: any, res: any) => {
   try {
     console.log('📊 Reporte Estadísticas de Niños')
 
-    // Obtener todos los niños con sus datos
+    // Obtener todos los niños
     const ninosQuery = `
       SELECT 
         n.id,
         n.nombres,
         n.apellidos,
-        n.fecha_nacimiento,
+        to_char(n.fecha_nacimiento, 'YYYY-MM-DD') as fecha_nacimiento,
         n.genero,
         n.direccion,
         n.telefono_contacto,
         n.nombre_encargado,
         n.activo,
-        nv.nombre as nivel_nombre,
-        sn.nombre as subnivel_nombre,
-        EXTRACT(YEAR FROM AGE(n.fecha_nacimiento)) as edad
+        COALESCE(nv.nombre, 'Sin nivel') as nivel_nombre,
+        COALESCE(sn.nombre, 'Sin subnivel') as subnivel_nombre,
+        EXTRACT(YEAR FROM AGE(n.fecha_nacimiento))::int as edad
       FROM ninos n
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
@@ -209,8 +336,8 @@ router.get('/ninos', async (req: any, res: any) => {
     // Estadísticas por nivel
     const porNivelQuery = `
       SELECT 
-        nv.nombre as nivel,
-        COUNT(n.id) as cantidad
+        COALESCE(nv.nombre, 'Sin nivel') as nivel,
+        COUNT(n.id)::int as cantidad
       FROM ninos n
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       WHERE n.activo = true
@@ -224,7 +351,7 @@ router.get('/ninos', async (req: any, res: any) => {
     const porGeneroQuery = `
       SELECT 
         genero,
-        COUNT(*) as cantidad
+        COUNT(*)::int as cantidad
       FROM ninos
       WHERE activo = true
       GROUP BY genero
@@ -241,7 +368,7 @@ router.get('/ninos', async (req: any, res: any) => {
           WHEN EXTRACT(YEAR FROM AGE(fecha_nacimiento)) BETWEEN 10 AND 14 THEN '10-14 años'
           ELSE '15+ años'
         END as rango_edad,
-        COUNT(*) as cantidad
+        COUNT(*)::int as cantidad
       FROM ninos
       WHERE activo = true
       GROUP BY rango_edad
@@ -254,7 +381,6 @@ router.get('/ninos', async (req: any, res: any) => {
     const ninosInactivos = ninosResult.rows.filter((n: any) => !n.activo).length
 
     console.log('✅ Total niños activos:', totalNinos)
-    console.log('   Niños inactivos:', ninosInactivos)
 
     res.json({
       ninos: ninosResult.rows,
@@ -272,4 +398,61 @@ router.get('/ninos', async (req: any, res: any) => {
   }
 })
 
-export default router
+// GET /reportes/ninos/export.csv - Exportar niños a CSV
+r.get('/reportes/ninos/export.csv', verificarAcceso, async (req: any, res: any) => {
+  try {
+    const query = `
+      SELECT 
+        n.nombres,
+        n.apellidos,
+        to_char(n.fecha_nacimiento, 'YYYY-MM-DD') as fecha_nacimiento,
+        EXTRACT(YEAR FROM AGE(n.fecha_nacimiento))::int as edad,
+        CASE WHEN n.genero = 'M' THEN 'Masculino' ELSE 'Femenino' END as genero,
+        COALESCE(nv.nombre, 'Sin nivel') as nivel,
+        COALESCE(sn.nombre, 'Sin subnivel') as subnivel,
+        n.nombre_encargado as encargado,
+        n.telefono_contacto as telefono,
+        n.direccion,
+        CASE WHEN n.activo THEN 'Activo' ELSE 'Inactivo' END as estado
+      FROM ninos n
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      ORDER BY n.nombres ASC
+    `
+
+    const { rows } = await pool.query(query)
+
+    // Armar CSV
+    const headers = ['nombres', 'apellidos', 'fecha_nacimiento', 'edad', 'genero', 'nivel', 'subnivel', 'encargado', 'telefono', 'direccion', 'estado']
+    const escape = (s: any) => {
+      const v = (s === null || s === undefined) ? '' : String(s)
+      return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+    }
+
+    const lines = [
+      'Nombres,Apellidos,Fecha Nacimiento,Edad,Género,Nivel,Subnivel,Encargado,Teléfono,Dirección,Estado',
+      ...rows.map(r => headers.map(h => escape((r as any)[h])).join(','))
+    ]
+
+    // Agregar resumen
+    const activos = rows.filter((n: any) => n.estado === 'Activo').length
+    const inactivos = rows.filter((n: any) => n.estado === 'Inactivo').length
+
+    lines.push('')
+    lines.push('RESUMEN,,,,,,,,,,')
+    lines.push(`Total Activos,${activos},,,,,,,,,`)
+    lines.push(`Total Inactivos,${inactivos},,,,,,,,,`)
+    lines.push(`Total General,${rows.length},,,,,,,,,`)
+
+    const csv = lines.join('\n')
+
+    res.setHeader('content-type', 'text/csv; charset=utf-8')
+    res.setHeader('content-disposition', `attachment; filename="reporte_ninos_${new Date().toISOString().split('T')[0]}.csv"`)
+    res.send(csv)
+  } catch (error: any) {
+    console.error('Error:', error.message)
+    res.status(500).send('Error al exportar')
+  }
+})
+
+export default r
