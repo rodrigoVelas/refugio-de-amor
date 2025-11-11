@@ -1,13 +1,42 @@
 import { useState, useEffect } from 'react'
 import { API_URL } from '../config'
 import Swal from 'sweetalert2'
-import { CSVLink } from 'react-csv'
 
 interface Usuario {
   id: string
   email: string
   nombres: string
   rol: string
+}
+
+// Función para descargar CSV manualmente
+function descargarCSV(data: any[][], filename: string) {
+  const csvContent = data.map(row => 
+    row.map(cell => {
+      const str = String(cell ?? '')
+      // Escapar comillas y envolver en comillas si contiene comas o saltos de línea
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }).join(',')
+  ).join('\n')
+
+  // Agregar BOM para que Excel reconozca UTF-8
+  const BOM = '\uFEFF'
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  
+  link.setAttribute('href', url)
+  link.setAttribute('download', filename)
+  link.style.visibility = 'hidden'
+  
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  
+  URL.revokeObjectURL(url)
 }
 
 export default function Reportes() {
@@ -80,7 +109,7 @@ export default function Reportes() {
 
       if (res.ok) {
         const data = await res.json()
-        console.log('📊 Datos financieros:', data)
+        console.log('📊 Datos financieros recibidos:', data)
         setDatosFinancieros(data.facturas || [])
         setResumenFinanciero(data.resumen || {})
         
@@ -96,7 +125,7 @@ export default function Reportes() {
         throw new Error(error.error || 'Error al cargar datos')
       }
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -119,7 +148,7 @@ export default function Reportes() {
 
       if (res.ok) {
         const data = await res.json()
-        console.log('📊 Datos asistencia:', data)
+        console.log('📊 Datos asistencia recibidos:', data)
         setDatosAsistencia(data.asistencias || [])
         setResumenAsistencia(data.resumen || {})
         
@@ -135,7 +164,7 @@ export default function Reportes() {
         throw new Error(error.error || 'Error al cargar datos')
       }
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -155,7 +184,7 @@ export default function Reportes() {
 
       if (res.ok) {
         const data = await res.json()
-        console.log('📊 Datos niños:', data)
+        console.log('📊 Datos niños recibidos:', data)
         setDatosNinos(data.ninos || [])
         
         Swal.fire({
@@ -170,7 +199,7 @@ export default function Reportes() {
         throw new Error(error.error || 'Error al cargar datos')
       }
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -191,7 +220,7 @@ export default function Reportes() {
       if (res.ok) {
         const data = await res.json()
         const inactivos = data.filter((n: any) => !n.activo)
-        console.log('📊 Datos inactivos:', inactivos)
+        console.log('📊 Datos inactivos recibidos:', inactivos)
         setDatosInactivos(inactivos)
         
         Swal.fire({
@@ -206,7 +235,7 @@ export default function Reportes() {
         throw new Error(error.error || 'Error al cargar datos')
       }
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -218,82 +247,166 @@ export default function Reportes() {
     }
   }
 
-  // ==================== PREPARAR DATOS PARA CSV ====================
+  // ==================== FUNCIONES DE DESCARGA ====================
 
-  const csvFinanciero = datosFinancieros.length > 0 ? [
-    ['No. Factura', 'Descripción', 'Tipo', 'Monto', 'Estado', 'Fecha Emisión', 'Fecha Vencimiento', 'Fecha Subida', 'Creado Por'],
-    ...datosFinancieros.map(f => [
-      f.numero_factura,
-      f.descripcion,
-      f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso',
-      `Q ${parseFloat(f.monto).toFixed(2)}`,
-      f.estado,
-      f.fecha_emision,
-      f.fecha_vencimiento || '',
-      f.creado_en,
-      f.creado_por_nombre || ''
-    ]),
-    [],
-    ['RESUMEN'],
-    ['Total Ingresos', '', '', `Q ${resumenFinanciero?.ingresos || '0.00'}`],
-    ['Total Egresos', '', '', `Q ${resumenFinanciero?.egresos || '0.00'}`],
-    ['Balance', '', '', `Q ${resumenFinanciero?.balance || '0.00'}`]
-  ] : []
+  function descargarReporteFinanciero() {
+    if (datosFinancieros.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin datos',
+        text: 'Primero debes cargar los datos',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
 
-  const csvAsistencia = datosAsistencia.length > 0 ? [
-    ['Fecha', 'Niño', 'Nivel', 'Subnivel', 'Estado', 'Registrado Por'],
-    ...datosAsistencia.map(a => [
-      a.fecha,
-      a.nino_nombre,
-      a.nivel_nombre || 'Sin nivel',
-      a.subnivel_nombre || 'Sin subnivel',
-      a.estado,
-      a.registrado_por_nombre || ''
-    ]),
-    [],
-    ['RESUMEN'],
-    ['Total Registros', resumenAsistencia?.total_registros || 0],
-    ['Presentes', resumenAsistencia?.presentes || 0],
-    ['Ausentes', resumenAsistencia?.ausentes || 0],
-    ['Suplentes', resumenAsistencia?.suplentes || 0],
-    ['% Asistencia', `${resumenAsistencia?.porcentaje_asistencia || 0}%`]
-  ] : []
+    const csvData = [
+      ['No. Factura', 'Descripción', 'Tipo', 'Monto', 'Estado', 'Fecha Emisión', 'Fecha Vencimiento', 'Fecha Subida', 'Creado Por'],
+      ...datosFinancieros.map(f => [
+        f.numero_factura,
+        f.descripcion,
+        f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso',
+        `Q ${parseFloat(f.monto).toFixed(2)}`,
+        f.estado,
+        f.fecha_emision,
+        f.fecha_vencimiento || '',
+        f.creado_en,
+        f.creado_por_nombre || ''
+      ]),
+      [],
+      ['RESUMEN'],
+      ['Total Ingresos', '', '', `Q ${resumenFinanciero?.ingresos || '0.00'}`],
+      ['Total Egresos', '', '', `Q ${resumenFinanciero?.egresos || '0.00'}`],
+      ['Balance', '', '', `Q ${resumenFinanciero?.balance || '0.00'}`]
+    ]
 
-  const csvNinos = datosNinos.length > 0 ? [
-    ['Nombres', 'Apellidos', 'Fecha Nacimiento', 'Edad', 'Género', 'Nivel', 'Subnivel', 'Encargado', 'Teléfono', 'Dirección'],
-    ...datosNinos.map(n => [
-      n.nombres,
-      n.apellidos,
-      n.fecha_nacimiento,
-      n.edad,
-      n.genero === 'M' ? 'Masculino' : 'Femenino',
-      n.nivel_nombre || 'Sin nivel',
-      n.subnivel_nombre || 'Sin subnivel',
-      n.nombre_encargado || '',
-      n.telefono_contacto || '',
-      n.direccion || ''
-    ]),
-    [],
-    ['RESUMEN'],
-    ['Total Niños Activos', datosNinos.length]
-  ] : []
+    descargarCSV(csvData, `reporte_financiero_${fechaInicio}_${fechaFin}.csv`)
+    
+    Swal.fire({
+      icon: 'success',
+      title: '¡Descargado!',
+      timer: 1500,
+      showConfirmButton: false
+    })
+  }
 
-  const csvInactivos = datosInactivos.length > 0 ? [
-    ['Nombres', 'Apellidos', 'Fecha Nacimiento', 'Edad', 'Género', 'Nivel', 'Motivo Inactividad', 'Fecha Inactivación'],
-    ...datosInactivos.map(n => [
-      n.nombres,
-      n.apellidos,
-      n.fecha_nacimiento,
-      n.edad || '',
-      n.genero === 'M' ? 'Masculino' : 'Femenino',
-      n.nivel_nombre || 'Sin nivel',
-      n.motivo_inactividad || 'No especificado',
-      n.fecha_inactivacion || ''
-    ]),
-    [],
-    ['RESUMEN'],
-    ['Total Niños Inactivos', datosInactivos.length]
-  ] : []
+  function descargarReporteAsistencia() {
+    if (datosAsistencia.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin datos',
+        text: 'Primero debes cargar los datos',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
+    const csvData = [
+      ['Fecha', 'Niño', 'Nivel', 'Subnivel', 'Estado', 'Registrado Por'],
+      ...datosAsistencia.map(a => [
+        a.fecha,
+        a.nino_nombre,
+        a.nivel_nombre || 'Sin nivel',
+        a.subnivel_nombre || 'Sin subnivel',
+        a.estado,
+        a.registrado_por_nombre || ''
+      ]),
+      [],
+      ['RESUMEN'],
+      ['Total Registros', resumenAsistencia?.total_registros || 0],
+      ['Presentes', resumenAsistencia?.presentes || 0],
+      ['Ausentes', resumenAsistencia?.ausentes || 0],
+      ['Suplentes', resumenAsistencia?.suplentes || 0],
+      ['% Asistencia', `${resumenAsistencia?.porcentaje_asistencia || 0}%`]
+    ]
+
+    descargarCSV(csvData, `reporte_asistencia_${mes}_${anio}.csv`)
+    
+    Swal.fire({
+      icon: 'success',
+      title: '¡Descargado!',
+      timer: 1500,
+      showConfirmButton: false
+    })
+  }
+
+  function descargarReporteNinos() {
+    if (datosNinos.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin datos',
+        text: 'Primero debes cargar los datos',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
+    const csvData = [
+      ['Nombres', 'Apellidos', 'Fecha Nacimiento', 'Edad', 'Género', 'Nivel', 'Subnivel', 'Encargado', 'Teléfono', 'Dirección'],
+      ...datosNinos.map(n => [
+        n.nombres,
+        n.apellidos,
+        n.fecha_nacimiento,
+        n.edad,
+        n.genero === 'M' ? 'Masculino' : 'Femenino',
+        n.nivel_nombre || 'Sin nivel',
+        n.subnivel_nombre || 'Sin subnivel',
+        n.nombre_encargado || '',
+        n.telefono_contacto || '',
+        n.direccion || ''
+      ]),
+      [],
+      ['RESUMEN'],
+      ['Total Niños Activos', datosNinos.length]
+    ]
+
+    descargarCSV(csvData, `reporte_ninos_activos_${new Date().toISOString().split('T')[0]}.csv`)
+    
+    Swal.fire({
+      icon: 'success',
+      title: '¡Descargado!',
+      timer: 1500,
+      showConfirmButton: false
+    })
+  }
+
+  function descargarReporteInactivos() {
+    if (datosInactivos.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin datos',
+        text: 'Primero debes cargar los datos',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
+    const csvData = [
+      ['Nombres', 'Apellidos', 'Fecha Nacimiento', 'Edad', 'Género', 'Nivel', 'Motivo Inactividad', 'Fecha Inactivación'],
+      ...datosInactivos.map(n => [
+        n.nombres,
+        n.apellidos,
+        n.fecha_nacimiento,
+        n.edad || '',
+        n.genero === 'M' ? 'Masculino' : 'Femenino',
+        n.nivel_nombre || 'Sin nivel',
+        n.motivo_inactividad || 'No especificado',
+        n.fecha_inactivacion || ''
+      ]),
+      [],
+      ['RESUMEN'],
+      ['Total Niños Inactivos', datosInactivos.length]
+    ]
+
+    descargarCSV(csvData, `reporte_ninos_inactivos_${new Date().toISOString().split('T')[0]}.csv`)
+    
+    Swal.fire({
+      icon: 'success',
+      title: '¡Descargado!',
+      timer: 1500,
+      showConfirmButton: false
+    })
+  }
 
   // ==================== RENDER ====================
 
@@ -409,14 +522,13 @@ export default function Reportes() {
                       <p>💰 Balance: <strong>Q {resumenFinanciero?.balance}</strong></p>
                     </div>
 
-                    <CSVLink
-                      data={csvFinanciero}
-                      filename={`reporte_financiero_${fechaInicio}_${fechaFin}.csv`}
+                    <button
                       className="btn"
-                      style={{ width: '100%', textAlign: 'center', textDecoration: 'none', display: 'block', padding: '0.75rem' }}
+                      onClick={descargarReporteFinanciero}
+                      style={{ width: '100%', padding: '0.75rem' }}
                     >
                       📥 Descargar CSV
-                    </CSVLink>
+                    </button>
                   </div>
                 )}
               </div>
@@ -480,14 +592,13 @@ export default function Reportes() {
                       <p>📈 % Asistencia: <strong>{resumenAsistencia?.porcentaje_asistencia}%</strong></p>
                     </div>
 
-                    <CSVLink
-                      data={csvAsistencia}
-                      filename={`reporte_asistencia_${mes}_${anio}.csv`}
+                    <button
                       className="btn"
-                      style={{ width: '100%', textAlign: 'center', textDecoration: 'none', display: 'block', padding: '0.75rem' }}
+                      onClick={descargarReporteAsistencia}
+                      style={{ width: '100%', padding: '0.75rem' }}
                     >
                       📥 Descargar CSV
-                    </CSVLink>
+                    </button>
                   </div>
                 )}
               </div>
@@ -520,14 +631,13 @@ export default function Reportes() {
                       <p>👶 Total Niños Activos: <strong>{datosNinos.length}</strong></p>
                     </div>
 
-                    <CSVLink
-                      data={csvNinos}
-                      filename={`reporte_ninos_activos_${new Date().toISOString().split('T')[0]}.csv`}
+                    <button
                       className="btn"
-                      style={{ width: '100%', textAlign: 'center', textDecoration: 'none', display: 'block', padding: '0.75rem' }}
+                      onClick={descargarReporteNinos}
+                      style={{ width: '100%', padding: '0.75rem' }}
                     >
                       📥 Descargar CSV
-                    </CSVLink>
+                    </button>
                   </div>
                 )}
               </div>
@@ -560,14 +670,13 @@ export default function Reportes() {
                       <p>🚪 Total Niños Inactivos: <strong>{datosInactivos.length}</strong></p>
                     </div>
 
-                    <CSVLink
-                      data={csvInactivos}
-                      filename={`reporte_ninos_inactivos_${new Date().toISOString().split('T')[0]}.csv`}
+                    <button
                       className="btn"
-                      style={{ width: '100%', textAlign: 'center', textDecoration: 'none', display: 'block', padding: '0.75rem' }}
+                      onClick={descargarReporteInactivos}
+                      style={{ width: '100%', padding: '0.75rem' }}
                     >
                       📥 Descargar CSV
-                    </CSVLink>
+                    </button>
                   </div>
                 )}
               </div>
