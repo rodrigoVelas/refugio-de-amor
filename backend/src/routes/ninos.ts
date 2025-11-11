@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { authMiddleware } from '../core/auth_middleware'
 import { requirePerms } from '../core/perm_middleware'
 import { pool } from '../core/db'
+import { getUserPerms } from '../core/rbac'
 
 const router = Router()
 
@@ -50,10 +51,19 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
         n.nivel_id,
         n.subnivel_id,
         n.activo,
+        n.genero,
+        n.direccion,
+        n.telefono_contacto,
+        n.nombre_encargado,
+        n.telefono_encargado,
+        n.direccion_encargado,
+        n.motivo_inactividad,
+        n.fecha_inactivacion,
         u.email as maestro_email,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
         nv.nombre as nivel_nombre,
-        sn.nombre as subnivel_nombre
+        sn.nombre as subnivel_nombre,
+        EXTRACT(YEAR FROM AGE(n.fecha_nacimiento))::int as edad
       FROM ninos n
       LEFT JOIN usuarios u ON n.maestro_id = u.id
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
@@ -69,6 +79,19 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
       console.log('   - userId que se usará:', userId)
     } else {
       console.log('4. 👑 SIN FILTRO: Es directora, verá todos los niños')
+    }
+
+    // Filtro de búsqueda
+    const buscar = req.query.buscar
+    if (buscar) {
+      const searchIndex = params.length + 1
+      params.push(`%${buscar}%`)
+      query += ` AND (
+        n.nombres ILIKE $${searchIndex} OR 
+        n.apellidos ILIKE $${searchIndex} OR 
+        n.codigo ILIKE $${searchIndex}
+      )`
+      console.log('   - Con búsqueda:', buscar)
     }
 
     query += ' ORDER BY n.apellidos, n.nombres'
@@ -89,6 +112,7 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
         console.log(`   ${i + 1}. ${nino.nombres} ${nino.apellidos}`)
         console.log(`      - maestro_id: ${nino.maestro_id}`)
         console.log(`      - maestro_email: ${nino.maestro_email}`)
+        console.log(`      - activo: ${nino.activo}`)
       })
     } else {
       console.log('   ⚠️ No se encontraron niños con este filtro')
@@ -122,7 +146,8 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
         n.*,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
         nv.nombre as nivel_nombre,
-        sn.nombre as subnivel_nombre
+        sn.nombre as subnivel_nombre,
+        EXTRACT(YEAR FROM AGE(n.fecha_nacimiento))::int as edad
       FROM ninos n
       LEFT JOIN usuarios u ON n.maestro_id = u.id
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
@@ -160,6 +185,9 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
       subnivel_id, 
       maestro_id,
       codigo, 
+      genero,
+      direccion,
+      telefono_contacto,
       nombre_encargado, 
       telefono_encargado, 
       direccion_encargado 
@@ -196,8 +224,9 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
     const result = await pool.query(
       `INSERT INTO ninos 
         (nombres, apellidos, fecha_nacimiento, nivel_id, subnivel_id, maestro_id, 
-         activo, codigo, nombre_encargado, telefono_encargado, direccion_encargado, creado_en)
-      VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, NOW())
+         activo, codigo, genero, direccion, telefono_contacto,
+         nombre_encargado, telefono_encargado, direccion_encargado, creado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, NOW())
       RETURNING *`,
       [
         nombres, 
@@ -206,7 +235,10 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
         nivel_id || null, 
         subnivel_id || null, 
         maestro_id,
-        codigo || null, 
+        codigo || null,
+        genero || null,
+        direccion || null,
+        telefono_contacto || null,
         nombre_encargado || null, 
         telefono_encargado || null, 
         direccion_encargado || null
@@ -237,7 +269,10 @@ router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: a
       nivel_id, 
       subnivel_id, 
       maestro_id,
-      codigo, 
+      codigo,
+      genero,
+      direccion,
+      telefono_contacto,
       nombre_encargado, 
       telefono_encargado, 
       direccion_encargado 
@@ -268,14 +303,17 @@ router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: a
     const result = await pool.query(
       `UPDATE ninos
       SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, nivel_id = $4, 
-          subnivel_id = $5, maestro_id = $6, codigo = $7, nombre_encargado = $8, 
-          telefono_encargado = $9, direccion_encargado = $10, modificado_en = NOW()
-      WHERE id = $11
+          subnivel_id = $5, maestro_id = $6, codigo = $7, genero = $8,
+          direccion = $9, telefono_contacto = $10,
+          nombre_encargado = $11, telefono_encargado = $12, 
+          direccion_encargado = $13, modificado_en = NOW()
+      WHERE id = $14
       RETURNING *`,
       [
         nombres, apellidos, fecha_nacimiento, nivel_id || null, subnivel_id || null, 
-        maestro_id, codigo || null, nombre_encargado || null, telefono_encargado || null, 
-        direccion_encargado || null, id
+        maestro_id, codigo || null, genero || null, direccion || null,
+        telefono_contacto || null, nombre_encargado || null, 
+        telefono_encargado || null, direccion_encargado || null, id
       ]
     )
 
@@ -287,6 +325,85 @@ router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: a
   } catch (error: any) {
     console.error('Error:', error)
     res.status(500).json({ error: 'Error al actualizar niño' })
+  }
+})
+
+// POST /ninos/:id/inactivar - Inactivar un niño
+router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { motivo } = req.body
+    const userId = req.user?.id
+
+    if (!userId) {
+      return res.status(401).json({ error: 'No autenticado' })
+    }
+
+    console.log('\n🚪 Inactivando niño:', id)
+    console.log('   Motivo:', motivo)
+    console.log('   Usuario:', userId)
+
+    // Verificar permisos
+    const perms = await getUserPerms(userId)
+    const puedeEditar = perms.includes('ninos_editar') || perms.includes('admin')
+    
+    if (!puedeEditar) {
+      // Verificar si es directora por rol
+      const userResult = await pool.query(
+        'SELECT rol FROM usuarios WHERE id = $1',
+        [userId]
+      )
+      const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
+      
+      if (!esDirectora) {
+        console.log('❌ Sin permisos')
+        return res.status(403).json({ error: 'No autorizado para inactivar niños' })
+      }
+    }
+
+    if (!motivo || !motivo.trim()) {
+      return res.status(400).json({ error: 'El motivo de inactividad es requerido' })
+    }
+
+    // Verificar que el niño existe y está activo
+    const check = await pool.query(
+      'SELECT id, nombres, apellidos, activo FROM ninos WHERE id = $1',
+      [id]
+    )
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Niño no encontrado' })
+    }
+
+    if (!check.rows[0].activo) {
+      return res.status(400).json({ error: 'El niño ya está inactivo' })
+    }
+
+    // Inactivar el niño
+    await pool.query(
+      `UPDATE ninos 
+       SET activo = false, 
+           motivo_inactividad = $1, 
+           fecha_inactivacion = NOW()
+       WHERE id = $2`,
+      [motivo.trim(), id]
+    )
+
+    console.log('✅ Niño inactivado:', check.rows[0].nombres, check.rows[0].apellidos)
+    console.log('   Motivo:', motivo.trim())
+
+    res.json({ 
+      ok: true, 
+      message: 'Niño inactivado exitosamente',
+      nino: {
+        id: check.rows[0].id,
+        nombres: check.rows[0].nombres,
+        apellidos: check.rows[0].apellidos
+      }
+    })
+  } catch (error: any) {
+    console.error('❌ Error al inactivar niño:', error.message)
+    res.status(500).json({ error: 'Error al inactivar niño: ' + error.message })
   }
 })
 
