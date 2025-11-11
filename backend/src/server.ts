@@ -85,6 +85,7 @@ app.use('/auth', auth)
 app.use(authMiddleware)
 
 // Rutas protegidas (requieren autenticación)
+// Rutas protegidas (requieren autenticación)
 app.use(perfil)
 app.use('/niveles', niveles)
 app.use('/subniveles', subniveles)
@@ -92,10 +93,10 @@ app.use('/ninos', ninos)
 app.use('/usuarios', usuarios)
 app.use('/roles', roles)
 app.use('/facturas', facturas)
-app.use('/asistencia', asistencia)
+app.use(asistencia)  // ← SIN prefijo (porque asistencia.ts ya lo tiene)
 app.use('/actividades', actividades)
 app.use('/documentos', documentos)
-app.use('/reportes', reportes)
+app.use('/reportes', reportes)  // ← CON prefijo (porque reportes.ts NO lo tiene)
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
