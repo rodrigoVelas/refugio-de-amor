@@ -18,7 +18,7 @@ async function puedeVerReportes(userId: string): Promise<boolean> {
 
 // GET /reportes/financiero/export.csv
 r.get('/reportes/financiero/export.csv', async (req: any, res: any) => {
-  const userId = req.user.id
+  const userId = req.user?.id
   if (!userId) return res.status(401).send('no auth')
   
   const tieneAcceso = await puedeVerReportes(userId)
@@ -96,7 +96,7 @@ r.get('/reportes/financiero/export.csv', async (req: any, res: any) => {
 
 // GET /reportes/asistencia/export.csv
 r.get('/reportes/asistencia/export.csv', async (req: any, res: any) => {
-  const userId = req.user.id
+  const userId = req.user?.id
   if (!userId) return res.status(401).send('no auth')
   
   const tieneAcceso = await puedeVerReportes(userId)
@@ -179,7 +179,7 @@ r.get('/reportes/asistencia/export.csv', async (req: any, res: any) => {
 
 // GET /reportes/ninos/export.csv
 r.get('/reportes/ninos/export.csv', async (req: any, res: any) => {
-  const userId = req.user.id
+  const userId = req.user?.id
   if (!userId) return res.status(401).send('no auth')
   
   const tieneAcceso = await puedeVerReportes(userId)
@@ -243,7 +243,7 @@ r.get('/reportes/ninos/export.csv', async (req: any, res: any) => {
 
 // GET /reportes/ninos-inactivos/export.csv
 r.get('/reportes/ninos-inactivos/export.csv', async (req: any, res: any) => {
-  const userId = req.user.id
+  const userId = req.user?.id
   if (!userId) return res.status(401).send('no auth')
   
   const tieneAcceso = await puedeVerReportes(userId)
