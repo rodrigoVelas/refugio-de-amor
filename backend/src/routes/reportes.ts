@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import { pool } from '../core/db'
-import { getUserPerms } from '../core/rbac'
 
 const r = Router()
 
@@ -26,8 +25,10 @@ async function verificarAcceso(req: any, res: any, next: any) {
   next()
 }
 
-// GET /reportes/financiero - Reporte de facturas
-r.get('/reportes/financiero', verificarAcceso, async (req: any, res: any) => {
+// ==================== REPORTE FINANCIERO ====================
+
+// GET /financiero - Reporte de facturas (JSON)
+r.get('/financiero', verificarAcceso, async (req: any, res: any) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query
 
@@ -100,10 +101,14 @@ r.get('/reportes/financiero', verificarAcceso, async (req: any, res: any) => {
   }
 })
 
-// GET /reportes/financiero/export.csv - Exportar a CSV
-r.get('/reportes/financiero/export.csv', verificarAcceso, async (req: any, res: any) => {
+// GET /financiero/export.csv - Exportar facturas a CSV
+r.get('/financiero/export.csv', verificarAcceso, async (req: any, res: any) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query
+
+    console.log('📥 Exportando reporte financiero CSV')
+    console.log('   Desde:', fecha_inicio)
+    console.log('   Hasta:', fecha_fin)
 
     let query = `
       SELECT 
@@ -154,24 +159,28 @@ r.get('/reportes/financiero/export.csv', verificarAcceso, async (req: any, res: 
     const egresos = rows.filter((f: any) => f.tipo === 'egreso').reduce((sum: number, f: any) => sum + parseFloat(f.monto), 0)
     
     lines.push('')
-    lines.push(`RESUMEN,,,,,,,,`)
+    lines.push('RESUMEN,,,,,,,,')
     lines.push(`Total Ingresos,,,Q ${ingresos.toFixed(2)},,,,,`)
     lines.push(`Total Egresos,,,Q ${egresos.toFixed(2)},,,,,`)
     lines.push(`Balance,,,Q ${(ingresos - egresos).toFixed(2)},,,,,`)
 
     const csv = lines.join('\n')
 
+    console.log('✅ CSV generado:', rows.length, 'facturas')
+
     res.setHeader('content-type', 'text/csv; charset=utf-8')
     res.setHeader('content-disposition', `attachment; filename="reporte_financiero_${fecha_inicio || 'todos'}_${fecha_fin || 'todos'}.csv"`)
     res.send(csv)
   } catch (error: any) {
-    console.error('Error:', error.message)
+    console.error('❌ Error:', error.message)
     res.status(500).send('Error al exportar')
   }
 })
 
-// GET /reportes/asistencia - Reporte de asistencia mensual
-r.get('/reportes/asistencia', verificarAcceso, async (req: any, res: any) => {
+// ==================== REPORTE ASISTENCIA ====================
+
+// GET /asistencia - Reporte de asistencia mensual (JSON)
+r.get('/asistencia', verificarAcceso, async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
 
@@ -235,10 +244,13 @@ r.get('/reportes/asistencia', verificarAcceso, async (req: any, res: any) => {
   }
 })
 
-// GET /reportes/asistencia/export.csv - Exportar asistencia a CSV
-r.get('/reportes/asistencia/export.csv', verificarAcceso, async (req: any, res: any) => {
+// GET /asistencia/export.csv - Exportar asistencia a CSV
+r.get('/asistencia/export.csv', verificarAcceso, async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
+
+    console.log('📥 Exportando reporte asistencia CSV')
+    console.log('   Mes:', mes, '| Año:', anio)
 
     let query = `
       SELECT 
@@ -296,17 +308,21 @@ r.get('/reportes/asistencia/export.csv', verificarAcceso, async (req: any, res: 
 
     const csv = lines.join('\n')
 
+    console.log('✅ CSV generado:', rows.length, 'registros')
+
     res.setHeader('content-type', 'text/csv; charset=utf-8')
     res.setHeader('content-disposition', `attachment; filename="reporte_asistencia_${mes || 'todos'}_${anio || 'todos'}.csv"`)
     res.send(csv)
   } catch (error: any) {
-    console.error('Error:', error.message)
+    console.error('❌ Error:', error.message)
     res.status(500).send('Error al exportar')
   }
 })
 
-// GET /reportes/ninos - Reporte estadístico de niños
-r.get('/reportes/ninos', verificarAcceso, async (req: any, res: any) => {
+// ==================== REPORTE NIÑOS ====================
+
+// GET /ninos - Reporte estadístico de niños (JSON)
+r.get('/ninos', verificarAcceso, async (req: any, res: any) => {
   try {
     console.log('📊 Reporte Estadísticas de Niños')
 
@@ -328,6 +344,7 @@ r.get('/reportes/ninos', verificarAcceso, async (req: any, res: any) => {
       FROM ninos n
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      WHERE n.activo = true
       ORDER BY n.nombres ASC
     `
 
@@ -377,8 +394,7 @@ r.get('/reportes/ninos', verificarAcceso, async (req: any, res: any) => {
 
     const porEdadResult = await pool.query(porEdadQuery)
 
-    const totalNinos = ninosResult.rows.filter((n: any) => n.activo).length
-    const ninosInactivos = ninosResult.rows.filter((n: any) => !n.activo).length
+    const totalNinos = ninosResult.rows.length
 
     console.log('✅ Total niños activos:', totalNinos)
 
@@ -386,7 +402,6 @@ r.get('/reportes/ninos', verificarAcceso, async (req: any, res: any) => {
       ninos: ninosResult.rows,
       resumen: {
         total_ninos: totalNinos,
-        ninos_inactivos: ninosInactivos,
         por_nivel: porNivelResult.rows,
         por_genero: porGeneroResult.rows,
         por_edad: porEdadResult.rows
@@ -398,9 +413,11 @@ r.get('/reportes/ninos', verificarAcceso, async (req: any, res: any) => {
   }
 })
 
-// GET /reportes/ninos/export.csv - Exportar niños a CSV
-r.get('/reportes/ninos/export.csv', verificarAcceso, async (req: any, res: any) => {
+// GET /ninos/export.csv - Exportar niños activos a CSV
+r.get('/ninos/export.csv', verificarAcceso, async (req: any, res: any) => {
   try {
+    console.log('📥 Exportando reporte niños activos CSV')
+
     const query = `
       SELECT 
         n.nombres,
@@ -412,51 +429,53 @@ r.get('/reportes/ninos/export.csv', verificarAcceso, async (req: any, res: any) 
         COALESCE(sn.nombre, 'Sin subnivel') as subnivel,
         n.nombre_encargado as encargado,
         n.telefono_contacto as telefono,
-        n.direccion,
-        CASE WHEN n.activo THEN 'Activo' ELSE 'Inactivo' END as estado
+        n.direccion
       FROM ninos n
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
+      WHERE n.activo = true
       ORDER BY n.nombres ASC
     `
 
     const { rows } = await pool.query(query)
 
     // Armar CSV
-    const headers = ['nombres', 'apellidos', 'fecha_nacimiento', 'edad', 'genero', 'nivel', 'subnivel', 'encargado', 'telefono', 'direccion', 'estado']
+    const headers = ['nombres', 'apellidos', 'fecha_nacimiento', 'edad', 'genero', 'nivel', 'subnivel', 'encargado', 'telefono', 'direccion']
     const escape = (s: any) => {
       const v = (s === null || s === undefined) ? '' : String(s)
       return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
     }
 
     const lines = [
-      'Nombres,Apellidos,Fecha Nacimiento,Edad,Género,Nivel,Subnivel,Encargado,Teléfono,Dirección,Estado',
+      'Nombres,Apellidos,Fecha Nacimiento,Edad,Género,Nivel,Subnivel,Encargado,Teléfono,Dirección',
       ...rows.map(r => headers.map(h => escape((r as any)[h])).join(','))
     ]
 
     // Agregar resumen
-    const activos = rows.filter((n: any) => n.estado === 'Activo').length
-    const inactivos = rows.filter((n: any) => n.estado === 'Inactivo').length
-
     lines.push('')
-    lines.push('RESUMEN,,,,,,,,,,')
-    lines.push(`Total Activos,${activos},,,,,,,,,`)
-    lines.push(`Total Inactivos,${inactivos},,,,,,,,,`)
-    lines.push(`Total General,${rows.length},,,,,,,,,`)
+    lines.push('RESUMEN,,,,,,,,,')
+    lines.push(`Total Niños Activos,${rows.length},,,,,,,,`)
 
     const csv = lines.join('\n')
 
+    console.log('✅ CSV generado:', rows.length, 'niños activos')
+
     res.setHeader('content-type', 'text/csv; charset=utf-8')
-    res.setHeader('content-disposition', `attachment; filename="reporte_ninos_${new Date().toISOString().split('T')[0]}.csv"`)
+    res.setHeader('content-disposition', `attachment; filename="reporte_ninos_activos_${new Date().toISOString().split('T')[0]}.csv"`)
     res.send(csv)
   } catch (error: any) {
-    console.error('Error:', error.message)
+    console.error('❌ Error:', error.message)
     res.status(500).send('Error al exportar')
   }
 })
-// GET /reportes/ninos-inactivos/export.csv - Exportar niños inactivos a CSV
-r.get('/reportes/ninos-inactivos/export.csv', verificarAcceso, async (req: any, res: any) => {
+
+// ==================== REPORTE NIÑOS INACTIVOS ====================
+
+// GET /ninos-inactivos/export.csv - Exportar niños inactivos a CSV
+r.get('/ninos-inactivos/export.csv', verificarAcceso, async (req: any, res: any) => {
   try {
+    console.log('📥 Exportando reporte niños inactivos CSV')
+
     const query = `
       SELECT 
         n.nombres,
@@ -493,10 +512,10 @@ r.get('/reportes/ninos-inactivos/export.csv', verificarAcceso, async (req: any, 
 
     // Agregar resumen
     lines.push('')
-    lines.push('RESUMEN,,,,,,,,,')
-    lines.push(`Total Niños Inactivos,${rows.length},,,,,,,,`)
+    lines.push('RESUMEN,,,,,,,,,,')
+    lines.push(`Total Niños Inactivos,${rows.length},,,,,,,,,`)
     
-    // Contar por motivo si existe el campo
+    // Contar por motivo
     const porMotivo: any = {}
     rows.forEach((r: any) => {
       const motivo = r.motivo_inactividad || 'No especificado'
@@ -504,18 +523,20 @@ r.get('/reportes/ninos-inactivos/export.csv', verificarAcceso, async (req: any, 
     })
     
     lines.push('')
-    lines.push('POR MOTIVO,,,,,,,,,')
+    lines.push('POR MOTIVO,,,,,,,,,,')
     Object.entries(porMotivo).forEach(([motivo, count]) => {
-      lines.push(`${motivo},${count},,,,,,,,`)
+      lines.push(`${motivo},${count},,,,,,,,,,`)
     })
 
     const csv = lines.join('\n')
+
+    console.log('✅ CSV generado:', rows.length, 'niños inactivos')
 
     res.setHeader('content-type', 'text/csv; charset=utf-8')
     res.setHeader('content-disposition', `attachment; filename="reporte_ninos_inactivos_${new Date().toISOString().split('T')[0]}.csv"`)
     res.send(csv)
   } catch (error: any) {
-    console.error('Error:', error.message)
+    console.error('❌ Error:', error.message)
     res.status(500).send('Error al exportar')
   }
 })
