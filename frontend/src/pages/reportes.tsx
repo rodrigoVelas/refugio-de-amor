@@ -43,7 +43,7 @@ export default function Reportes() {
   // ==================== FUNCIONES DE DESCARGA ====================
 
   function descargarReporteFinanciero() {
-    const url = `${API_URL}/reportes/financiero/export.csv?mes=${mes}&anio=${anio}`
+    const url = `${API_URL}/reportes/financiero?mes=${mes}&anio=${anio}`
     window.open(url, '_blank')
     
     Swal.fire({
@@ -56,7 +56,7 @@ export default function Reportes() {
   }
 
   function descargarReporteAsistencia() {
-    const url = `${API_URL}/reportes/asistencia/export.csv?mes=${mes}&anio=${anio}`
+    const url = `${API_URL}/reportes/asistencia?mes=${mes}&anio=${anio}`
     window.open(url, '_blank')
     
     Swal.fire({
@@ -69,7 +69,7 @@ export default function Reportes() {
   }
 
   function descargarReporteNinos() {
-    const url = `${API_URL}/reportes/ninos/export.csv`
+    const url = `${API_URL}/reportes/ninos`
     window.open(url, '_blank')
     
     Swal.fire({
@@ -82,7 +82,7 @@ export default function Reportes() {
   }
 
   function descargarReporteInactivos() {
-    const url = `${API_URL}/reportes/ninos-inactivos/export.csv`
+    const url = `${API_URL}/reportes/inactivos`
     window.open(url, '_blank')
     
     Swal.fire({

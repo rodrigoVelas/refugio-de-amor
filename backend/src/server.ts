@@ -96,7 +96,7 @@ app.use('/facturas', facturas)
 app.use(asistencia)  // ← SIN PREFIJO - porque asistencia.ts ya lo tiene
 app.use('/actividades', actividades)
 app.use('/documentos', documentos)
-app.use('/reportes', reportes)  // ← CON PREFIJO
+app.use(reportes)  // ← SIN PREFIJO
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
