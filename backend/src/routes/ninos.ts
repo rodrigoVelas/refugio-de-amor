@@ -17,7 +17,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     console.log('='.repeat(70))
     console.log('1. Usuario ID:', userId)
 
-    // Obtener info del usuario (usando 'rol' no 'rol_id')
     const userResult = await pool.query(
       'SELECT id, email, nombres, rol FROM usuarios WHERE id = $1',
       [userId]
@@ -34,12 +33,9 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     console.log('   - Nombres:', usuario.nombres)
     console.log('   - rol:', usuario.rol, '(tipo:', typeof usuario.rol, ')')
 
-    // Determinar si es directora (rol = '1' o rol = 1)
     const esDirectora = String(usuario.rol) === '1' || usuario.rol === 1
     console.log('3. ¿Es directora?:', esDirectora)
-    console.log('   - Comparación: rol', usuario.rol, '=== "1" o === 1?')
 
-    // Construir query - IMPORTANTE: Ya NO filtramos por activo aquí
     let query = `
       SELECT 
         n.id,
@@ -76,12 +72,10 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
       params.push(userId)
       query += ` AND n.maestro_id = $1`
       console.log('4. 🔒 FILTRO APLICADO: maestro_id = $1')
-      console.log('   - userId que se usará:', userId)
     } else {
       console.log('4. 👑 SIN FILTRO: Es directora, verá todos los niños')
     }
 
-    // Filtro de búsqueda
     const buscar = req.query.buscar
     if (buscar) {
       const searchIndex = params.length + 1
@@ -96,36 +90,17 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 
     query += ' ORDER BY n.activo DESC, n.apellidos, n.nombres'
 
-    console.log('\n5. Query SQL completa:')
-    console.log(query)
-    console.log('\n6. Parámetros:', params)
-
-    // Ejecutar query
     const result = await pool.query(query, params)
 
     console.log('\n7. ✅ Resultado:')
     console.log('   - Niños encontrados:', result.rows.length)
     console.log('   - Activos:', result.rows.filter(n => n.activo).length)
     console.log('   - Inactivos:', result.rows.filter(n => !n.activo).length)
-    
-    if (result.rows.length > 0) {
-      console.log('\n8. Primeros 3 niños:')
-      result.rows.slice(0, 3).forEach((nino, i) => {
-        console.log(`   ${i + 1}. ${nino.nombres} ${nino.apellidos}`)
-        console.log(`      - maestro_id: ${nino.maestro_id}`)
-        console.log(`      - maestro_email: ${nino.maestro_email}`)
-        console.log(`      - activo: ${nino.activo}`)
-      })
-    } else {
-      console.log('   ⚠️ No se encontraron niños con este filtro')
-    }
-
     console.log('='.repeat(70) + '\n')
 
     res.json(result.rows)
   } catch (error: any) {
     console.error('❌ ERROR:', error.message)
-    console.error('Stack:', error.stack)
     res.status(500).json({ error: 'Error al listar niños' })
   }
 })
@@ -200,8 +175,6 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
     console.log('  - nombres:', nombres)
     console.log('  - apellidos:', apellidos)
     console.log('  - maestro_id:', maestro_id)
-    console.log('  - nivel_id:', nivel_id)
-    console.log('  - subnivel_id:', subnivel_id)
 
     if (!nombres || !apellidos || !fecha_nacimiento || !maestro_id) {
       console.log('❌ Faltan campos requeridos')
@@ -210,7 +183,6 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
       })
     }
 
-    // Verificar que el maestro existe
     const maestroCheck = await pool.query(
       'SELECT id, email FROM usuarios WHERE id = $1',
       [maestro_id]
@@ -249,7 +221,6 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
 
     console.log('✅ Niño creado exitosamente:')
     console.log('   - ID:', result.rows[0].id)
-    console.log('   - maestro_id guardado:', result.rows[0].maestro_id)
     console.log('===================\n')
 
     res.json({ ok: true, nino: result.rows[0] })
@@ -268,7 +239,6 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
     console.log('\n=== PUT /ninos/:id ===')
     console.log('Actualizando niño:', id)
-    console.log('Body recibido:', body)
 
     const userResult = await pool.query(
       'SELECT rol FROM usuarios WHERE id = $1',
@@ -277,7 +247,6 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
     const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
 
-    // Si NO es directora, verificar acceso
     if (!esDirectora) {
       const check = await pool.query(
         'SELECT id FROM ninos WHERE id = $1 AND maestro_id = $2',
@@ -289,12 +258,10 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       }
     }
 
-    // Construir UPDATE dinámico
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
 
-    // Campos que se pueden actualizar
     const allowedFields = [
       'nombres', 'apellidos', 'fecha_nacimiento', 'nivel_id', 'subnivel_id',
       'maestro_id', 'codigo', 'genero', 'direccion', 'telefono_contacto',
@@ -314,7 +281,6 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       return res.status(400).json({ error: 'No hay campos para actualizar' })
     }
 
-    // Agregar modificado_en
     updates.push(`modificado_en = NOW()`)
     values.push(id)
 
@@ -324,9 +290,6 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       WHERE id = $${paramIndex}
       RETURNING *
     `
-
-    console.log('Query:', query)
-    console.log('Values:', values)
 
     const result = await pool.query(query, values)
 
@@ -350,27 +313,32 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
     const { motivo } = req.body
     const userId = req.user?.id
 
+    console.log('\n🚪 POST /ninos/:id/inactivar')
+    console.log('   ID del niño:', id)
+    console.log('   Motivo:', motivo)
+    console.log('   Usuario:', userId)
+
     if (!userId) {
       return res.status(401).json({ error: 'No autenticado' })
     }
-
-    console.log('\n🚪 Inactivando niño:', id)
-    console.log('   Motivo:', motivo)
-    console.log('   Usuario:', userId)
 
     if (!motivo || !motivo.trim()) {
       return res.status(400).json({ error: 'El motivo de inactividad es requerido' })
     }
 
-    // Verificar que el niño existe y está activo
+    // Verificar que el niño existe
     const check = await pool.query(
       'SELECT id, nombres, apellidos, activo FROM ninos WHERE id = $1',
       [id]
     )
 
     if (check.rows.length === 0) {
+      console.log('❌ Niño no encontrado')
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
+
+    console.log('   Niño encontrado:', check.rows[0].nombres, check.rows[0].apellidos)
+    console.log('   Estado actual:', check.rows[0].activo)
 
     if (!check.rows[0].activo) {
       return res.status(400).json({ error: 'El niño ya está inactivo' })
@@ -388,8 +356,9 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
       [motivo.trim(), id]
     )
 
-    console.log('✅ Niño inactivado:', check.rows[0].nombres, check.rows[0].apellidos)
-    console.log('   Activo ahora:', result.rows[0].activo)
+    console.log('✅ Niño inactivado exitosamente')
+    console.log('   Nuevo estado activo:', result.rows[0].activo)
+    console.log('   Motivo guardado:', result.rows[0].motivo_inactividad)
 
     res.json({ 
       ok: true, 
@@ -398,6 +367,7 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
     })
   } catch (error: any) {
     console.error('❌ Error al inactivar niño:', error.message)
+    console.error('Stack:', error.stack)
     res.status(500).json({ error: 'Error al inactivar niño: ' + error.message })
   }
 })
@@ -408,28 +378,14 @@ router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
     const { id } = req.params
     const userId = req.user?.id
 
+    console.log('\n✅ POST /ninos/:id/reactivar')
+    console.log('   ID del niño:', id)
+    console.log('   Usuario:', userId)
+
     if (!userId) {
       return res.status(401).json({ error: 'No autenticado' })
     }
 
-    console.log('\n✅ Reactivando niño:', id)
-    console.log('   Usuario:', userId)
-
-    // Verificar permisos
-    const perms = await getUserPerms(userId)
-    const puedeEditar = perms.includes('ninos_editar') || perms.includes('admin')
-    
-    if (!puedeEditar) {
-      const userResult = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [userId])
-      const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
-      
-      if (!esDirectora) {
-        console.log('❌ Sin permisos')
-        return res.status(403).json({ error: 'No autorizado para reactivar niños' })
-      }
-    }
-
-    // Verificar que el niño existe y está inactivo
     const check = await pool.query(
       'SELECT id, nombres, apellidos, activo FROM ninos WHERE id = $1',
       [id]
@@ -443,13 +399,14 @@ router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
       return res.status(400).json({ error: 'El niño ya está activo' })
     }
 
-    // Reactivar el niño
-    await pool.query(
+    const result = await pool.query(
       `UPDATE ninos 
        SET activo = true, 
            motivo_inactividad = NULL, 
-           fecha_inactivacion = NULL
-       WHERE id = $1`,
+           fecha_inactivacion = NULL,
+           modificado_en = NOW()
+       WHERE id = $1
+       RETURNING *`,
       [id]
     )
 
@@ -458,11 +415,7 @@ router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
     res.json({ 
       ok: true, 
       message: 'Niño reactivado exitosamente',
-      nino: {
-        id: check.rows[0].id,
-        nombres: check.rows[0].nombres,
-        apellidos: check.rows[0].apellidos
-      }
+      nino: result.rows[0]
     })
   } catch (error: any) {
     console.error('❌ Error al reactivar niño:', error.message)
@@ -497,9 +450,7 @@ router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (r
       return res.status(404).json({ error: 'Niño no encontrado o sin acceso' })
     }
 
-    // Primero eliminar asistencias
     await pool.query('DELETE FROM asistencia WHERE nino_id = $1', [id])
-    // Luego eliminar niño
     await pool.query('DELETE FROM ninos WHERE id = $1', [id])
 
     res.json({ ok: true })

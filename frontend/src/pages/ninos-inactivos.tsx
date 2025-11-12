@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react'
 import { API_URL } from '../config'
 import Swal from 'sweetalert2'
@@ -27,41 +28,42 @@ export default function NinosInactivos() {
     cargarNinosInactivos()
   }, [])
 
- async function cargarNinosInactivos() {
-  try {
-    setLoading(true)
-    console.log('🚪 Cargando niños inactivos...')
-    
-    const res = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
-    
-    if (!res.ok) {
-      throw new Error('Error al cargar niños')
+  async function cargarNinosInactivos() {
+    try {
+      setLoading(true)
+      console.log('🚪 Cargando niños inactivos...')
+      
+      const res = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
+      
+      if (!res.ok) {
+        throw new Error('Error al cargar niños')
+      }
+      
+      const data = await res.json()
+      console.log('   Total niños en BD:', data.length)
+      
+      // Filtrar solo inactivos
+      const inactivos = data.filter((n: any) => n.activo === false)
+      console.log('   Niños inactivos:', inactivos.length)
+      
+      if (inactivos.length > 0) {
+        console.log('   Primer niño inactivo:', inactivos[0])
+      }
+      
+      setNinos(inactivos)
+    } catch (error: any) {
+      console.error('❌ Error:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error.message || 'Error al cargar niños inactivos',
+        confirmButtonColor: '#3b82f6'
+      })
+    } finally {
+      setLoading(false)
     }
-    
-    const data = await res.json()
-    console.log('   Total niños en BD:', data.length)
-    
-    // Filtrar solo inactivos
-    const inactivos = data.filter((n: any) => n.activo === false)
-    console.log('   Niños inactivos:', inactivos.length)
-    
-    if (inactivos.length > 0) {
-      console.log('   Primer niño inactivo:', inactivos[0])
-    }
-    
-    setNinos(inactivos)
-  } catch (error: any) {
-    console.error('❌ Error:', error)
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: error.message || 'Error al cargar niños inactivos',
-      confirmButtonColor: '#3b82f6'
-    })
-  } finally {
-    setLoading(false)
   }
-}
+
   async function reactivarNino(id: string, nombre: string) {
     const result = await Swal.fire({
       icon: 'question',
@@ -85,32 +87,29 @@ export default function NinosInactivos() {
     if (!result.isConfirmed) return
 
     try {
-      const res = await fetch(`${API_URL}/ninos/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          activo: true,
-          motivo_inactividad: null,
-          fecha_inactivacion: null
-        })
+      console.log('✅ Reactivando niño:', id)
+      
+      const res = await fetch(`${API_URL}/ninos/${id}/reactivar`, {
+        method: 'POST',
+        credentials: 'include'
       })
 
-      if (res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: '¡Reactivado!',
-          text: `${nombre} ha sido reactivado`,
-          timer: 2000,
-          showConfirmButton: false
-        })
-        cargarNinosInactivos()
-      } else {
-        const err = await res.json()
-        throw new Error(err.error || 'Error al reactivar')
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Error al reactivar')
       }
+
+      await Swal.fire({
+        icon: 'success',
+        title: '¡Reactivado!',
+        text: `${nombre} ha sido reactivado`,
+        timer: 2000,
+        showConfirmButton: false
+      })
+      
+      cargarNinosInactivos()
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
