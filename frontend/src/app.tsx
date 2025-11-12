@@ -18,6 +18,9 @@ import Asistencia from './pages/asistencia'
 import Actividades from './pages/actividades'
 import Documentos from './pages/documentos'
 import Reportes from './pages/reportes'
+import NinosInactivos from './pages/ninos-inactivos'
+
+
 
 
 
@@ -212,6 +215,7 @@ export default function App() {
         } />
         <Route path="/documentos" element={<Documentos />} />
         <Route path="/reportes" element={<Reportes />} />
+        <Route path="/ninos-inactivos" element={<NinosInactivos />} />
 
       </Routes>
     </AppLayout>

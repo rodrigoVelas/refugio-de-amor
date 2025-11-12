@@ -39,7 +39,7 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     console.log('3. ¿Es directora?:', esDirectora)
     console.log('   - Comparación: rol', usuario.rol, '=== "1" o === 1?')
 
-    // Construir query
+    // Construir query - IMPORTANTE: Ya NO filtramos por activo aquí
     let query = `
       SELECT 
         n.id,
@@ -68,7 +68,7 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
       LEFT JOIN usuarios u ON n.maestro_id = u.id
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
-      WHERE n.activo = true
+      WHERE 1=1
     `
     const params: any[] = []
 
@@ -94,7 +94,7 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
       console.log('   - Con búsqueda:', buscar)
     }
 
-    query += ' ORDER BY n.apellidos, n.nombres'
+    query += ' ORDER BY n.activo DESC, n.apellidos, n.nombres'
 
     console.log('\n5. Query SQL completa:')
     console.log(query)
@@ -105,6 +105,8 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 
     console.log('\n7. ✅ Resultado:')
     console.log('   - Niños encontrados:', result.rows.length)
+    console.log('   - Activos:', result.rows.filter(n => n.activo).length)
+    console.log('   - Inactivos:', result.rows.filter(n => !n.activo).length)
     
     if (result.rows.length > 0) {
       console.log('\n8. Primeros 3 niños:')
@@ -258,29 +260,15 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
 })
 
 // PUT /ninos/:id - Actualizar niño
-router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: any, res: any) => {
+router.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const userId = req.user.id
-    const { 
-      nombres, 
-      apellidos, 
-      fecha_nacimiento, 
-      nivel_id, 
-      subnivel_id, 
-      maestro_id,
-      codigo,
-      genero,
-      direccion,
-      telefono_contacto,
-      nombre_encargado, 
-      telefono_encargado, 
-      direccion_encargado 
-    } = req.body
+    const body = req.body
 
-    if (!nombres || !apellidos || !fecha_nacimiento || !maestro_id) {
-      return res.status(400).json({ error: 'Faltan campos requeridos' })
-    }
+    console.log('\n=== PUT /ninos/:id ===')
+    console.log('Actualizando niño:', id)
+    console.log('Body recibido:', body)
 
     const userResult = await pool.query(
       'SELECT rol FROM usuarios WHERE id = $1',
@@ -289,6 +277,7 @@ router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: a
 
     const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
 
+    // Si NO es directora, verificar acceso
     if (!esDirectora) {
       const check = await pool.query(
         'SELECT id FROM ninos WHERE id = $1 AND maestro_id = $2',
@@ -300,31 +289,57 @@ router.put('/:id', authMiddleware, requirePerms(['ninos_editar']), async (req: a
       }
     }
 
-    const result = await pool.query(
-      `UPDATE ninos
-      SET nombres = $1, apellidos = $2, fecha_nacimiento = $3, nivel_id = $4, 
-          subnivel_id = $5, maestro_id = $6, codigo = $7, genero = $8,
-          direccion = $9, telefono_contacto = $10,
-          nombre_encargado = $11, telefono_encargado = $12, 
-          direccion_encargado = $13, modificado_en = NOW()
-      WHERE id = $14
-      RETURNING *`,
-      [
-        nombres, apellidos, fecha_nacimiento, nivel_id || null, subnivel_id || null, 
-        maestro_id, codigo || null, genero || null, direccion || null,
-        telefono_contacto || null, nombre_encargado || null, 
-        telefono_encargado || null, direccion_encargado || null, id
-      ]
-    )
+    // Construir UPDATE dinámico
+    const updates: string[] = []
+    const values: any[] = []
+    let paramIndex = 1
+
+    // Campos que se pueden actualizar
+    const allowedFields = [
+      'nombres', 'apellidos', 'fecha_nacimiento', 'nivel_id', 'subnivel_id',
+      'maestro_id', 'codigo', 'genero', 'direccion', 'telefono_contacto',
+      'nombre_encargado', 'telefono_encargado', 'direccion_encargado',
+      'activo', 'motivo_inactividad', 'fecha_inactivacion'
+    ]
+
+    for (const field of allowedFields) {
+      if (field in body) {
+        updates.push(`${field} = $${paramIndex}`)
+        values.push(body[field])
+        paramIndex++
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' })
+    }
+
+    // Agregar modificado_en
+    updates.push(`modificado_en = NOW()`)
+    values.push(id)
+
+    const query = `
+      UPDATE ninos
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING *
+    `
+
+    console.log('Query:', query)
+    console.log('Values:', values)
+
+    const result = await pool.query(query, values)
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
+    console.log('✅ Niño actualizado:', result.rows[0].nombres)
+
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
-    console.error('Error:', error)
-    res.status(500).json({ error: 'Error al actualizar niño' })
+    console.error('❌ Error:', error)
+    res.status(500).json({ error: 'Error al actualizar niño: ' + error.message })
   }
 })
 
@@ -404,6 +419,74 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
   } catch (error: any) {
     console.error('❌ Error al inactivar niño:', error.message)
     res.status(500).json({ error: 'Error al inactivar niño: ' + error.message })
+  }
+})
+
+// POST /ninos/:id/reactivar - Reactivar un niño
+router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const userId = req.user?.id
+
+    if (!userId) {
+      return res.status(401).json({ error: 'No autenticado' })
+    }
+
+    console.log('\n✅ Reactivando niño:', id)
+    console.log('   Usuario:', userId)
+
+    // Verificar permisos
+    const perms = await getUserPerms(userId)
+    const puedeEditar = perms.includes('ninos_editar') || perms.includes('admin')
+    
+    if (!puedeEditar) {
+      const userResult = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [userId])
+      const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
+      
+      if (!esDirectora) {
+        console.log('❌ Sin permisos')
+        return res.status(403).json({ error: 'No autorizado para reactivar niños' })
+      }
+    }
+
+    // Verificar que el niño existe y está inactivo
+    const check = await pool.query(
+      'SELECT id, nombres, apellidos, activo FROM ninos WHERE id = $1',
+      [id]
+    )
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Niño no encontrado' })
+    }
+
+    if (check.rows[0].activo) {
+      return res.status(400).json({ error: 'El niño ya está activo' })
+    }
+
+    // Reactivar el niño
+    await pool.query(
+      `UPDATE ninos 
+       SET activo = true, 
+           motivo_inactividad = NULL, 
+           fecha_inactivacion = NULL
+       WHERE id = $1`,
+      [id]
+    )
+
+    console.log('✅ Niño reactivado:', check.rows[0].nombres, check.rows[0].apellidos)
+
+    res.json({ 
+      ok: true, 
+      message: 'Niño reactivado exitosamente',
+      nino: {
+        id: check.rows[0].id,
+        nombres: check.rows[0].nombres,
+        apellidos: check.rows[0].apellidos
+      }
+    })
+  } catch (error: any) {
+    console.error('❌ Error al reactivar niño:', error.message)
+    res.status(500).json({ error: 'Error al reactivar niño: ' + error.message })
   }
 })
 
