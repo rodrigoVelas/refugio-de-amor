@@ -358,24 +358,6 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
     console.log('   Motivo:', motivo)
     console.log('   Usuario:', userId)
 
-    // Verificar permisos
-    const perms = await getUserPerms(userId)
-    const puedeEditar = perms.includes('ninos_editar') || perms.includes('admin')
-    
-    if (!puedeEditar) {
-      // Verificar si es directora por rol
-      const userResult = await pool.query(
-        'SELECT rol FROM usuarios WHERE id = $1',
-        [userId]
-      )
-      const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
-      
-      if (!esDirectora) {
-        console.log('❌ Sin permisos')
-        return res.status(403).json({ error: 'No autorizado para inactivar niños' })
-      }
-    }
-
     if (!motivo || !motivo.trim()) {
       return res.status(400).json({ error: 'El motivo de inactividad es requerido' })
     }
@@ -395,26 +377,24 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
     }
 
     // Inactivar el niño
-    await pool.query(
+    const result = await pool.query(
       `UPDATE ninos 
        SET activo = false, 
            motivo_inactividad = $1, 
-           fecha_inactivacion = NOW()
-       WHERE id = $2`,
+           fecha_inactivacion = NOW(),
+           modificado_en = NOW()
+       WHERE id = $2
+       RETURNING *`,
       [motivo.trim(), id]
     )
 
     console.log('✅ Niño inactivado:', check.rows[0].nombres, check.rows[0].apellidos)
-    console.log('   Motivo:', motivo.trim())
+    console.log('   Activo ahora:', result.rows[0].activo)
 
     res.json({ 
       ok: true, 
       message: 'Niño inactivado exitosamente',
-      nino: {
-        id: check.rows[0].id,
-        nombres: check.rows[0].nombres,
-        apellidos: check.rows[0].apellidos
-      }
+      nino: result.rows[0]
     })
   } catch (error: any) {
     console.error('❌ Error al inactivar niño:', error.message)

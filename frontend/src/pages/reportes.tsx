@@ -60,86 +60,99 @@ export default function Reportes() {
                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
   // ==================== CARGAR DATOS FINANCIEROS ====================
+async function cargarDatosFinancieros() {
+  try {
+    setLoadingFinanciero(true)
+    console.log('💰 Cargando datos financieros...')
+    console.log('   Mes:', mes, 'Año:', anio)
 
-  async function cargarDatosFinancieros() {
-    try {
-      setLoadingFinanciero(true)
-      console.log('💰 Cargando datos financieros...')
-      console.log('   Mes:', mes, 'Año:', anio)
+    const res = await fetch(`${API_URL}/facturas`, { credentials: 'include' })
 
-      const res = await fetch(`${API_URL}/facturas`, { credentials: 'include' })
+    if (!res.ok) {
+      throw new Error('Error al cargar facturas')
+    }
 
-      if (!res.ok) {
-        throw new Error('Error al cargar facturas')
+    const todasFacturas = await res.json()
+    console.log('   Total facturas en BD:', todasFacturas.length)
+    console.log('   Primera factura ejemplo:', todasFacturas[0])
+
+    // Filtrar por mes y año
+    const filtered = todasFacturas.filter((f: any) => {
+      const fecha = new Date(f.creado_en)
+      const coincide = fecha.getMonth() + 1 === mes && fecha.getFullYear() === anio
+      return coincide
+    })
+
+    console.log('   Facturas filtradas:', filtered.length)
+    
+    if (filtered.length > 0) {
+      console.log('   Ejemplo de factura filtrada:', filtered[0])
+    }
+    
+    setDatosFinancieros(filtered)
+    
+    // Calcular totales - ASEGURAR QUE MONTO ES NÚMERO
+    let ingresos = 0
+    let egresos = 0
+
+    filtered.forEach((f: any) => {
+      const monto = parseFloat(f.monto || f.cantidad || f.total || 0)
+      console.log(`   Factura ${f.numero_factura}: tipo=${f.tipo}, monto=${monto}`)
+      
+      if (f.tipo === 'ingreso') {
+        ingresos += monto
+      } else if (f.tipo === 'egreso') {
+        egresos += monto
       }
+    })
 
-      const todasFacturas = await res.json()
-      console.log('   Total facturas en BD:', todasFacturas.length)
-
-      // Filtrar por mes y año
-      const filtered = todasFacturas.filter((f: any) => {
-        const fecha = new Date(f.creado_en)
-        return fecha.getMonth() + 1 === mes && fecha.getFullYear() === anio
-      })
-
-      console.log('   Facturas del mes:', filtered.length)
-      
-      setDatosFinancieros(filtered)
-      
-      // Calcular totales
-      const ingresos = filtered
-        .filter((f: any) => f.tipo === 'ingreso')
-        .reduce((sum: number, f: any) => sum + parseFloat(f.monto || 0), 0)
-      
-      const egresos = filtered
-        .filter((f: any) => f.tipo === 'egreso')
-        .reduce((sum: number, f: any) => sum + parseFloat(f.monto || 0), 0)
-
-      console.log('   Ingresos:', ingresos)
-      console.log('   Egresos:', egresos)
-      
-      setResumenFinanciero({
-        total_facturas: filtered.length,
-        ingresos: ingresos.toFixed(2),
-        egresos: egresos.toFixed(2),
-        balance: (ingresos - egresos).toFixed(2)
-      })
-      
-      if (filtered.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin datos',
-          text: `No hay facturas para ${meses[mes - 1]} ${anio}`,
-          confirmButtonColor: '#3b82f6'
-        })
-      } else {
-        Swal.fire({
-          icon: 'success',
-          title: '¡Datos cargados!',
-          html: `
-            <div style="text-align: left; padding: 1rem;">
-              <p><strong>📊 Facturas:</strong> ${filtered.length}</p>
-              <p style="color: #10b981;"><strong>💰 Ingresos:</strong> Q ${ingresos.toFixed(2)}</p>
-              <p style="color: #ef4444;"><strong>💸 Egresos:</strong> Q ${egresos.toFixed(2)}</p>
-              <p><strong>📈 Balance:</strong> Q ${(ingresos - egresos).toFixed(2)}</p>
-            </div>
-          `,
-          timer: 3000,
-          showConfirmButton: false
-        })
-      }
-    } catch (error: any) {
-      console.error('❌ Error:', error)
+    console.log('   📊 Totales calculados:')
+    console.log('      Ingresos:', ingresos)
+    console.log('      Egresos:', egresos)
+    console.log('      Balance:', ingresos - egresos)
+    
+    setResumenFinanciero({
+      total_facturas: filtered.length,
+      ingresos: ingresos.toFixed(2),
+      egresos: egresos.toFixed(2),
+      balance: (ingresos - egresos).toFixed(2)
+    })
+    
+    if (filtered.length === 0) {
       Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'Error al cargar datos financieros',
+        icon: 'info',
+        title: 'Sin datos',
+        text: `No hay facturas para ${meses[mes - 1]} ${anio}`,
         confirmButtonColor: '#3b82f6'
       })
-    } finally {
-      setLoadingFinanciero(false)
+    } else {
+      Swal.fire({
+        icon: 'success',
+        title: '¡Datos cargados!',
+        html: `
+          <div style="text-align: left; padding: 1rem;">
+            <p><strong>📊 Facturas:</strong> ${filtered.length}</p>
+            <p style="color: #10b981;"><strong>💰 Ingresos:</strong> Q ${ingresos.toFixed(2)}</p>
+            <p style="color: #ef4444;"><strong>💸 Egresos:</strong> Q ${egresos.toFixed(2)}</p>
+            <p><strong>📈 Balance:</strong> Q ${(ingresos - egresos).toFixed(2)}</p>
+          </div>
+        `,
+        timer: 3000,
+        showConfirmButton: false
+      })
     }
+  } catch (error: any) {
+    console.error('❌ Error:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message || 'Error al cargar datos financieros',
+      confirmButtonColor: '#3b82f6'
+    })
+  } finally {
+    setLoadingFinanciero(false)
   }
+}
 
   // ==================== CARGAR DATOS ASISTENCIA ====================
 
@@ -353,58 +366,71 @@ export default function Reportes() {
 
   // ==================== GENERAR PDFs ====================
 
-  function generarPDFFinanciero() {
-    if (datosFinancieros.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Sin datos',
-        text: 'Primero carga los datos financieros',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
+function generarPDFFinanciero() {
+  if (datosFinancieros.length === 0) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Sin datos',
+      text: 'Primero carga los datos financieros',
+      confirmButtonColor: '#3b82f6'
+    })
+    return
+  }
 
-    const doc = new jsPDF()
-    
-    doc.setFontSize(18)
-    doc.text('Reporte Financiero', 14, 20)
-    
-    doc.setFontSize(12)
-    doc.text(`Período: ${meses[mes - 1]} ${anio}`, 14, 28)
-    
-    doc.setFontSize(10)
-    doc.text(`Total Facturas: ${resumenFinanciero.total_facturas}`, 14, 38)
-    doc.setTextColor(16, 185, 129)
-    doc.text(`Ingresos: Q ${resumenFinanciero.ingresos}`, 14, 44)
-    doc.setTextColor(239, 68, 68)
-    doc.text(`Egresos: Q ${resumenFinanciero.egresos}`, 14, 50)
-    doc.setTextColor(0, 0, 0)
-    doc.text(`Balance: Q ${resumenFinanciero.balance}`, 14, 56)
-    
-    autoTable(doc, {
-      startY: 65,
-      head: [['No. Factura', 'Descripción', 'Tipo', 'Monto', 'Estado']],
-      body: datosFinancieros.map(f => [
+  const doc = new jsPDF()
+  
+  doc.setFontSize(18)
+  doc.text('Reporte Financiero', 14, 20)
+  
+  doc.setFontSize(12)
+  doc.text(`Período: ${meses[mes - 1]} ${anio}`, 14, 28)
+  
+  doc.setFontSize(10)
+  doc.text(`Total Facturas: ${resumenFinanciero.total_facturas}`, 14, 38)
+  doc.setTextColor(16, 185, 129)
+  doc.text(`Ingresos: Q ${resumenFinanciero.ingresos}`, 14, 44)
+  doc.setTextColor(239, 68, 68)
+  doc.text(`Egresos: Q ${resumenFinanciero.egresos}`, 14, 50)
+  doc.setTextColor(0, 0, 0)
+  doc.text(`Balance: Q ${resumenFinanciero.balance}`, 14, 56)
+  
+  autoTable(doc, {
+    startY: 65,
+    head: [['No. Factura', 'Descripción', 'Tipo', 'Monto', 'Estado']],
+    body: datosFinancieros.map(f => {
+      const monto = parseFloat(f.monto || f.cantidad || f.total || 0)
+      return [
         f.numero_factura || 'N/A',
         (f.descripcion || '').substring(0, 30),
         f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso',
-        `Q ${parseFloat(f.monto || 0).toFixed(2)}`,
+        `Q ${monto.toFixed(2)}`,
         f.estado || 'N/A'
-      ]),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [59, 130, 246] }
-    })
-    
-    doc.save(`reporte_financiero_${meses[mes - 1]}_${anio}.pdf`)
-    
-    Swal.fire({
-      icon: 'success',
-      title: '¡PDF Descargado!',
-      text: `Reporte de ${datosFinancieros.length} facturas`,
-      timer: 2000,
-      showConfirmButton: false
-    })
-  }
+      ]
+    }),
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [59, 130, 246] },
+    // Resaltar totales en la última fila
+    didDrawPage: function (data: any) {
+      // Footer con totales
+      const finalY = (doc as any).lastAutoTable.finalY || 65
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Total Ingresos: Q ${resumenFinanciero.ingresos}`, 14, finalY + 10)
+      doc.text(`Total Egresos: Q ${resumenFinanciero.egresos}`, 14, finalY + 16)
+      doc.text(`Balance Final: Q ${resumenFinanciero.balance}`, 14, finalY + 22)
+    }
+  })
+  
+  doc.save(`reporte_financiero_${meses[mes - 1]}_${anio}.pdf`)
+  
+  Swal.fire({
+    icon: 'success',
+    title: '¡PDF Descargado!',
+    text: `Reporte de ${datosFinancieros.length} facturas`,
+    timer: 2000,
+    showConfirmButton: false
+  })
+}
 
   function generarPDFAsistencia() {
     if (datosAsistencia.length === 0) {

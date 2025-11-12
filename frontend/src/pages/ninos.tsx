@@ -277,106 +277,95 @@ export default function Ninos() {
     setShowInactivarModal(true)
   }
 
-  async function inactivarNino() {
-    if (!ninoAInactivar) return
+ async function inactivarNino() {
+  if (!ninoAInactivar) return
 
-    if (!motivoInactividad.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Motivo requerido',
-        text: 'Debes especificar el motivo de inactividad',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
-    const result = await Swal.fire({
+  if (!motivoInactividad.trim()) {
+    Swal.fire({
       icon: 'warning',
-      title: '¿Inactivar niño?',
-      html: `
-        <p>¿Estás seguro de inactivar a:</p>
-        <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
-          ${ninoAInactivar.nombres} ${ninoAInactivar.apellidos}
-        </p>
-        <p style="color: #ef4444; margin-top: 1rem; font-weight: 500;">
-          ⚠️ El niño será movido a la lista de inactivos
-        </p>
-      `,
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Sí, inactivar',
-      cancelButtonText: 'Cancelar'
+      title: 'Motivo requerido',
+      text: 'Debes especificar el motivo de inactividad',
+      confirmButtonColor: '#3b82f6'
+    })
+    return
+  }
+
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: '¿Inactivar niño?',
+    html: `
+      <p>¿Estás seguro de inactivar a:</p>
+      <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
+        ${ninoAInactivar.nombres} ${ninoAInactivar.apellidos}
+      </p>
+      <p style="color: #ef4444; margin-top: 1rem; font-weight: 500;">
+        ⚠️ El niño será movido a la lista de inactivos
+      </p>
+    `,
+    showCancelButton: true,
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280',
+    confirmButtonText: 'Sí, inactivar',
+    cancelButtonText: 'Cancelar'
+  })
+
+  if (!result.isConfirmed) return
+
+  try {
+    setInactivando(true)
+
+    console.log('🚪 Inactivando niño:', ninoAInactivar.id)
+    console.log('   Motivo:', motivoInactividad)
+
+    // USAR POST al endpoint /inactivar
+    const res = await fetch(`${API_URL}/ninos/${ninoAInactivar.id}/inactivar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ 
+        motivo: motivoInactividad.trim()
+      })
     })
 
-    if (!result.isConfirmed) return
+    console.log('Response status:', res.status)
+    console.log('Response ok:', res.ok)
 
-    try {
-      setInactivando(true)
-
-      console.log('🚪 Inactivando niño:', ninoAInactivar.id)
-      console.log('   Motivo:', motivoInactividad)
-
-      // Usar PUT para actualizar el niño
-      const res = await fetch(`${API_URL}/ninos/${ninoAInactivar.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          // Incluir TODOS los datos del niño
-          nombres: ninoAInactivar.nombres,
-          apellidos: ninoAInactivar.apellidos,
-          fecha_nacimiento: ninoAInactivar.fecha_nacimiento,
-          maestro_id: ninoAInactivar.maestro_id,
-          nivel_id: ninoAInactivar.nivel_id,
-          codigo: ninoAInactivar.codigo,
-          nombre_encargado: ninoAInactivar.nombre_encargado,
-          telefono_encargado: ninoAInactivar.telefono_encargado,
-          direccion_encargado: ninoAInactivar.direccion_encargado,
-          // Campos de inactivación
-          activo: false,
-          motivo_inactividad: motivoInactividad.trim()
-        })
-      })
-
-      console.log('Response status:', res.status)
-
-      if (!res.ok) {
-        const errorText = await res.text()
-        console.error('Error response:', errorText)
-        throw new Error('Error al inactivar niño')
-      }
-
-      const data = await res.json()
-      console.log('✅ Response data:', data)
-
-      await Swal.fire({
-        icon: 'success',
-        title: '¡Niño inactivado!',
-        text: `${ninoAInactivar.nombres} ${ninoAInactivar.apellidos} fue movido a inactivos`,
-        timer: 3000,
-        showConfirmButton: false
-      })
-      
-      setShowInactivarModal(false)
-      setNinoAInactivar(null)
-      setMotivoInactividad('')
-      
-      // Recargar lista de niños
-      cargarDatos()
-
-    } catch (error: any) {
-      console.error('❌ Error completo:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'Error al inactivar niño',
-        confirmButtonColor: '#3b82f6'
-      })
-    } finally {
-      setInactivando(false)
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }))
+      console.error('Error response:', errorData)
+      throw new Error(errorData.error || 'Error al inactivar niño')
     }
+
+    const data = await res.json()
+    console.log('✅ Response data:', data)
+
+    await Swal.fire({
+      icon: 'success',
+      title: '¡Niño inactivado!',
+      text: `${ninoAInactivar.nombres} ${ninoAInactivar.apellidos} fue movido a inactivos`,
+      timer: 3000,
+      showConfirmButton: false
+    })
+    
+    setShowInactivarModal(false)
+    setNinoAInactivar(null)
+    setMotivoInactividad('')
+    
+    // Recargar lista de niños
+    await cargarDatos()
+
+  } catch (error: any) {
+    console.error('❌ Error completo:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message || 'Error al inactivar niño',
+      confirmButtonColor: '#3b82f6'
+    })
+  } finally {
+    setInactivando(false)
   }
+}
 
   // ==================== FUNCIONES AUXILIARES ====================
 
