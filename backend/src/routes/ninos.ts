@@ -307,113 +307,91 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 })
 
 // POST /ninos/:id/inactivar - Inactivar un niño
+// POST /ninos/:id/inactivar - Inactivar un niño (VERSIÓN SIMPLE)
 router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const { motivo } = req.body
-    const userId = req.user?.id
 
-    console.log('\n🚪 POST /ninos/:id/inactivar')
-    console.log('   ID del niño:', id)
+    console.log('\n🚪 Inactivando niño')
+    console.log('   ID:', id)
     console.log('   Motivo:', motivo)
-    console.log('   Usuario:', userId)
-
-    if (!userId) {
-      return res.status(401).json({ error: 'No autenticado' })
-    }
 
     if (!motivo || !motivo.trim()) {
-      return res.status(400).json({ error: 'El motivo de inactividad es requerido' })
+      return res.status(400).json({ error: 'El motivo es requerido' })
     }
 
-    // Verificar que el niño existe y obtener todos sus datos
-    const check = await pool.query(
-      `SELECT n.*, 
-              u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
-              nv.nombre as nivel_nombre
-       FROM ninos n
-       LEFT JOIN usuarios u ON n.maestro_id = u.id
-       LEFT JOIN niveles nv ON n.nivel_id = nv.id
-       WHERE n.id = $1`,
+    // Obtener datos del niño
+    const ninoResult = await pool.query(
+      'SELECT * FROM ninos WHERE id = $1',
       [id]
     )
 
-    if (check.rows.length === 0) {
+    if (ninoResult.rows.length === 0) {
       console.log('❌ Niño no encontrado')
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
-    const nino = check.rows[0]
-    console.log('   Niño encontrado:', nino.nombres, nino.apellidos)
-    console.log('   Estado actual:', nino.activo)
+    const nino = ninoResult.rows[0]
+    console.log('   Niño:', nino.nombres, nino.apellidos)
 
     if (!nino.activo) {
       return res.status(400).json({ error: 'El niño ya está inactivo' })
     }
 
-    // Iniciar transacción
-    await pool.query('BEGIN')
+    // Insertar en tabla ninos_inactivos
+    console.log('   Insertando en ninos_inactivos...')
+    const insertResult = await pool.query(
+      `INSERT INTO ninos_inactivos 
+        (nino_id, nombres, apellidos, fecha_nacimiento, codigo, nivel_id, maestro_id,
+         nombre_encargado, telefono_encargado, direccion_encargado, motivo_inactividad)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
+      [
+        nino.id,
+        nino.nombres,
+        nino.apellidos,
+        nino.fecha_nacimiento,
+        nino.codigo,
+        nino.nivel_id,
+        nino.maestro_id,
+        nino.nombre_encargado,
+        nino.telefono_encargado,
+        nino.direccion_encargado,
+        motivo.trim()
+      ]
+    )
 
-    try {
-      // 1. Insertar en tabla ninos_inactivos
-      await pool.query(
-        `INSERT INTO ninos_inactivos 
-          (nino_id, nombres, apellidos, fecha_nacimiento, codigo, nivel_id, maestro_id,
-           nombre_encargado, telefono_encargado, direccion_encargado, motivo_inactividad, fecha_inactivacion)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
-        [
-          nino.id,
-          nino.nombres,
-          nino.apellidos,
-          nino.fecha_nacimiento,
-          nino.codigo,
-          nino.nivel_id,
-          nino.maestro_id,
-          nino.nombre_encargado,
-          nino.telefono_encargado,
-          nino.direccion_encargado,
-          motivo.trim()
-        ]
-      )
+    console.log('   ✅ Insertado ID:', insertResult.rows[0].id)
 
-      console.log('   ✅ Guardado en ninos_inactivos')
+    // Marcar como inactivo en tabla ninos
+    console.log('   Actualizando tabla ninos...')
+    await pool.query(
+      `UPDATE ninos 
+       SET activo = false, 
+           motivo_inactividad = $1, 
+           fecha_inactivacion = NOW()
+       WHERE id = $2`,
+      [motivo.trim(), id]
+    )
 
-      // 2. Marcar como inactivo en tabla ninos
-      await pool.query(
-        `UPDATE ninos 
-         SET activo = false, 
-             motivo_inactividad = $1, 
-             fecha_inactivacion = NOW(),
-             modificado_en = NOW()
-         WHERE id = $2`,
-        [motivo.trim(), id]
-      )
+    console.log('✅ Niño inactivado exitosamente')
 
-      console.log('   ✅ Marcado como inactivo en tabla ninos')
+    res.json({ 
+      ok: true, 
+      message: 'Niño inactivado exitosamente'
+    })
 
-      // Confirmar transacción
-      await pool.query('COMMIT')
-
-      console.log('✅ Niño inactivado exitosamente')
-
-      res.json({ 
-        ok: true, 
-        message: 'Niño inactivado exitosamente',
-        nino: {
-          id: nino.id,
-          nombres: nino.nombres,
-          apellidos: nino.apellidos
-        }
-      })
-    } catch (error) {
-      // Revertir transacción si hay error
-      await pool.query('ROLLBACK')
-      throw error
-    }
   } catch (error: any) {
-    console.error('❌ Error al inactivar niño:', error.message)
-    console.error('Stack:', error.stack)
-    res.status(500).json({ error: 'Error del servidor: ' + error.message })
+    console.error('❌ ERROR COMPLETO:', error)
+    console.error('   Mensaje:', error.message)
+    console.error('   Stack:', error.stack)
+    console.error('   Detail:', error.detail)
+    
+    res.status(500).json({ 
+      error: 'Error del servidor',
+      detalle: error.message 
+    })
   }
 })
 

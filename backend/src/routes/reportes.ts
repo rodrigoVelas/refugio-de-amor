@@ -81,6 +81,7 @@ r.get('/reportes/financiero', async (req: any, res: any) => {
 
 // REPORTE ASISTENCIA
 // GET /reportes/asistencia/datos - Obtener datos de asistencia
+// GET /reportes/asistencia/datos - Obtener datos de asistencia
 r.get('/reportes/asistencia/datos', async (req: any, res: any) => {
   const userId = req.user?.id
   if (!userId) return res.status(401).json({ error: 'no auth' })
@@ -88,33 +89,73 @@ r.get('/reportes/asistencia/datos', async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
 
-    console.log('📊 Obteniendo datos de asistencia')
-    console.log('   Mes:', mes, 'Año:', anio)
+    console.log('\n📊 GET /reportes/asistencia/datos')
+    console.log('   Usuario:', userId)
+    console.log('   Mes:', mes)
+    console.log('   Año:', anio)
 
     if (!mes || !anio) {
       return res.status(400).json({ error: 'Mes y año son requeridos' })
     }
 
-    // Consulta directa a la tabla asistencia
+    // Verificar primero si hay registros de asistencia
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM asistencia
+      WHERE EXTRACT(YEAR FROM fecha) = $1 
+        AND EXTRACT(MONTH FROM fecha) = $2
+    `
+    
+    const countResult = await pool.query(countQuery, [anio, mes])
+    console.log('   Total registros en el mes:', countResult.rows[0].total)
+
+    if (parseInt(countResult.rows[0].total) === 0) {
+      console.log('   ⚠️ No hay registros para este período')
+      return res.json({
+        registros: [],
+        resumen: {
+          total_registros: 0,
+          presentes: 0,
+          ausentes: 0,
+          suplentes: 0,
+          porcentaje_asistencia: '0'
+        }
+      })
+    }
+
+    // Consulta principal con los campos correctos
     const query = `
       SELECT 
+        a.id,
         to_char(a.fecha, 'YYYY-MM-DD') as fecha,
         to_char(a.fecha, 'DD/MM/YYYY') as fecha_formato,
-        n.nombres || ' ' || n.apellidos as nino_nombre,
-        COALESCE(nv.nombre, 'Sin nivel') as nivel,
+        a.hora,
         a.estado,
-        a.nota
+        COALESCE(a.nota, '') as nota,
+        a.nino_id,
+        n.nombres,
+        n.apellidos,
+        n.nombres || ' ' || n.apellidos as nino_nombre,
+        COALESCE(nv.nombre, 'Sin nivel') as nivel_nombre
       FROM asistencia a
-      JOIN ninos n ON a.nino_id = n.id
+      INNER JOIN ninos n ON a.nino_id = n.id
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       WHERE EXTRACT(YEAR FROM a.fecha) = $1 
         AND EXTRACT(MONTH FROM a.fecha) = $2
       ORDER BY a.fecha DESC, n.nombres ASC
     `
 
+    console.log('   Ejecutando query principal...')
     const { rows } = await pool.query(query, [anio, mes])
+    console.log('   Registros obtenidos:', rows.length)
 
-    console.log('   Registros encontrados:', rows.length)
+    if (rows.length > 0) {
+      console.log('   Primera fila ejemplo:', {
+        fecha: rows[0].fecha,
+        nino_nombre: rows[0].nino_nombre,
+        estado: rows[0].estado
+      })
+    }
 
     // Calcular estadísticas
     const total = rows.length
@@ -122,6 +163,13 @@ r.get('/reportes/asistencia/datos', async (req: any, res: any) => {
     const ausentes = rows.filter(a => a.estado === 'ausente').length
     const suplentes = rows.filter(a => a.estado === 'suplente').length
     const porcentaje = total > 0 ? ((presentes / total) * 100).toFixed(2) : '0'
+
+    console.log('   Estadísticas calculadas:')
+    console.log('      Total:', total)
+    console.log('      Presentes:', presentes)
+    console.log('      Ausentes:', ausentes)
+    console.log('      Suplentes:', suplentes)
+    console.log('      Porcentaje:', porcentaje + '%')
 
     res.json({
       registros: rows,
@@ -133,9 +181,17 @@ r.get('/reportes/asistencia/datos', async (req: any, res: any) => {
         porcentaje_asistencia: porcentaje
       }
     })
+
   } catch (error: any) {
-    console.error('❌ Error:', error.message)
-    res.status(500).json({ error: 'Error al obtener datos' })
+    console.error('❌ ERROR en /reportes/asistencia/datos')
+    console.error('   Mensaje:', error.message)
+    console.error('   Stack:', error.stack)
+    console.error('   Detail:', error.detail)
+    
+    res.status(500).json({ 
+      error: 'Error al obtener datos',
+      detalle: error.message 
+    })
   }
 })
 
@@ -217,50 +273,47 @@ r.get('/reportes/ninos', async (req: any, res: any) => {
 })
 
 // REPORTE NIÑOS INACTIVOS
-r.get('/reportes/inactivos', async (req: any, res: any) => {
+// GET /reportes/ninos-inactivos/datos - Obtener niños inactivos
+r.get('/reportes/ninos-inactivos/datos', async (req: any, res: any) => {
   const userId = req.user?.id
-  if (!userId) return res.status(401).send('no auth')
-  
-  const puede = await puedeVerReportes(userId)
-  if (!puede) return res.status(403).send('acceso denegado')
-
-  console.log('📊 Descargando reporte niños inactivos')
+  if (!userId) return res.status(401).json({ error: 'no auth' })
 
   try {
-    const { rows } = await pool.query(`
-      SELECT 
-        n.codigo, n.nombres, n.apellidos,
-        to_char(n.fecha_nacimiento, 'YYYY-MM-DD') as fecha_nac,
-        n.motivo_inactividad,
-        to_char(n.fecha_inactivacion, 'YYYY-MM-DD') as fecha_inact
-      FROM ninos n
-      WHERE n.activo = false
-      ORDER BY n.fecha_inactivacion DESC NULLS LAST
+    console.log('🚪 Obteniendo niños inactivos')
+
+    // Verificar primero si la tabla existe
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'ninos_inactivos'
+      );
     `)
 
-    const escape = (s: any) => {
-      const v = s == null ? '' : String(s)
-      return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+    if (!tableCheck.rows[0].exists) {
+      console.log('⚠️ Tabla ninos_inactivos no existe')
+      return res.json([])
     }
 
-    const lines = [
-      'Código,Nombres,Apellidos,Fecha Nacimiento,Motivo,Fecha Inactivación',
-      ...rows.map(r => `${escape(r.codigo)},${escape(r.nombres)},${escape(r.apellidos)},${escape(r.fecha_nac)},${escape(r.motivo_inactividad)},${escape(r.fecha_inact)}`),
-      '',
-      `Total,${rows.length}`
-    ]
+    const query = `
+      SELECT 
+        ni.*,
+        EXTRACT(YEAR FROM AGE(ni.fecha_nacimiento))::int as edad
+      FROM ninos_inactivos ni
+      ORDER BY ni.fecha_inactivacion DESC
+    `
 
-    const csv = lines.join('\n')
-    
-    res.setHeader('content-type', 'text/csv; charset=utf-8')
-    res.setHeader('content-disposition', `attachment; filename="ninos_inactivos.csv"`)
-    res.send(csv)
+    const { rows } = await pool.query(query)
+
+    console.log('   Niños inactivos encontrados:', rows.length)
+
+    res.json(rows)
   } catch (error: any) {
-    console.error('Error:', error)
-    res.status(500).send('error')
+    console.error('❌ Error:', error.message)
+    console.error('   Detail:', error.detail)
+    res.status(500).json({ error: 'Error al obtener datos: ' + error.message })
   }
 })
-
 console.log('✅ Rutas de reportes registradas')
 
 export default r

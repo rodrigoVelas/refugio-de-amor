@@ -144,27 +144,40 @@ export default function Reportes() {
   }
 
   // ==================== CARGAR DATOS ASISTENCIA ====================
-
 async function cargarDatosAsistencia() {
   try {
     setLoadingAsistencia(true)
     console.log('📅 Cargando datos de asistencia...')
     console.log('   Mes:', mes, 'Año:', anio)
+    console.log('   URL:', `${API_URL}/reportes/asistencia/datos?mes=${mes}&anio=${anio}`)
 
-    // Usar el nuevo endpoint
     const res = await fetch(
       `${API_URL}/reportes/asistencia/datos?mes=${mes}&anio=${anio}`, 
       { credentials: 'include' }
     )
 
+    console.log('   Response status:', res.status)
+    console.log('   Response ok:', res.ok)
+
     if (!res.ok) {
-      throw new Error('Error al cargar datos de asistencia')
+      const errorText = await res.text()
+      console.error('   Error response:', errorText)
+      
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: 'Error del servidor' }
+      }
+      
+      throw new Error(errorData.error || errorData.detalle || 'Error al cargar datos')
     }
 
     const data = await res.json()
-    console.log('   Datos recibidos:', data)
+    console.log('   ✅ Datos recibidos:', data)
+    console.log('   Ejemplo de registro:', data.registros[0])
 
-    if (data.registros.length === 0) {
+    if (!data.registros || data.registros.length === 0) {
       setDatosAsistencia([])
       setResumenAsistencia({
         total_registros: 0,
@@ -203,17 +216,18 @@ async function cargarDatosAsistencia() {
     })
 
   } catch (error: any) {
-    console.error('❌ Error:', error)
+    console.error('❌ Error completo:', error)
     Swal.fire({
       icon: 'error',
-      title: 'Error',
-      text: error.message || 'Error al cargar datos de asistencia',
+      title: 'Error al cargar datos de asistencia',
+      text: error.message || 'Error desconocido',
       confirmButtonColor: '#3b82f6'
     })
   } finally {
     setLoadingAsistencia(false)
   }
 }
+
   // ==================== CARGAR DATOS NIÑOS ====================
 
   async function cargarDatosNinos() {
@@ -364,65 +378,67 @@ async function cargarDatosAsistencia() {
     })
   }
 
-  function generarPDFAsistencia() {
-    if (datosAsistencia.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Sin datos',
-        text: 'Primero carga los datos de asistencia',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
-    const doc = new jsPDF()
-    
-    doc.setFontSize(18)
-    doc.text('Reporte de Asistencia', 14, 20)
-    
-    doc.setFontSize(12)
-    doc.text(`Período: ${meses[mes - 1]} ${anio}`, 14, 28)
-    
-    doc.setFontSize(10)
-    doc.text(`Total Registros: ${resumenAsistencia.total_registros}`, 14, 38)
-    doc.setTextColor(16, 185, 129)
-    doc.text(`Presentes: ${resumenAsistencia.presentes} (${resumenAsistencia.porcentaje_asistencia}%)`, 14, 44)
-    doc.setTextColor(239, 68, 68)
-    doc.text(`Ausentes: ${resumenAsistencia.ausentes}`, 14, 50)
-    doc.setTextColor(0, 0, 0)
-    doc.text(`Suplentes: ${resumenAsistencia.suplentes}`, 14, 56)
-    
-    autoTable(doc, {
-      startY: 65,
-      head: [['Fecha', 'Niño', 'Estado', 'Nota']],
-      body: datosAsistencia.map(a => [
-        a.fecha_formato || new Date(a.fecha).toLocaleDateString('es-GT'),
-        a.nino_nombre || a.nombres || 'N/A',
-        a.estado === 'presente' ? 'Presente' : 
-        a.estado === 'ausente' ? 'Ausente' : 
-        a.estado === 'suplente' ? 'Suplente' : a.estado,
-        (a.nota || '').substring(0, 40)
-      ]),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [16, 185, 129] },
-      columnStyles: {
-        0: { cellWidth: 25 },
-        1: { cellWidth: 60 },
-        2: { cellWidth: 25 },
-        3: { cellWidth: 'auto' }
-      }
-    })
-    
-    doc.save(`reporte_asistencia_${meses[mes - 1]}_${anio}.pdf`)
-    
+function generarPDFAsistencia() {
+  if (datosAsistencia.length === 0) {
     Swal.fire({
-      icon: 'success',
-      title: '¡PDF Descargado!',
-      text: `Reporte de ${datosAsistencia.length} registros`,
-      timer: 2000,
-      showConfirmButton: false
+      icon: 'warning',
+      title: 'Sin datos',
+      text: 'Primero carga los datos de asistencia',
+      confirmButtonColor: '#3b82f6'
     })
+    return
   }
+
+  const doc = new jsPDF()
+  
+  doc.setFontSize(18)
+  doc.text('Reporte de Asistencia', 14, 20)
+  
+  doc.setFontSize(12)
+  doc.text(`Período: ${meses[mes - 1]} ${anio}`, 14, 28)
+  
+  doc.setFontSize(10)
+  doc.text(`Total Registros: ${resumenAsistencia.total_registros}`, 14, 38)
+  doc.setTextColor(16, 185, 129)
+  doc.text(`Presentes: ${resumenAsistencia.presentes} (${resumenAsistencia.porcentaje_asistencia}%)`, 14, 44)
+  doc.setTextColor(239, 68, 68)
+  doc.text(`Ausentes: ${resumenAsistencia.ausentes}`, 14, 50)
+  doc.setTextColor(0, 0, 0)
+  doc.text(`Suplentes: ${resumenAsistencia.suplentes}`, 14, 56)
+  
+  autoTable(doc, {
+    startY: 65,
+    head: [['Fecha', 'Hora', 'Niño', 'Estado', 'Nota']],
+    body: datosAsistencia.map(a => [
+      a.fecha_formato || new Date(a.fecha).toLocaleDateString('es-GT'),
+      a.hora || 'N/A',
+      a.nino_nombre || `${a.nombres || ''} ${a.apellidos || ''}`,
+      a.estado === 'presente' ? 'Presente' : 
+      a.estado === 'ausente' ? 'Ausente' : 
+      a.estado === 'suplente' ? 'Suplente' : a.estado,
+      (a.nota || '').substring(0, 40)
+    ]),
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [16, 185, 129] },
+    columnStyles: {
+      0: { cellWidth: 25 },
+      1: { cellWidth: 20 },
+      2: { cellWidth: 50 },
+      3: { cellWidth: 25 },
+      4: { cellWidth: 'auto' }
+    }
+  })
+  
+  doc.save(`reporte_asistencia_${meses[mes - 1]}_${anio}.pdf`)
+  
+  Swal.fire({
+    icon: 'success',
+    title: '¡PDF Descargado!',
+    text: `Reporte de ${datosAsistencia.length} registros`,
+    timer: 2000,
+    showConfirmButton: false
+  })
+}
 
   function generarPDFNinos() {
     if (datosNinos.length === 0) {
