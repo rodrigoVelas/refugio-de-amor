@@ -326,9 +326,15 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
       return res.status(400).json({ error: 'El motivo de inactividad es requerido' })
     }
 
-    // Verificar que el niño existe
+    // Verificar que el niño existe y obtener todos sus datos
     const check = await pool.query(
-      'SELECT id, nombres, apellidos, activo FROM ninos WHERE id = $1',
+      `SELECT n.*, 
+              u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
+              nv.nombre as nivel_nombre
+       FROM ninos n
+       LEFT JOIN usuarios u ON n.maestro_id = u.id
+       LEFT JOIN niveles nv ON n.nivel_id = nv.id
+       WHERE n.id = $1`,
       [id]
     )
 
@@ -337,41 +343,81 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
-    console.log('   Niño encontrado:', check.rows[0].nombres, check.rows[0].apellidos)
-    console.log('   Estado actual:', check.rows[0].activo)
+    const nino = check.rows[0]
+    console.log('   Niño encontrado:', nino.nombres, nino.apellidos)
+    console.log('   Estado actual:', nino.activo)
 
-    if (!check.rows[0].activo) {
+    if (!nino.activo) {
       return res.status(400).json({ error: 'El niño ya está inactivo' })
     }
 
-    // Inactivar el niño
-    const result = await pool.query(
-      `UPDATE ninos 
-       SET activo = false, 
-           motivo_inactividad = $1, 
-           fecha_inactivacion = NOW(),
-           modificado_en = NOW()
-       WHERE id = $2
-       RETURNING *`,
-      [motivo.trim(), id]
-    )
+    // Iniciar transacción
+    await pool.query('BEGIN')
 
-    console.log('✅ Niño inactivado exitosamente')
-    console.log('   Nuevo estado activo:', result.rows[0].activo)
-    console.log('   Motivo guardado:', result.rows[0].motivo_inactividad)
+    try {
+      // 1. Insertar en tabla ninos_inactivos
+      await pool.query(
+        `INSERT INTO ninos_inactivos 
+          (nino_id, nombres, apellidos, fecha_nacimiento, codigo, nivel_id, maestro_id,
+           nombre_encargado, telefono_encargado, direccion_encargado, motivo_inactividad, fecha_inactivacion)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
+        [
+          nino.id,
+          nino.nombres,
+          nino.apellidos,
+          nino.fecha_nacimiento,
+          nino.codigo,
+          nino.nivel_id,
+          nino.maestro_id,
+          nino.nombre_encargado,
+          nino.telefono_encargado,
+          nino.direccion_encargado,
+          motivo.trim()
+        ]
+      )
 
-    res.json({ 
-      ok: true, 
-      message: 'Niño inactivado exitosamente',
-      nino: result.rows[0]
-    })
+      console.log('   ✅ Guardado en ninos_inactivos')
+
+      // 2. Marcar como inactivo en tabla ninos
+      await pool.query(
+        `UPDATE ninos 
+         SET activo = false, 
+             motivo_inactividad = $1, 
+             fecha_inactivacion = NOW(),
+             modificado_en = NOW()
+         WHERE id = $2`,
+        [motivo.trim(), id]
+      )
+
+      console.log('   ✅ Marcado como inactivo en tabla ninos')
+
+      // Confirmar transacción
+      await pool.query('COMMIT')
+
+      console.log('✅ Niño inactivado exitosamente')
+
+      res.json({ 
+        ok: true, 
+        message: 'Niño inactivado exitosamente',
+        nino: {
+          id: nino.id,
+          nombres: nino.nombres,
+          apellidos: nino.apellidos
+        }
+      })
+    } catch (error) {
+      // Revertir transacción si hay error
+      await pool.query('ROLLBACK')
+      throw error
+    }
   } catch (error: any) {
     console.error('❌ Error al inactivar niño:', error.message)
     console.error('Stack:', error.stack)
-    res.status(500).json({ error: 'Error al inactivar niño: ' + error.message })
+    res.status(500).json({ error: 'Error del servidor: ' + error.message })
   }
 })
 
+// POST /ninos/:id/reactivar - Reactivar un niño
 // POST /ninos/:id/reactivar - Reactivar un niño
 router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
   try {
@@ -386,6 +432,7 @@ router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
       return res.status(401).json({ error: 'No autenticado' })
     }
 
+    // Verificar que el niño existe
     const check = await pool.query(
       'SELECT id, nombres, apellidos, activo FROM ninos WHERE id = $1',
       [id]
@@ -399,24 +446,42 @@ router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
       return res.status(400).json({ error: 'El niño ya está activo' })
     }
 
-    const result = await pool.query(
-      `UPDATE ninos 
-       SET activo = true, 
-           motivo_inactividad = NULL, 
-           fecha_inactivacion = NULL,
-           modificado_en = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [id]
-    )
+    // Iniciar transacción
+    await pool.query('BEGIN')
 
-    console.log('✅ Niño reactivado:', check.rows[0].nombres, check.rows[0].apellidos)
+    try {
+      // 1. Eliminar de ninos_inactivos
+      await pool.query('DELETE FROM ninos_inactivos WHERE nino_id = $1', [id])
+      console.log('   ✅ Eliminado de ninos_inactivos')
 
-    res.json({ 
-      ok: true, 
-      message: 'Niño reactivado exitosamente',
-      nino: result.rows[0]
-    })
+      // 2. Reactivar en tabla ninos
+      const result = await pool.query(
+        `UPDATE ninos 
+         SET activo = true, 
+             motivo_inactividad = NULL, 
+             fecha_inactivacion = NULL,
+             modificado_en = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [id]
+      )
+
+      console.log('   ✅ Reactivado en tabla ninos')
+
+      // Confirmar transacción
+      await pool.query('COMMIT')
+
+      console.log('✅ Niño reactivado exitosamente')
+
+      res.json({ 
+        ok: true, 
+        message: 'Niño reactivado exitosamente',
+        nino: result.rows[0]
+      })
+    } catch (error) {
+      await pool.query('ROLLBACK')
+      throw error
+    }
   } catch (error: any) {
     console.error('❌ Error al reactivar niño:', error.message)
     res.status(500).json({ error: 'Error al reactivar niño: ' + error.message })

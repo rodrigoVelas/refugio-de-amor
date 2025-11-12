@@ -80,63 +80,93 @@ r.get('/reportes/financiero', async (req: any, res: any) => {
 })
 
 // REPORTE ASISTENCIA
-r.get('/reportes/asistencia', async (req: any, res: any) => {
+// GET /reportes/asistencia/datos - Obtener datos de asistencia
+r.get('/reportes/asistencia/datos', async (req: any, res: any) => {
   const userId = req.user?.id
-  if (!userId) return res.status(401).send('no auth')
-  
-  const puede = await puedeVerReportes(userId)
-  if (!puede) return res.status(403).send('acceso denegado')
-
-  const { mes, anio } = req.query
-  
-  console.log('📊 Descargando reporte asistencia, mes:', mes, 'año:', anio)
+  if (!userId) return res.status(401).json({ error: 'no auth' })
 
   try {
-    let q = `SELECT 
-      to_char(a.fecha, 'YYYY-MM-DD') as fecha,
-      n.nombres || ' ' || n.apellidos as nino,
-      nv.nombre as nivel,
-      a.estado
-    FROM asistencia a
-    JOIN ninos n ON a.nino_id = n.id
-    LEFT JOIN niveles nv ON n.nivel_id = nv.id
-    WHERE 1=1`
+    const { mes, anio } = req.query
 
-    const params: any[] = []
-    if (mes && anio) {
-      params.push(anio, mes)
-      q += ` AND EXTRACT(YEAR FROM a.fecha) = $1 AND EXTRACT(MONTH FROM a.fecha) = $2`
+    console.log('📊 Obteniendo datos de asistencia')
+    console.log('   Mes:', mes, 'Año:', anio)
+
+    if (!mes || !anio) {
+      return res.status(400).json({ error: 'Mes y año son requeridos' })
     }
-    q += ` ORDER BY a.fecha DESC`
 
-    const { rows } = await pool.query(q, params)
-    
+    // Consulta directa a la tabla asistencia
+    const query = `
+      SELECT 
+        to_char(a.fecha, 'YYYY-MM-DD') as fecha,
+        to_char(a.fecha, 'DD/MM/YYYY') as fecha_formato,
+        n.nombres || ' ' || n.apellidos as nino_nombre,
+        COALESCE(nv.nombre, 'Sin nivel') as nivel,
+        a.estado,
+        a.nota
+      FROM asistencia a
+      JOIN ninos n ON a.nino_id = n.id
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      WHERE EXTRACT(YEAR FROM a.fecha) = $1 
+        AND EXTRACT(MONTH FROM a.fecha) = $2
+      ORDER BY a.fecha DESC, n.nombres ASC
+    `
+
+    const { rows } = await pool.query(query, [anio, mes])
+
+    console.log('   Registros encontrados:', rows.length)
+
+    // Calcular estadísticas
     const total = rows.length
     const presentes = rows.filter(a => a.estado === 'presente').length
+    const ausentes = rows.filter(a => a.estado === 'ausente').length
+    const suplentes = rows.filter(a => a.estado === 'suplente').length
+    const porcentaje = total > 0 ? ((presentes / total) * 100).toFixed(2) : '0'
 
-    const escape = (s: any) => {
-      const v = s == null ? '' : String(s)
-      return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
-    }
-
-    const lines = [
-      'Fecha,Niño,Nivel,Estado',
-      ...rows.map(r => `${escape(r.fecha)},${escape(r.nino)},${escape(r.nivel)},${escape(r.estado)}`),
-      '',
-      'RESUMEN',
-      `Total,${total}`,
-      `Presentes,${presentes}`,
-      `% Asistencia,${total > 0 ? ((presentes/total)*100).toFixed(2) : 0}%`
-    ]
-
-    const csv = lines.join('\n')
-    
-    res.setHeader('content-type', 'text/csv; charset=utf-8')
-    res.setHeader('content-disposition', `attachment; filename="asistencia_${mes}_${anio}.csv"`)
-    res.send(csv)
+    res.json({
+      registros: rows,
+      resumen: {
+        total_registros: total,
+        presentes,
+        ausentes,
+        suplentes,
+        porcentaje_asistencia: porcentaje
+      }
+    })
   } catch (error: any) {
-    console.error('Error:', error)
-    res.status(500).send('error')
+    console.error('❌ Error:', error.message)
+    res.status(500).json({ error: 'Error al obtener datos' })
+  }
+})
+
+// GET /reportes/ninos-inactivos/datos - Obtener niños inactivos
+r.get('/reportes/ninos-inactivos/datos', async (req: any, res: any) => {
+  const userId = req.user?.id
+  if (!userId) return res.status(401).json({ error: 'no auth' })
+
+  try {
+    console.log('🚪 Obteniendo niños inactivos')
+
+    const query = `
+      SELECT 
+        ni.*,
+        nv.nombre as nivel_nombre,
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
+        EXTRACT(YEAR FROM AGE(ni.fecha_nacimiento))::int as edad
+      FROM ninos_inactivos ni
+      LEFT JOIN niveles nv ON ni.nivel_id = nv.id
+      LEFT JOIN usuarios u ON ni.maestro_id = u.id
+      ORDER BY ni.fecha_inactivacion DESC
+    `
+
+    const { rows } = await pool.query(query)
+
+    console.log('   Niños inactivos encontrados:', rows.length)
+
+    res.json(rows)
+  } catch (error: any) {
+    console.error('❌ Error:', error.message)
+    res.status(500).json({ error: 'Error al obtener datos' })
   }
 })
 

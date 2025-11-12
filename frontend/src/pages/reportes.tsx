@@ -145,140 +145,75 @@ export default function Reportes() {
 
   // ==================== CARGAR DATOS ASISTENCIA ====================
 
-  async function cargarDatosAsistencia() {
-    try {
-      setLoadingAsistencia(true)
-      console.log('📅 Cargando datos de asistencia...')
-      console.log('   Mes:', mes, 'Año:', anio)
+async function cargarDatosAsistencia() {
+  try {
+    setLoadingAsistencia(true)
+    console.log('📅 Cargando datos de asistencia...')
+    console.log('   Mes:', mes, 'Año:', anio)
 
-      const sesionesRes = await fetch(`${API_URL}/asistencia`, { credentials: 'include' })
+    // Usar el nuevo endpoint
+    const res = await fetch(
+      `${API_URL}/reportes/asistencia/datos?mes=${mes}&anio=${anio}`, 
+      { credentials: 'include' }
+    )
 
-      if (!sesionesRes.ok) {
-        throw new Error('Error al cargar sesiones')
-      }
+    if (!res.ok) {
+      throw new Error('Error al cargar datos de asistencia')
+    }
 
-      const sesiones = await sesionesRes.json()
-      console.log('   Total sesiones en BD:', sesiones.length)
+    const data = await res.json()
+    console.log('   Datos recibidos:', data)
 
-      // Filtrar sesiones del mes
-      const sesionesFiltradas = sesiones.filter((s: any) => {
-        const fecha = new Date(s.fecha)
-        return fecha.getMonth() + 1 === mes && fecha.getFullYear() === anio
-      })
-
-      console.log('   Sesiones del mes:', sesionesFiltradas.length)
-
-      if (sesionesFiltradas.length === 0) {
-        setDatosAsistencia([])
-        setResumenAsistencia({
-          total_registros: 0,
-          presentes: 0,
-          ausentes: 0,
-          suplentes: 0,
-          porcentaje_asistencia: '0'
-        })
-
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin datos',
-          text: `No hay sesiones de asistencia para ${meses[mes - 1]} ${anio}`,
-          confirmButtonColor: '#3b82f6'
-        })
-        return
-      }
-
-      // Cargar detalles de cada sesión
-      const todosRegistros: any[] = []
-
-      for (const sesion of sesionesFiltradas) {
-        try {
-          console.log('   Cargando sesión:', sesion.id)
-          const detRes = await fetch(`${API_URL}/asistencia/${sesion.id}/editar`, { 
-            credentials: 'include' 
-          })
-
-          if (detRes.ok) {
-            const detData = await detRes.json()
-            console.log('   Detalles recibidos:', detData)
-            
-            if (detData.detalles && Array.isArray(detData.detalles)) {
-              const registrosConFecha = detData.detalles.map((d: any) => ({
-                ...d,
-                fecha: sesion.fecha,
-                fecha_formato: new Date(sesion.fecha).toLocaleDateString('es-GT')
-              }))
-              
-              todosRegistros.push(...registrosConFecha)
-              console.log('      ✓ Agregados', registrosConFecha.length, 'registros')
-            }
-          } else {
-            console.log('      ⚠️ Error al cargar sesión')
-          }
-        } catch (error) {
-          console.error('      ❌ Error:', error)
-        }
-      }
-
-      console.log('   📊 Total registros cargados:', todosRegistros.length)
-
-      if (todosRegistros.length === 0) {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Sin registros',
-          text: 'Las sesiones no tienen registros de asistencia',
-          confirmButtonColor: '#3b82f6'
-        })
-        setDatosAsistencia([])
-        return
-      }
-
-      setDatosAsistencia(todosRegistros)
-
-      // Calcular estadísticas
-      const presentes = todosRegistros.filter(a => a.estado === 'presente').length
-      const ausentes = todosRegistros.filter(a => a.estado === 'ausente').length
-      const suplentes = todosRegistros.filter(a => a.estado === 'suplente').length
-      const porcentaje = todosRegistros.length > 0 
-        ? ((presentes / todosRegistros.length) * 100).toFixed(2) 
-        : '0'
-
+    if (data.registros.length === 0) {
+      setDatosAsistencia([])
       setResumenAsistencia({
-        total_registros: todosRegistros.length,
-        presentes,
-        ausentes,
-        suplentes,
-        porcentaje_asistencia: porcentaje
+        total_registros: 0,
+        presentes: 0,
+        ausentes: 0,
+        suplentes: 0,
+        porcentaje_asistencia: '0'
       })
 
       Swal.fire({
-        icon: 'success',
-        title: '¡Datos cargados!',
-        html: `
-          <div style="text-align: left; padding: 1rem;">
-            <p><strong>📊 Total registros:</strong> ${todosRegistros.length}</p>
-            <p style="color: #10b981;"><strong>✅ Presentes:</strong> ${presentes}</p>
-            <p style="color: #ef4444;"><strong>❌ Ausentes:</strong> ${ausentes}</p>
-            <p><strong>📝 Suplentes:</strong> ${suplentes}</p>
-            <p><strong>📈 % Asistencia:</strong> ${porcentaje}%</p>
-          </div>
-        `,
-        timer: 3000,
-        showConfirmButton: false
-      })
-
-    } catch (error: any) {
-      console.error('❌ Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'Error al cargar datos de asistencia',
+        icon: 'info',
+        title: 'Sin datos',
+        text: `No hay registros de asistencia para ${meses[mes - 1]} ${anio}`,
         confirmButtonColor: '#3b82f6'
       })
-    } finally {
-      setLoadingAsistencia(false)
+      return
     }
-  }
 
+    setDatosAsistencia(data.registros)
+    setResumenAsistencia(data.resumen)
+
+    Swal.fire({
+      icon: 'success',
+      title: '¡Datos cargados!',
+      html: `
+        <div style="text-align: left; padding: 1rem;">
+          <p><strong>📊 Total registros:</strong> ${data.resumen.total_registros}</p>
+          <p style="color: #10b981;"><strong>✅ Presentes:</strong> ${data.resumen.presentes}</p>
+          <p style="color: #ef4444;"><strong>❌ Ausentes:</strong> ${data.resumen.ausentes}</p>
+          <p><strong>📝 Suplentes:</strong> ${data.resumen.suplentes}</p>
+          <p><strong>📈 % Asistencia:</strong> ${data.resumen.porcentaje_asistencia}%</p>
+        </div>
+      `,
+      timer: 3000,
+      showConfirmButton: false
+    })
+
+  } catch (error: any) {
+    console.error('❌ Error:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message || 'Error al cargar datos de asistencia',
+      confirmButtonColor: '#3b82f6'
+    })
+  } finally {
+    setLoadingAsistencia(false)
+  }
+}
   // ==================== CARGAR DATOS NIÑOS ====================
 
   async function cargarDatosNinos() {

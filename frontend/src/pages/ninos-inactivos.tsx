@@ -29,41 +29,39 @@ export default function NinosInactivos() {
   }, [])
 
   async function cargarNinosInactivos() {
-    try {
-      setLoading(true)
-      console.log('🚪 Cargando niños inactivos...')
-      
-      const res = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
-      
-      if (!res.ok) {
-        throw new Error('Error al cargar niños')
-      }
-      
-      const data = await res.json()
-      console.log('   Total niños en BD:', data.length)
-      
-      // Filtrar solo inactivos
-      const inactivos = data.filter((n: any) => n.activo === false)
-      console.log('   Niños inactivos:', inactivos.length)
-      
-      if (inactivos.length > 0) {
-        console.log('   Primer niño inactivo:', inactivos[0])
-      }
-      
-      setNinos(inactivos)
-    } catch (error: any) {
-      console.error('❌ Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'Error al cargar niños inactivos',
-        confirmButtonColor: '#3b82f6'
-      })
-    } finally {
-      setLoading(false)
+  try {
+    setLoading(true)
+    console.log('🚪 Cargando niños inactivos...')
+    
+    // Usar el nuevo endpoint
+    const res = await fetch(`${API_URL}/reportes/ninos-inactivos/datos`, { 
+      credentials: 'include' 
+    })
+    
+    if (!res.ok) {
+      throw new Error('Error al cargar niños inactivos')
     }
+    
+    const data = await res.json()
+    console.log('   Niños inactivos:', data.length)
+    
+    if (data.length > 0) {
+      console.log('   Primer niño:', data[0])
+    }
+    
+    setNinos(data)
+  } catch (error: any) {
+    console.error('❌ Error:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message || 'Error al cargar niños inactivos',
+      confirmButtonColor: '#3b82f6'
+    })
+  } finally {
+    setLoading(false)
   }
-
+}
   async function reactivarNino(id: string, nombre: string) {
     const result = await Swal.fire({
       icon: 'question',
