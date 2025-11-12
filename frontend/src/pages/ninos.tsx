@@ -27,6 +27,8 @@ interface Nino {
   maestro_nombre: string
   maestro_email: string
   nivel_nombre: string | null
+  edad: number
+  activo: boolean
 }
 
 export default function Ninos() {
@@ -312,38 +314,59 @@ export default function Ninos() {
     try {
       setInactivando(true)
 
-      console.log('Inactivando niño:', ninoAInactivar.id)
-      console.log('Motivo:', motivoInactividad)
+      console.log('🚪 Inactivando niño:', ninoAInactivar.id)
+      console.log('   Motivo:', motivoInactividad)
 
-      const res = await fetch(`${API_URL}/ninos/${ninoAInactivar.id}/inactivar`, {
-        method: 'POST',
+      // Usar PUT para actualizar el niño
+      const res = await fetch(`${API_URL}/ninos/${ninoAInactivar.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ motivo: motivoInactividad.trim() })
+        body: JSON.stringify({ 
+          // Incluir TODOS los datos del niño
+          nombres: ninoAInactivar.nombres,
+          apellidos: ninoAInactivar.apellidos,
+          fecha_nacimiento: ninoAInactivar.fecha_nacimiento,
+          maestro_id: ninoAInactivar.maestro_id,
+          nivel_id: ninoAInactivar.nivel_id,
+          codigo: ninoAInactivar.codigo,
+          nombre_encargado: ninoAInactivar.nombre_encargado,
+          telefono_encargado: ninoAInactivar.telefono_encargado,
+          direccion_encargado: ninoAInactivar.direccion_encargado,
+          // Campos de inactivación
+          activo: false,
+          motivo_inactividad: motivoInactividad.trim()
+        })
       })
 
-      const data = await res.json()
+      console.log('Response status:', res.status)
 
-      if (res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: '¡Niño inactivado!',
-          text: `${ninoAInactivar.nombres} ${ninoAInactivar.apellidos} fue movido a inactivos`,
-          timer: 3000,
-          showConfirmButton: false
-        })
-        
-        setShowInactivarModal(false)
-        setNinoAInactivar(null)
-        setMotivoInactividad('')
-        
-        // Recargar lista de niños
-        cargarDatos()
-      } else {
-        throw new Error(data.error || 'Error al inactivar')
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('Error response:', errorText)
+        throw new Error('Error al inactivar niño')
       }
+
+      const data = await res.json()
+      console.log('✅ Response data:', data)
+
+      await Swal.fire({
+        icon: 'success',
+        title: '¡Niño inactivado!',
+        text: `${ninoAInactivar.nombres} ${ninoAInactivar.apellidos} fue movido a inactivos`,
+        timer: 3000,
+        showConfirmButton: false
+      })
+      
+      setShowInactivarModal(false)
+      setNinoAInactivar(null)
+      setMotivoInactividad('')
+      
+      // Recargar lista de niños
+      cargarDatos()
+
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error completo:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -465,7 +488,6 @@ export default function Ninos() {
                     <button className="btn btn-ghost" onClick={() => abrirModal(nino)} style={{ flex: '1 1 auto' }}>
                       Editar
                     </button>
-                    {/* BOTÓN DE INACTIVAR */}
                     <button 
                       className="btn"
                       onClick={() => abrirModalInactivar(nino)}
@@ -649,76 +671,75 @@ export default function Ninos() {
               </div>
 
               {/* Información del niño */}
-              <div style={{ 
-                padding: '1rem', 
-                background: 'var(--surface-elevated)', 
-                borderRadius: 'var(--radius)', 
-                marginBottom: '1.5rem',
-                border: '1px solid var(--border)'
-              }}>
-                <p style={{ marginBottom: '0.5rem' }}>
-                  <strong>Código:</strong> {ninoAInactivar.codigo || 'Sin código'}
-                </p>
-                <p style={{ marginBottom: '0.5rem' }}>
-                  <strong>Edad:</strong> {calcularEdad(ninoAInactivar.fecha_nacimiento)} años
-                </p>
-                <p>
-                  <strong>Nivel:</strong> {ninoAInactivar.nivel_nombre || 'Sin nivel'}
-                </p>
-              </div>
-
-              {/* Formulario */}
-              <div className="form">
-                <div >
-                  <label className="label" style={{ fontWeight: '600', fontSize: '1rem' }}>
-                    Motivo de inactividad *
-                  </label>
-                  <textarea
-                    className="textarea"
-                    value={motivoInactividad}
-                    onChange={e => setMotivoInactividad(e.target.value)}
-                    placeholder="Ejemplo: Cumplió 18 años, Se mudó de ciudad, Finalizó el programa, Graduación..."
-                    rows={4}
-                    required
-                    disabled={inactivando}
-                    style={{ fontSize: '0.95rem' }}
-                  />
-                  <small style={{ 
-                    display: 'block', 
-                    marginTop: '0.5rem', 
-                    color: 'var(--text-secondary)',
-                    fontSize: '0.875rem'
-                  }}>
-                    📝 Especifica claramente el motivo por el cual el niño ya no estará activo en el sistema.
-                    Esta información quedará registrada permanentemente.
-                  </small>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-actions" style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)' }}>
-              <button 
-                className="btn btn-ghost" 
-                onClick={() => setShowInactivarModal(false)}
+              <div style={{
+padding: '1rem',
+background: 'var(--surface-elevated)',
+borderRadius: 'var(--radius)',
+marginBottom: '1.5rem',
+border: '1px solid var(--border)'
+}}>
+<p style={{ marginBottom: '0.5rem' }}>
+<strong>Código:</strong> {ninoAInactivar.codigo || 'Sin código'}
+</p>
+<p style={{ marginBottom: '0.5rem' }}>
+<strong>Edad:</strong> {calcularEdad(ninoAInactivar.fecha_nacimiento)} años
+</p>
+<p>
+<strong>Nivel:</strong> {ninoAInactivar.nivel_nombre || 'Sin nivel'}
+</p>
+</div>
+{/* Formulario */}
+          <div className="form">
+            <div>
+              <label className="label" style={{ fontWeight: '600', fontSize: '1rem' }}>
+                Motivo de inactividad *
+              </label>
+              <textarea
+                className="textarea"
+                value={motivoInactividad}
+                onChange={e => setMotivoInactividad(e.target.value)}
+                placeholder="Ejemplo: Cumplió 18 años, Se mudó de ciudad, Finalizó el programa, Graduación..."
+                rows={4}
+                required
                 disabled={inactivando}
-              >
-                Cancelar
-              </button>
-              <button 
-                className="btn"
-                onClick={inactivarNino}
-                disabled={inactivando || !motivoInactividad.trim()}
-                style={{ 
-                  background: '#ef4444',
-                  opacity: (inactivando || !motivoInactividad.trim()) ? 0.5 : 1
-                }}
-              >
-                {inactivando ? 'Inactivando...' : '🚪 Inactivar Niño'}
-              </button>
+                style={{ fontSize: '0.95rem' }}
+              />
+              <small style={{ 
+                display: 'block', 
+                marginTop: '0.5rem', 
+                color: 'var(--text-secondary)',
+                fontSize: '0.875rem'
+              }}>
+                📝 Especifica claramente el motivo por el cual el niño ya no estará activo en el sistema.
+                Esta información quedará registrada permanentemente.
+              </small>
             </div>
           </div>
         </div>
-      )}
+
+        <div className="modal-actions" style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)' }}>
+          <button 
+            className="btn btn-ghost" 
+            onClick={() => setShowInactivarModal(false)}
+            disabled={inactivando}
+          >
+            Cancelar
+          </button>
+          <button 
+            className="btn"
+            onClick={inactivarNino}
+            disabled={inactivando || !motivoInactividad.trim()}
+            style={{ 
+              background: '#ef4444',
+              opacity: (inactivando || !motivoInactividad.trim()) ? 0.5 : 1
+            }}
+          >
+            {inactivando ? 'Inactivando...' : '🚪 Inactivar Niño'}
+          </button>
+        </div>
+      </div>
     </div>
+  )}
+</div> 
   )
 }

@@ -59,56 +59,81 @@ export default function Reportes() {
   const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
-  // ==================== CARGAR DATOS ====================
+  // ==================== CARGAR DATOS FINANCIEROS ====================
 
   async function cargarDatosFinancieros() {
     try {
       setLoadingFinanciero(true)
+      console.log('💰 Cargando datos financieros...')
+      console.log('   Mes:', mes, 'Año:', anio)
 
-      const res = await fetch(
-        `${API_URL}/facturas?mes=${mes}&anio=${anio}`,
-        { credentials: 'include' }
-      )
+      const res = await fetch(`${API_URL}/facturas`, { credentials: 'include' })
 
-      if (res.ok) {
-        const data = await res.json()
-        console.log('📊 Facturas cargadas:', data.length)
-        
-        // Filtrar por mes y año en el frontend
-        const filtered = data.filter((f: any) => {
-          const fecha = new Date(f.creado_en)
-          return fecha.getMonth() + 1 === mes && fecha.getFullYear() === anio
+      if (!res.ok) {
+        throw new Error('Error al cargar facturas')
+      }
+
+      const todasFacturas = await res.json()
+      console.log('   Total facturas en BD:', todasFacturas.length)
+
+      // Filtrar por mes y año
+      const filtered = todasFacturas.filter((f: any) => {
+        const fecha = new Date(f.creado_en)
+        return fecha.getMonth() + 1 === mes && fecha.getFullYear() === anio
+      })
+
+      console.log('   Facturas del mes:', filtered.length)
+      
+      setDatosFinancieros(filtered)
+      
+      // Calcular totales
+      const ingresos = filtered
+        .filter((f: any) => f.tipo === 'ingreso')
+        .reduce((sum: number, f: any) => sum + parseFloat(f.monto || 0), 0)
+      
+      const egresos = filtered
+        .filter((f: any) => f.tipo === 'egreso')
+        .reduce((sum: number, f: any) => sum + parseFloat(f.monto || 0), 0)
+
+      console.log('   Ingresos:', ingresos)
+      console.log('   Egresos:', egresos)
+      
+      setResumenFinanciero({
+        total_facturas: filtered.length,
+        ingresos: ingresos.toFixed(2),
+        egresos: egresos.toFixed(2),
+        balance: (ingresos - egresos).toFixed(2)
+      })
+      
+      if (filtered.length === 0) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin datos',
+          text: `No hay facturas para ${meses[mes - 1]} ${anio}`,
+          confirmButtonColor: '#3b82f6'
         })
-        
-        setDatosFinancieros(filtered)
-        
-        const ingresos = filtered.filter((f: any) => f.tipo === 'ingreso')
-          .reduce((sum: number, f: any) => sum + parseFloat(f.monto), 0)
-        
-        const egresos = filtered.filter((f: any) => f.tipo === 'egreso')
-          .reduce((sum: number, f: any) => sum + parseFloat(f.monto), 0)
-        
-        setResumenFinanciero({
-          total_facturas: filtered.length,
-          ingresos: ingresos.toFixed(2),
-          egresos: egresos.toFixed(2),
-          balance: (ingresos - egresos).toFixed(2)
-        })
-        
+      } else {
         Swal.fire({
           icon: 'success',
           title: '¡Datos cargados!',
-          text: `${filtered.length} facturas encontradas`,
-          timer: 2000,
+          html: `
+            <div style="text-align: left; padding: 1rem;">
+              <p><strong>📊 Facturas:</strong> ${filtered.length}</p>
+              <p style="color: #10b981;"><strong>💰 Ingresos:</strong> Q ${ingresos.toFixed(2)}</p>
+              <p style="color: #ef4444;"><strong>💸 Egresos:</strong> Q ${egresos.toFixed(2)}</p>
+              <p><strong>📈 Balance:</strong> Q ${(ingresos - egresos).toFixed(2)}</p>
+            </div>
+          `,
+          timer: 3000,
           showConfirmButton: false
         })
       }
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al cargar datos financieros',
+        text: error.message || 'Error al cargar datos financieros',
         confirmButtonColor: '#3b82f6'
       })
     } finally {
@@ -116,63 +141,131 @@ export default function Reportes() {
     }
   }
 
+  // ==================== CARGAR DATOS ASISTENCIA ====================
+
   async function cargarDatosAsistencia() {
     try {
       setLoadingAsistencia(true)
+      console.log('📅 Cargando datos de asistencia...')
+      console.log('   Mes:', mes, 'Año:', anio)
 
-      const res = await fetch(`${API_URL}/asistencia`, { credentials: 'include' })
+      // Cargar sesiones
+      const sesionesRes = await fetch(`${API_URL}/asistencia`, { credentials: 'include' })
 
-      if (res.ok) {
-        const sesiones = await res.json()
-        console.log('📊 Sesiones cargadas:', sesiones.length)
-        
-        // Obtener detalles de las sesiones del mes
-        let todosRegistros: any[] = []
-        
-        for (const sesion of sesiones) {
-          const fecha = new Date(sesion.fecha)
-          if (fecha.getMonth() + 1 === mes && fecha.getFullYear() === anio) {
-            try {
-              const detRes = await fetch(`${API_URL}/asistencia/${sesion.id}/editar`, { credentials: 'include' })
-              if (detRes.ok) {
-                const detData = await detRes.json()
-                todosRegistros = [...todosRegistros, ...detData.detalles]
-              }
-            } catch (e) {
-              console.error('Error cargando sesión:', e)
+      if (!sesionesRes.ok) {
+        throw new Error('Error al cargar sesiones')
+      }
+
+      const sesiones = await sesionesRes.json()
+      console.log('   Total sesiones:', sesiones.length)
+
+      // Filtrar sesiones del mes
+      const sesionesFiltradas = sesiones.filter((s: any) => {
+        const fecha = new Date(s.fecha)
+        return fecha.getMonth() + 1 === mes && fecha.getFullYear() === anio
+      })
+
+      console.log('   Sesiones del mes:', sesionesFiltradas.length)
+
+      if (sesionesFiltradas.length === 0) {
+        setDatosAsistencia([])
+        setResumenAsistencia({
+          total_registros: 0,
+          presentes: 0,
+          ausentes: 0,
+          suplentes: 0,
+          porcentaje_asistencia: '0'
+        })
+
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin datos',
+          text: `No hay sesiones de asistencia para ${meses[mes - 1]} ${anio}`,
+          confirmButtonColor: '#3b82f6'
+        })
+        return
+      }
+
+      // Cargar detalles de cada sesión
+      const todosRegistros: any[] = []
+
+      for (const sesion of sesionesFiltradas) {
+        try {
+          const detRes = await fetch(`${API_URL}/asistencia/${sesion.id}/editar`, { 
+            credentials: 'include' 
+          })
+
+          if (detRes.ok) {
+            const detData = await detRes.json()
+            
+            if (detData.detalles && Array.isArray(detData.detalles)) {
+              const registrosConFecha = detData.detalles.map((d: any) => ({
+                ...d,
+                fecha: sesion.fecha,
+                fecha_formato: new Date(sesion.fecha).toLocaleDateString('es-GT')
+              }))
+              
+              todosRegistros.push(...registrosConFecha)
             }
           }
+        } catch (error) {
+          console.error('Error en sesión:', sesion.id, error)
         }
-        
-        setDatosAsistencia(todosRegistros)
-        
-        const presentes = todosRegistros.filter(a => a.estado === 'presente').length
-        const ausentes = todosRegistros.filter(a => a.estado === 'ausente').length
-        const suplentes = todosRegistros.filter(a => a.estado === 'suplente').length
-        const porcentaje = todosRegistros.length > 0 ? ((presentes / todosRegistros.length) * 100).toFixed(2) : '0'
-        
-        setResumenAsistencia({
-          total_registros: todosRegistros.length,
-          presentes,
-          ausentes,
-          suplentes,
-          porcentaje_asistencia: porcentaje
-        })
-        
-        Swal.fire({
-          icon: 'success',
-          title: '¡Datos cargados!',
-          text: `${todosRegistros.length} registros encontrados`,
-          timer: 2000,
-          showConfirmButton: false
-        })
       }
+
+      console.log('   Total registros:', todosRegistros.length)
+
+      if (todosRegistros.length === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Sin registros',
+          text: 'Las sesiones no tienen registros de asistencia',
+          confirmButtonColor: '#3b82f6'
+        })
+        setDatosAsistencia([])
+        return
+      }
+
+      setDatosAsistencia(todosRegistros)
+
+      // Calcular estadísticas
+      const presentes = todosRegistros.filter(a => a.estado === 'presente').length
+      const ausentes = todosRegistros.filter(a => a.estado === 'ausente').length
+      const suplentes = todosRegistros.filter(a => a.estado === 'suplente').length
+      const porcentaje = todosRegistros.length > 0 
+        ? ((presentes / todosRegistros.length) * 100).toFixed(2) 
+        : '0'
+
+      setResumenAsistencia({
+        total_registros: todosRegistros.length,
+        presentes,
+        ausentes,
+        suplentes,
+        porcentaje_asistencia: porcentaje
+      })
+
+      Swal.fire({
+        icon: 'success',
+        title: '¡Datos cargados!',
+        html: `
+          <div style="text-align: left; padding: 1rem;">
+            <p><strong>📊 Total registros:</strong> ${todosRegistros.length}</p>
+            <p style="color: #10b981;"><strong>✅ Presentes:</strong> ${presentes}</p>
+            <p style="color: #ef4444;"><strong>❌ Ausentes:</strong> ${ausentes}</p>
+            <p><strong>📝 Suplentes:</strong> ${suplentes}</p>
+            <p><strong>📈 % Asistencia:</strong> ${porcentaje}%</p>
+          </div>
+        `,
+        timer: 3000,
+        showConfirmButton: false
+      })
+
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al cargar datos de asistencia',
+        text: error.message || 'Error al cargar datos de asistencia',
         confirmButtonColor: '#3b82f6'
       })
     } finally {
@@ -180,32 +273,38 @@ export default function Reportes() {
     }
   }
 
+  // ==================== CARGAR DATOS NIÑOS ====================
+
   async function cargarDatosNinos() {
     try {
       setLoadingNinos(true)
+      console.log('👶 Cargando niños activos...')
 
       const res = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
 
-      if (res.ok) {
-        const data = await res.json()
-        const activos = data.filter((n: any) => n.activo !== false)
-        console.log('📊 Niños activos:', activos.length)
-        setDatosNinos(activos)
-        
-        Swal.fire({
-          icon: 'success',
-          title: '¡Datos cargados!',
-          text: `${activos.length} niños activos`,
-          timer: 2000,
-          showConfirmButton: false
-        })
+      if (!res.ok) {
+        throw new Error('Error al cargar niños')
       }
+
+      const data = await res.json()
+      const activos = data.filter((n: any) => n.activo !== false)
+      
+      console.log('   Niños activos:', activos.length)
+      setDatosNinos(activos)
+      
+      Swal.fire({
+        icon: 'success',
+        title: '¡Datos cargados!',
+        text: `${activos.length} niños activos encontrados`,
+        timer: 2000,
+        showConfirmButton: false
+      })
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al cargar datos de niños',
+        text: error.message || 'Error al cargar datos de niños',
         confirmButtonColor: '#3b82f6'
       })
     } finally {
@@ -213,32 +312,38 @@ export default function Reportes() {
     }
   }
 
+  // ==================== CARGAR DATOS INACTIVOS ====================
+
   async function cargarDatosInactivos() {
     try {
       setLoadingInactivos(true)
+      console.log('🚪 Cargando niños inactivos...')
 
       const res = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
 
-      if (res.ok) {
-        const data = await res.json()
-        const inactivos = data.filter((n: any) => n.activo === false)
-        console.log('📊 Niños inactivos:', inactivos.length)
-        setDatosInactivos(inactivos)
-        
-        Swal.fire({
-          icon: 'success',
-          title: '¡Datos cargados!',
-          text: `${inactivos.length} niños inactivos`,
-          timer: 2000,
-          showConfirmButton: false
-        })
+      if (!res.ok) {
+        throw new Error('Error al cargar niños')
       }
+
+      const data = await res.json()
+      const inactivos = data.filter((n: any) => n.activo === false)
+      
+      console.log('   Niños inactivos:', inactivos.length)
+      setDatosInactivos(inactivos)
+      
+      Swal.fire({
+        icon: 'success',
+        title: '¡Datos cargados!',
+        text: `${inactivos.length} niños inactivos encontrados`,
+        timer: 2000,
+        showConfirmButton: false
+      })
     } catch (error: any) {
-      console.error('Error:', error)
+      console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al cargar datos de niños inactivos',
+        text: error.message || 'Error al cargar datos de niños inactivos',
         confirmButtonColor: '#3b82f6'
       })
     } finally {
@@ -253,7 +358,7 @@ export default function Reportes() {
       Swal.fire({
         icon: 'warning',
         title: 'Sin datos',
-        text: 'Primero carga los datos',
+        text: 'Primero carga los datos financieros',
         confirmButtonColor: '#3b82f6'
       })
       return
@@ -261,41 +366,42 @@ export default function Reportes() {
 
     const doc = new jsPDF()
     
-    // Título
     doc.setFontSize(18)
     doc.text('Reporte Financiero', 14, 20)
     
     doc.setFontSize(12)
     doc.text(`Período: ${meses[mes - 1]} ${anio}`, 14, 28)
     
-    // Resumen
     doc.setFontSize(10)
     doc.text(`Total Facturas: ${resumenFinanciero.total_facturas}`, 14, 38)
+    doc.setTextColor(16, 185, 129)
     doc.text(`Ingresos: Q ${resumenFinanciero.ingresos}`, 14, 44)
+    doc.setTextColor(239, 68, 68)
     doc.text(`Egresos: Q ${resumenFinanciero.egresos}`, 14, 50)
+    doc.setTextColor(0, 0, 0)
     doc.text(`Balance: Q ${resumenFinanciero.balance}`, 14, 56)
     
-    // Tabla
     autoTable(doc, {
       startY: 65,
       head: [['No. Factura', 'Descripción', 'Tipo', 'Monto', 'Estado']],
       body: datosFinancieros.map(f => [
-        f.numero_factura,
-        f.descripcion,
+        f.numero_factura || 'N/A',
+        (f.descripcion || '').substring(0, 30),
         f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso',
-        `Q ${parseFloat(f.monto).toFixed(2)}`,
-        f.estado
+        `Q ${parseFloat(f.monto || 0).toFixed(2)}`,
+        f.estado || 'N/A'
       ]),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [59, 130, 246] }
     })
     
-    doc.save(`reporte_financiero_${mes}_${anio}.pdf`)
+    doc.save(`reporte_financiero_${meses[mes - 1]}_${anio}.pdf`)
     
     Swal.fire({
       icon: 'success',
-      title: '¡Descargado!',
-      timer: 1500,
+      title: '¡PDF Descargado!',
+      text: `Reporte de ${datosFinancieros.length} facturas`,
+      timer: 2000,
       showConfirmButton: false
     })
   }
@@ -305,7 +411,7 @@ export default function Reportes() {
       Swal.fire({
         icon: 'warning',
         title: 'Sin datos',
-        text: 'Primero carga los datos',
+        text: 'Primero carga los datos de asistencia',
         confirmButtonColor: '#3b82f6'
       })
       return
@@ -321,29 +427,41 @@ export default function Reportes() {
     
     doc.setFontSize(10)
     doc.text(`Total Registros: ${resumenAsistencia.total_registros}`, 14, 38)
-    doc.text(`Presentes: ${resumenAsistencia.presentes}`, 14, 44)
+    doc.setTextColor(16, 185, 129)
+    doc.text(`Presentes: ${resumenAsistencia.presentes} (${resumenAsistencia.porcentaje_asistencia}%)`, 14, 44)
+    doc.setTextColor(239, 68, 68)
     doc.text(`Ausentes: ${resumenAsistencia.ausentes}`, 14, 50)
-    doc.text(`% Asistencia: ${resumenAsistencia.porcentaje_asistencia}%`, 14, 56)
+    doc.setTextColor(0, 0, 0)
+    doc.text(`Suplentes: ${resumenAsistencia.suplentes}`, 14, 56)
     
     autoTable(doc, {
       startY: 65,
       head: [['Fecha', 'Niño', 'Estado', 'Nota']],
       body: datosAsistencia.map(a => [
-        a.fecha || '',
-        `${a.nino_nombre || 'N/A'}`,
-        a.estado,
-        a.nota || ''
+        a.fecha_formato || new Date(a.fecha).toLocaleDateString('es-GT'),
+        a.nino_nombre || a.nombres || 'N/A',
+        a.estado === 'presente' ? 'Presente' : 
+        a.estado === 'ausente' ? 'Ausente' : 
+        a.estado === 'suplente' ? 'Suplente' : a.estado,
+        (a.nota || '').substring(0, 40)
       ]),
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [16, 185, 129] }
+      headStyles: { fillColor: [16, 185, 129] },
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 60 },
+        2: { cellWidth: 25 },
+        3: { cellWidth: 'auto' }
+      }
     })
     
-    doc.save(`reporte_asistencia_${mes}_${anio}.pdf`)
+    doc.save(`reporte_asistencia_${meses[mes - 1]}_${anio}.pdf`)
     
     Swal.fire({
       icon: 'success',
-      title: '¡Descargado!',
-      timer: 1500,
+      title: '¡PDF Descargado!',
+      text: `Reporte de ${datosAsistencia.length} registros`,
+      timer: 2000,
       showConfirmButton: false
     })
   }
@@ -353,7 +471,7 @@ export default function Reportes() {
       Swal.fire({
         icon: 'warning',
         title: 'Sin datos',
-        text: 'Primero carga los datos',
+        text: 'Primero carga los datos de niños activos',
         confirmButtonColor: '#3b82f6'
       })
       return
@@ -366,17 +484,18 @@ export default function Reportes() {
     
     doc.setFontSize(12)
     doc.text(`Total: ${datosNinos.length} niños`, 14, 28)
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-GT')}`, 14, 34)
     
     autoTable(doc, {
-      startY: 35,
+      startY: 42,
       head: [['Código', 'Nombres', 'Apellidos', 'Edad', 'Nivel', 'Encargado']],
       body: datosNinos.map(n => [
-        n.codigo || '',
-        n.nombres,
-        n.apellidos,
-        n.edad || '',
+        n.codigo || 'N/A',
+        n.nombres || 'N/A',
+        n.apellidos || 'N/A',
+        n.edad ? `${n.edad} años` : 'N/A',
         n.nivel_nombre || 'Sin nivel',
-        n.nombre_encargado || ''
+        n.nombre_encargado || 'N/A'
       ]),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [245, 158, 11] }
@@ -386,8 +505,9 @@ export default function Reportes() {
     
     Swal.fire({
       icon: 'success',
-      title: '¡Descargado!',
-      timer: 1500,
+      title: '¡PDF Descargado!',
+      text: `Reporte de ${datosNinos.length} niños activos`,
+      timer: 2000,
       showConfirmButton: false
     })
   }
@@ -397,7 +517,7 @@ export default function Reportes() {
       Swal.fire({
         icon: 'warning',
         title: 'Sin datos',
-        text: 'Primero carga los datos',
+        text: 'Primero carga los datos de niños inactivos',
         confirmButtonColor: '#3b82f6'
       })
       return
@@ -410,16 +530,17 @@ export default function Reportes() {
     
     doc.setFontSize(12)
     doc.text(`Total: ${datosInactivos.length} niños`, 14, 28)
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-GT')}`, 14, 34)
     
     autoTable(doc, {
-      startY: 35,
+      startY: 42,
       head: [['Código', 'Nombres', 'Apellidos', 'Motivo', 'Fecha Inactivación']],
       body: datosInactivos.map(n => [
-        n.codigo || '',
-        n.nombres,
-        n.apellidos,
-        n.motivo_inactividad || 'No especificado',
-        n.fecha_inactivacion ? new Date(n.fecha_inactivacion).toLocaleDateString('es-GT') : ''
+        n.codigo || 'N/A',
+        n.nombres || 'N/A',
+        n.apellidos || 'N/A',
+        (n.motivo_inactividad || 'No especificado').substring(0, 30),
+        n.fecha_inactivacion ? new Date(n.fecha_inactivacion).toLocaleDateString('es-GT') : 'N/A'
       ]),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [239, 68, 68] }
@@ -429,8 +550,9 @@ export default function Reportes() {
     
     Swal.fire({
       icon: 'success',
-      title: '¡Descargado!',
-      timer: 1500,
+      title: '¡PDF Descargado!',
+      text: `Reporte de ${datosInactivos.length} niños inactivos`,
+      timer: 2000,
       showConfirmButton: false
     })
   }
@@ -505,7 +627,7 @@ export default function Reportes() {
               <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>💰 Reporte Financiero</h2>
               
               <div className="alert" style={{ marginBottom: '1.5rem', background: '#eff6ff', border: '1px solid #3b82f6', color: '#1e40af' }}>
-                <strong>📋 Incluye:</strong> Facturas del mes con totales
+                <strong>📋 Incluye:</strong> Facturas del mes seleccionado con totales de ingresos, egresos y balance
               </div>
 
               <div className="form">
@@ -540,13 +662,27 @@ export default function Reportes() {
                   {loadingFinanciero ? 'Cargando...' : '🔍 Cargar Datos'}
                 </button>
 
-                {datosFinancieros.length > 0 && (
+                {datosFinancieros.length > 0 && resumenFinanciero && (
                   <div>
-                    <div style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
-                      <p><strong>Facturas:</strong> {resumenFinanciero.total_facturas}</p>
-                      <p style={{ color: '#10b981' }}><strong>Ingresos:</strong> Q {resumenFinanciero.ingresos}</p>
-                      <p style={{ color: '#ef4444' }}><strong>Egresos:</strong> Q {resumenFinanciero.egresos}</p>
-                      <p><strong>Balance:</strong> Q {resumenFinanciero.balance}</p>
+                    <div style={{ 
+                      padding: '1rem', 
+                      background: 'var(--surface-elevated)', 
+                      borderRadius: 'var(--radius)', 
+                      marginBottom: '1rem',
+                      border: '1px solid var(--border)'
+                    }}>
+                      <p style={{ marginBottom: '0.5rem' }}>
+                        <strong>📊 Facturas:</strong> {resumenFinanciero.total_facturas}
+                      </p>
+                      <p style={{ color: '#10b981', marginBottom: '0.5rem' }}>
+                        <strong>💰 Ingresos:</strong> Q {resumenFinanciero.ingresos}
+                      </p>
+                      <p style={{ color: '#ef4444', marginBottom: '0.5rem' }}>
+                        <strong>💸 Egresos:</strong> Q {resumenFinanciero.egresos}
+                      </p>
+                      <p style={{ fontWeight: '600', fontSize: '1.125rem' }}>
+                        <strong>📈 Balance:</strong> Q {resumenFinanciero.balance}
+                      </p>
                     </div>
 
                     <button
@@ -568,7 +704,7 @@ export default function Reportes() {
               <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>📅 Reporte de Asistencia</h2>
               
               <div className="alert" style={{ marginBottom: '1.5rem', background: '#f0fdf4', border: '1px solid #10b981', color: '#065f46' }}>
-                <strong>📋 Incluye:</strong> Registros de asistencia del mes
+                <strong>📋 Incluye:</strong> Todos los registros de asistencia del mes seleccionado
               </div>
 
               <div className="form">
@@ -583,125 +719,157 @@ export default function Reportes() {
                   </div>
                   <div>
                     <label className="label">Año *</label>
-                    <input
-                      type="number"
-                      className="input"
-                      value={anio}
-                      onChange={e => setAnio(parseInt(e.target.value))}
-                      min={2020}
-                      max={2030}
-                    />
-                  </div>
+<input
+type="number"
+className="input"
+value={anio}
+onChange={e => setAnio(parseInt(e.target.value))}
+min={2020}
+max={2030}
+/>
+</div>
+</div>
+<button
+              className="btn"
+              onClick={cargarDatosAsistencia}
+              disabled={loadingAsistencia}
+              style={{ width: '100%', marginBottom: '1rem' }}
+            >
+              {loadingAsistencia ? 'Cargando...' : '🔍 Cargar Datos'}
+            </button>
+
+            {datosAsistencia.length > 0 && resumenAsistencia && (
+              <div>
+                <div style={{ 
+                  padding: '1rem', 
+                  background: 'var(--surface-elevated)', 
+                  borderRadius: 'var(--radius)', 
+                  marginBottom: '1rem',
+                  border: '1px solid var(--border)'
+                }}>
+                  <p style={{ marginBottom: '0.5rem' }}>
+                    <strong>📊 Total:</strong> {resumenAsistencia.total_registros}
+                  </p>
+                  <p style={{ color: '#10b981', marginBottom: '0.5rem' }}>
+                    <strong>✅ Presentes:</strong> {resumenAsistencia.presentes}
+                  </p>
+                  <p style={{ color: '#ef4444', marginBottom: '0.5rem' }}>
+                    <strong>❌ Ausentes:</strong> {resumenAsistencia.ausentes}
+                  </p>
+                  <p style={{ marginBottom: '0.5rem' }}>
+                    <strong>📝 Suplentes:</strong> {resumenAsistencia.suplentes}
+                  </p>
+                  <p style={{ fontWeight: '600', fontSize: '1.125rem' }}>
+                    <strong>📈 % Asistencia:</strong> {resumenAsistencia.porcentaje_asistencia}%
+                  </p>
                 </div>
 
                 <button
                   className="btn"
-                  onClick={cargarDatosAsistencia}
-                  disabled={loadingAsistencia}
-                  style={{ width: '100%', marginBottom: '1rem' }}
+                  onClick={generarPDFAsistencia}
+                  style={{ width: '100%' }}
                 >
-                  {loadingAsistencia ? 'Cargando...' : '🔍 Cargar Datos'}
+                  📥 Descargar PDF
                 </button>
-
-                {datosAsistencia.length > 0 && (
-                  <div>
-                    <div style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
-                      <p><strong>Total:</strong> {resumenAsistencia.total_registros}</p>
-                      <p style={{ color: '#10b981' }}><strong>Presentes:</strong> {resumenAsistencia.presentes}</p>
-                      <p style={{ color: '#ef4444' }}><strong>Ausentes:</strong> {resumenAsistencia.ausentes}</p>
-                      <p><strong>% Asistencia:</strong> {resumenAsistencia.porcentaje_asistencia}%</p>
-                    </div>
-
-                    <button
-                      className="btn"
-                      onClick={generarPDFAsistencia}
-                      style={{ width: '100%' }}
-                    >
-                      📥 Descargar PDF
-                    </button>
-                  </div>
-                )}
               </div>
-            </div>
-          )}
-
-          {/* REPORTE NIÑOS */}
-          {reporteActivo === 'ninos' && (
-            <div style={{ maxWidth: '800px' }}>
-              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>👶 Reporte de Niños Activos</h2>
-              
-              <div className="alert" style={{ marginBottom: '1.5rem', background: '#fef3c7', border: '1px solid #f59e0b', color: '#92400e' }}>
-                <strong>📋 Incluye:</strong> Lista completa de niños activos
-              </div>
-
-              <div className="form">
-                <button
-                  className="btn"
-                  onClick={cargarDatosNinos}
-                  disabled={loadingNinos}
-                  style={{ width: '100%', marginBottom: '1rem' }}
-                >
-                  {loadingNinos ? 'Cargando...' : '🔍 Cargar Datos'}
-                </button>
-
-                {datosNinos.length > 0 && (
-                  <div>
-                    <div style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
-                      <p><strong>Total Niños Activos:</strong> {datosNinos.length}</p>
-                    </div>
-
-                    <button
-                      className="btn"
-                      onClick={generarPDFNinos}
-                      style={{ width: '100%' }}
-                    >
-                      📥 Descargar PDF
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* REPORTE INACTIVOS */}
-          {reporteActivo === 'inactivos' && (
-            <div style={{ maxWidth: '800px' }}>
-              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>🚪 Reporte de Niños Inactivos</h2>
-              
-              <div className="alert" style={{ marginBottom: '1.5rem', background: '#fee2e2', border: '1px solid #ef4444', color: '#991b1b' }}>
-                <strong>📋 Incluye:</strong> Niños inactivos con motivo
-              </div>
-
-              <div className="form">
-                <button
-                  className="btn"
-                  onClick={cargarDatosInactivos}
-                  disabled={loadingInactivos}
-                  style={{ width: '100%', marginBottom: '1rem' }}
-                >
-                  {loadingInactivos ? 'Cargando...' : '🔍 Cargar Datos'}
-                </button>
-
-                {datosInactivos.length > 0 && (
-                  <div>
-                    <div style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
-                      <p><strong>Total Niños Inactivos:</strong> {datosInactivos.length}</p>
-                    </div>
-
-                    <button
-                      className="btn"
-                      onClick={generarPDFInactivos}
-                      style={{ width: '100%' }}
-                    >
-                      📥 Descargar PDF
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* REPORTE NIÑOS ACTIVOS */}
+      {reporteActivo === 'ninos' && (
+        <div style={{ maxWidth: '800px' }}>
+          <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>👶 Reporte de Niños Activos</h2>
+          
+          <div className="alert" style={{ marginBottom: '1.5rem', background: '#fef3c7', border: '1px solid #f59e0b', color: '#92400e' }}>
+            <strong>📋 Incluye:</strong> Lista completa de todos los niños activos con sus datos
+          </div>
+
+          <div className="form">
+            <button
+              className="btn"
+              onClick={cargarDatosNinos}
+              disabled={loadingNinos}
+              style={{ width: '100%', marginBottom: '1rem' }}
+            >
+              {loadingNinos ? 'Cargando...' : '🔍 Cargar Datos'}
+            </button>
+
+            {datosNinos.length > 0 && (
+              <div>
+                <div style={{ 
+                  padding: '1rem', 
+                  background: 'var(--surface-elevated)', 
+                  borderRadius: 'var(--radius)', 
+                  marginBottom: '1rem',
+                  border: '1px solid var(--border)'
+                }}>
+                  <p style={{ fontWeight: '600', fontSize: '1.125rem' }}>
+                    <strong>👶 Total Niños Activos:</strong> {datosNinos.length}
+                  </p>
+                </div>
+
+                <button
+                  className="btn"
+                  onClick={generarPDFNinos}
+                  style={{ width: '100%' }}
+                >
+                  📥 Descargar PDF
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* REPORTE NIÑOS INACTIVOS */}
+      {reporteActivo === 'inactivos' && (
+        <div style={{ maxWidth: '800px' }}>
+          <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>🚪 Reporte de Niños Inactivos</h2>
+          
+          <div className="alert" style={{ marginBottom: '1.5rem', background: '#fee2e2', border: '1px solid #ef4444', color: '#991b1b' }}>
+            <strong>📋 Incluye:</strong> Todos los niños inactivos con motivo de salida
+          </div>
+
+          <div className="form">
+            <button
+              className="btn"
+              onClick={cargarDatosInactivos}
+              disabled={loadingInactivos}
+              style={{ width: '100%', marginBottom: '1rem' }}
+            >
+              {loadingInactivos ? 'Cargando...' : '🔍 Cargar Datos'}
+            </button>
+
+            {datosInactivos.length > 0 && (
+              <div>
+                <div style={{ 
+                  padding: '1rem', 
+                  background: 'var(--surface-elevated)', 
+                  borderRadius: 'var(--radius)', 
+                  marginBottom: '1rem',
+                  border: '1px solid var(--border)'
+                }}>
+                  <p style={{ fontWeight: '600', fontSize: '1.125rem' }}>
+                    <strong>🚪 Total Niños Inactivos:</strong> {datosInactivos.length}
+                  </p>
+                </div>
+
+                <button
+                  className="btn"
+                  onClick={generarPDFInactivos}
+                  style={{ width: '100%' }}
+                >
+                  📥 Descargar PDF
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  </div>
+</div>
   )
 }
