@@ -27,29 +27,29 @@ export default function NinosInactivos() {
   useEffect(() => {
     cargarNinosInactivos()
   }, [])
-
-  async function cargarNinosInactivos() {
+async function cargarNinosInactivos() {
   try {
     setLoading(true)
     console.log('🚪 Cargando niños inactivos...')
     
-    // Usar el nuevo endpoint
-    const res = await fetch(`${API_URL}/reportes/ninos-inactivos/datos`, { 
-      credentials: 'include' 
-    })
+    const res = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
     
     if (!res.ok) {
-      throw new Error('Error al cargar niños inactivos')
+      throw new Error('Error al cargar niños')
     }
     
     const data = await res.json()
-    console.log('   Niños inactivos:', data.length)
+    console.log('   Total niños en BD:', data.length)
     
-    if (data.length > 0) {
-      console.log('   Primer niño:', data[0])
+    // Filtrar solo inactivos
+    const inactivos = data.filter((n: any) => n.activo === false)
+    console.log('   Niños inactivos:', inactivos.length)
+    
+    if (inactivos.length > 0) {
+      console.log('   Primer niño inactivo:', inactivos[0])
     }
     
-    setNinos(data)
+    setNinos(inactivos)
   } catch (error: any) {
     console.error('❌ Error:', error)
     Swal.fire({

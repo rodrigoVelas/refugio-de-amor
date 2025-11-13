@@ -196,6 +196,7 @@ r.get('/reportes/asistencia/datos', async (req: any, res: any) => {
 })
 
 // GET /reportes/ninos-inactivos/datos - Obtener niños inactivos
+// GET /reportes/ninos-inactivos/datos - Obtener niños inactivos (SIMPLE)
 r.get('/reportes/ninos-inactivos/datos', async (req: any, res: any) => {
   const userId = req.user?.id
   if (!userId) return res.status(401).json({ error: 'no auth' })
@@ -205,14 +206,15 @@ r.get('/reportes/ninos-inactivos/datos', async (req: any, res: any) => {
 
     const query = `
       SELECT 
-        ni.*,
+        n.*,
         nv.nombre as nivel_nombre,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
-        EXTRACT(YEAR FROM AGE(ni.fecha_nacimiento))::int as edad
-      FROM ninos_inactivos ni
-      LEFT JOIN niveles nv ON ni.nivel_id = nv.id
-      LEFT JOIN usuarios u ON ni.maestro_id = u.id
-      ORDER BY ni.fecha_inactivacion DESC
+        EXTRACT(YEAR FROM AGE(n.fecha_nacimiento))::int as edad
+      FROM ninos n
+      LEFT JOIN niveles nv ON n.nivel_id = nv.id
+      LEFT JOIN usuarios u ON n.maestro_id = u.id
+      WHERE n.activo = false
+      ORDER BY n.fecha_inactivacion DESC NULLS LAST
     `
 
     const { rows } = await pool.query(query)
@@ -222,7 +224,7 @@ r.get('/reportes/ninos-inactivos/datos', async (req: any, res: any) => {
     res.json(rows)
   } catch (error: any) {
     console.error('❌ Error:', error.message)
-    res.status(500).json({ error: 'Error al obtener datos' })
+    res.status(500).json({ error: 'Error al obtener datos: ' + error.message })
   }
 })
 
