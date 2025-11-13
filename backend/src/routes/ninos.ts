@@ -231,6 +231,124 @@ router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any,
 })
 
 // PUT /ninos/:id - Actualizar niño
+// POST /ninos - Crear niño (CON VALIDACIONES)
+router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any, res: any) => {
+  try {
+    const { 
+      nombres, 
+      apellidos, 
+      fecha_nacimiento, 
+      nivel_id, 
+      subnivel_id, 
+      maestro_id,
+      codigo,  // ← AHORA OBLIGATORIO
+      genero,
+      direccion,
+      telefono_contacto,
+      nombre_encargado, 
+      telefono_encargado,  // ← VALIDAR
+      direccion_encargado 
+    } = req.body
+
+    console.log('\n=== POST /ninos ===')
+    console.log('Datos recibidos:', { nombres, apellidos, codigo, telefono_encargado })
+
+    // VALIDACIONES
+    if (!nombres || !apellidos || !fecha_nacimiento || !maestro_id || !codigo) {
+      console.log('❌ Faltan campos requeridos')
+      return res.status(400).json({ 
+        error: 'Faltan campos requeridos: nombres, apellidos, fecha_nacimiento, maestro_id y código' 
+      })
+    }
+
+    // Validar código no vacío
+    if (!codigo.trim()) {
+      return res.status(400).json({ 
+        error: 'El código del niño es obligatorio y no puede estar vacío' 
+      })
+    }
+
+    // Validar teléfono del encargado (si se proporciona)
+    if (telefono_encargado) {
+      const telefonoLimpio = telefono_encargado.replace(/\s/g, '') // Quitar espacios
+      
+      // Validar que solo contenga dígitos
+      if (!/^\d+$/.test(telefonoLimpio)) {
+        return res.status(400).json({ 
+          error: 'El teléfono del encargado solo debe contener números' 
+        })
+      }
+      
+      // Validar que sean exactamente 8 dígitos
+      if (telefonoLimpio.length !== 8) {
+        return res.status(400).json({ 
+          error: 'El teléfono del encargado debe tener exactamente 8 dígitos' 
+        })
+      }
+    }
+
+    // Verificar que el maestro existe
+    const maestroCheck = await pool.query(
+      'SELECT id, email FROM usuarios WHERE id = $1',
+      [maestro_id]
+    )
+
+    if (maestroCheck.rows.length === 0) {
+      console.log('❌ Maestro no existe:', maestro_id)
+      return res.status(400).json({ error: 'El maestro seleccionado no existe' })
+    }
+
+    console.log('✅ Maestro verificado:', maestroCheck.rows[0].email)
+
+    // Verificar que el código no esté duplicado
+    const codigoCheck = await pool.query(
+      'SELECT id, nombres, apellidos FROM ninos WHERE LOWER(codigo) = LOWER($1)',
+      [codigo.trim()]
+    )
+
+    if (codigoCheck.rows.length > 0) {
+      return res.status(400).json({ 
+        error: `El código "${codigo}" ya está en uso por ${codigoCheck.rows[0].nombres} ${codigoCheck.rows[0].apellidos}` 
+      })
+    }
+
+    const result = await pool.query(
+      `INSERT INTO ninos 
+        (nombres, apellidos, fecha_nacimiento, nivel_id, subnivel_id, maestro_id, 
+         activo, codigo, genero, direccion, telefono_contacto,
+         nombre_encargado, telefono_encargado, direccion_encargado, creado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, NOW())
+      RETURNING *`,
+      [
+        nombres.trim(), 
+        apellidos.trim(), 
+        fecha_nacimiento, 
+        nivel_id || null, 
+        subnivel_id || null, 
+        maestro_id,
+        codigo.trim(),
+        genero || null,
+        direccion || null,
+        telefono_contacto || null,
+        nombre_encargado || null, 
+        telefono_encargado ? telefono_encargado.replace(/\s/g, '') : null,
+        direccion_encargado || null
+      ]
+    )
+
+    console.log('✅ Niño creado exitosamente:')
+    console.log('   - ID:', result.rows[0].id)
+    console.log('   - Código:', result.rows[0].codigo)
+    console.log('===================\n')
+
+    res.json({ ok: true, nino: result.rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error al crear niño:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// PUT /ninos/:id - Actualizar niño (CON VALIDACIONES)
 router.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
@@ -239,6 +357,47 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
     console.log('\n=== PUT /ninos/:id ===')
     console.log('Actualizando niño:', id)
+
+    // VALIDACIONES antes de actualizar
+    if (body.codigo !== undefined) {
+      if (!body.codigo || !body.codigo.trim()) {
+        return res.status(400).json({ 
+          error: 'El código del niño no puede estar vacío' 
+        })
+      }
+
+      // Verificar que el código no esté duplicado (excepto el actual)
+      const codigoCheck = await pool.query(
+        'SELECT id, nombres, apellidos FROM ninos WHERE LOWER(codigo) = LOWER($1) AND id != $2',
+        [body.codigo.trim(), id]
+      )
+
+      if (codigoCheck.rows.length > 0) {
+        return res.status(400).json({ 
+          error: `El código "${body.codigo}" ya está en uso por ${codigoCheck.rows[0].nombres} ${codigoCheck.rows[0].apellidos}` 
+        })
+      }
+    }
+
+    // Validar teléfono del encargado
+    if (body.telefono_encargado !== undefined && body.telefono_encargado) {
+      const telefonoLimpio = body.telefono_encargado.replace(/\s/g, '')
+      
+      if (!/^\d+$/.test(telefonoLimpio)) {
+        return res.status(400).json({ 
+          error: 'El teléfono del encargado solo debe contener números' 
+        })
+      }
+      
+      if (telefonoLimpio.length !== 8) {
+        return res.status(400).json({ 
+          error: 'El teléfono del encargado debe tener exactamente 8 dígitos' 
+        })
+      }
+
+      // Actualizar el valor limpio
+      body.telefono_encargado = telefonoLimpio
+    }
 
     const userResult = await pool.query(
       'SELECT rol FROM usuarios WHERE id = $1',
@@ -272,7 +431,12 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     for (const field of allowedFields) {
       if (field in body) {
         updates.push(`${field} = $${paramIndex}`)
-        values.push(body[field])
+        // Limpiar strings
+        if (typeof body[field] === 'string') {
+          values.push(body[field].trim())
+        } else {
+          values.push(body[field])
+        }
         paramIndex++
       }
     }

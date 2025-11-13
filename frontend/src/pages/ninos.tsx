@@ -160,72 +160,100 @@ export default function Ninos() {
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  e.preventDefault()
 
-    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !maestroId) {
+  // VALIDACIONES
+  if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !maestroId || !codigo.trim()) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Campos incompletos',
+      text: 'Completa nombres, apellidos, fecha de nacimiento, código y maestro',
+      confirmButtonColor: '#3b82f6'
+    })
+    return
+  }
+
+  // Validar teléfono del encargado
+  if (telefonoEncargado.trim()) {
+    const telefonoLimpio = telefonoEncargado.replace(/\s/g, '')
+    
+    // Solo números
+    if (!/^\d+$/.test(telefonoLimpio)) {
       Swal.fire({
         icon: 'warning',
-        title: 'Campos incompletos',
-        text: 'Completa nombres, apellidos, fecha de nacimiento y maestro',
+        title: 'Teléfono inválido',
+        text: 'El teléfono del encargado solo debe contener números',
         confirmButtonColor: '#3b82f6'
       })
       return
     }
-
-    try {
-      setSaving(true)
-
-      const data = {
-        nombres,
-        apellidos,
-        fecha_nacimiento: fechaNacimiento,
-        nivel_id: nivelId || null,
-        subnivel_id: null,
-        maestro_id: maestroId,
-        codigo: codigo || null,
-        nombre_encargado: nombreEncargado || null,
-        telefono_encargado: telefonoEncargado || null,
-        direccion_encargado: direccionEncargado || null
-      }
-
-      const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
-      const res = await fetch(url, {
-        method: editingId ? 'PUT' : 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+    
+    // Exactamente 8 dígitos
+    if (telefonoLimpio.length !== 8) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Teléfono inválido',
+        text: 'El teléfono del encargado debe tener exactamente 8 dígitos',
+        confirmButtonColor: '#3b82f6'
       })
+      return
+    }
+  }
 
-      if (res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: editingId ? '¡Actualizado!' : '¡Registrado!',
-          timer: 2000,
-          showConfirmButton: false
-        })
-        setShowModal(false)
-        resetForm()
-        cargarDatos()
-      } else {
-        const err = await res.json()
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: err.error,
-          confirmButtonColor: '#3b82f6'
-        })
-      }
-    } catch (error) {
+  try {
+    setSaving(true)
+
+    const data = {
+      nombres: nombres.trim(),
+      apellidos: apellidos.trim(),
+      fecha_nacimiento: fechaNacimiento,
+      nivel_id: nivelId || null,
+      subnivel_id: null,
+      maestro_id: maestroId,
+      codigo: codigo.trim(),
+      nombre_encargado: nombreEncargado.trim() || null,
+      telefono_encargado: telefonoEncargado.replace(/\s/g, '') || null,
+      direccion_encargado: direccionEncargado.trim() || null
+    }
+
+    const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
+    const res = await fetch(url, {
+      method: editingId ? 'PUT' : 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+
+    if (res.ok) {
+      await Swal.fire({
+        icon: 'success',
+        title: editingId ? '¡Actualizado!' : '¡Registrado!',
+        timer: 2000,
+        showConfirmButton: false
+      })
+      setShowModal(false)
+      resetForm()
+      cargarDatos()
+    } else {
+      const err = await res.json()
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error al guardar',
+        text: err.error,
         confirmButtonColor: '#3b82f6'
       })
-    } finally {
-      setSaving(false)
     }
+  } catch (error) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Error al guardar',
+      confirmButtonColor: '#3b82f6'
+    })
+  } finally {
+    setSaving(false)
   }
+}
 
   async function handleEliminar(id: string, nombre: string) {
     const result = await Swal.fire({
@@ -576,10 +604,16 @@ export default function Ninos() {
                   <label className="label">Fecha de Nacimiento*</label>
                   <input type="date" className="input" value={fechaNacimiento} onChange={e => setFechaNacimiento(e.target.value)} required />
                 </div>
-                <div>
-                  <label className="label">Código</label>
-                  <input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Opcional" />
-                </div>
+              
+               <div>
+  <label className="label">Código *</label>
+  <input 
+    className="input" 
+    value={codigo} 
+    onChange={e => setCodigo(e.target.value)} 
+    placeholder="Obligatorio"
+    required/>
+</div>
               </div>
 
               <div>
@@ -607,10 +641,29 @@ export default function Ninos() {
                 <input className="input" value={nombreEncargado} onChange={e => setNombreEncargado(e.target.value)} />
               </div>
 
-              <div>
-                <label className="label">Teléfono del Encargado</label>
-                <input className="input" value={telefonoEncargado} onChange={e => setTelefonoEncargado(e.target.value)} />
-              </div>
+             <div>
+  <label className="label">Teléfono del Encargado (8 dígitos)</label>
+  <input 
+    className="input" 
+    value={telefonoEncargado} 
+    onChange={e => {
+      // Solo permitir números
+      const valor = e.target.value.replace(/\D/g, '')
+      // Máximo 8 dígitos
+      if (valor.length <= 8) {
+        setTelefonoEncargado(valor)
+      }
+    }}
+    placeholder="12345678"
+    maxLength={8}
+    pattern="\d{8}"
+  />
+  {telefonoEncargado && telefonoEncargado.length !== 8 && (
+    <small style={{ color: '#ef4444', fontSize: '0.875rem', display: 'block', marginTop: '0.25rem' }}>
+      Debe tener 8 dígitos
+    </small>
+  )}
+</div>
 
               <div>
                 <label className="label">Dirección del Encargado</label>
