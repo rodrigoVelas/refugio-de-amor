@@ -308,13 +308,12 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
 // POST /ninos/:id/inactivar - Inactivar un niño
 
-// POST /ninos/:id/inactivar - Inactivar un niño (VERSIÓN SIMPLE)
 router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const { motivo } = req.body
 
-    console.log('\n🚪 Inactivando niño')
+    console.log('\n Inactivando niño')
     console.log('   ID:', id)
     console.log('   Motivo:', motivo)
 
@@ -331,7 +330,7 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
        WHERE id = $2
        RETURNING nombres, apellidos`,
       [motivo.trim(), id]
-    )
+    ) 
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Niño no encontrado' })

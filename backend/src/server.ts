@@ -2,7 +2,6 @@
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-import { authMiddleware } from './core/auth_middleware'
 
 // Importar rutas
 import auth from './routes/auth'
@@ -26,9 +25,9 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:4173',
   'https://refugio-app-crud2.vercel.app',
-  'https://refugio-de-amor.vercel.app', // ← AÑADIDO
+  'https://refugio-de-amor.vercel.app',
   /^https:\/\/refugio-app-crud2-.*\.vercel\.app$/,
-  /^https:\/\/refugio-de-amor-.*\.vercel\.app$/, // ← AÑADIDO
+  /^https:\/\/refugio-de-amor-.*\.vercel\.app$/,
 ]
 
 app.use(
@@ -78,35 +77,35 @@ app.get('/', (req, res) => {
   })
 })
 
+// ==================== RUTAS ====================
+
 // Rutas públicas (sin autenticación)
 app.use('/auth', auth)
 
-// Middleware de autenticación para todas las rutas siguientes
-app.use(authMiddleware)
+// ⚠️ NO PONER authMiddleware GLOBAL AQUÍ
+// Cada ruta maneja su propia autenticación internamente
 
-
-// Rutas protegidas (requieren autenticación)
+// Rutas protegidas (la autenticación está en cada archivo de ruta)
 app.use(perfil)
 app.use('/niveles', niveles)
 app.use('/subniveles', subniveles)
-app.use('/ninos', ninos)
+app.use('/ninos', ninos)  // ← IMPORTANTE: Esto debe funcionar ahora
 app.use('/usuarios', usuarios)
 app.use('/roles', roles)
 app.use('/facturas', facturas)
-app.use(asistencia)  // ← SIN PREFIJO - porque asistencia.ts ya lo tiene
+app.use(asistencia)
 app.use('/actividades', actividades)
 app.use('/documentos', documentos)
-app.use(reportes)  // ← SIN PREFIJO
+app.use(reportes)
 
-// Manejo de rutas no encontradas
+// Manejo de rutas no encontradas (SOLO UNO)
 app.use((req, res) => {
   console.log('❌ 404:', req.method, req.path)
-  res.status(404).json({ error: 'Ruta no encontrada: ' + req.path })
-})
-
-// Manejo de rutas no encontradas
-app.use((req, res) => {
-  res.status(404).json({ error: 'Ruta no encontrada' })
+  res.status(404).json({ 
+    error: 'Ruta no encontrada',
+    path: req.path,
+    method: req.method
+  })
 })
 
 // Manejo de errores global
@@ -120,7 +119,19 @@ app.use((err: any, req: any, res: any, next: any) => {
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`✅ API lista en http://0.0.0.0:${PORT}`)
+  console.log(`\n✅ API lista en http://0.0.0.0:${PORT}`)
+  console.log('\n📍 Rutas registradas:')
+  console.log('   - POST   /auth/login')
+  console.log('   - GET    /ninos')
+  console.log('   - GET    /ninos/:id')
+  console.log('   - POST   /ninos')
+  console.log('   - PUT    /ninos/:id')
+  console.log('   - POST   /ninos/:id/inactivar  ← NUEVA')
+  console.log('   - POST   /ninos/:id/reactivar  ← NUEVA')
+  console.log('   - DELETE /ninos/:id')
+  console.log('   - GET    /asistencia/*')
+  console.log('   - GET    /reportes/*')
+  console.log('')
   
   // Verificar variables de entorno críticas
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'tu_secreto_super_seguro_aqui') {
