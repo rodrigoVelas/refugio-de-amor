@@ -687,14 +687,10 @@ export default function Ninos() {
         <div className="modal-backdrop" onClick={() => !inactivando && setShowInactivarModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
             <div className="modal-header">
-              <h2>🚪 Inactivar Niño</h2>
-              <button 
+         
                 className="btn btn-ghost" 
-                onClick={() => setShowInactivarModal(false)}
-                disabled={inactivando}
-              >
-                ✕
-              </button>
+           
+        
             </div>
             
             <div style={{ padding: '1.5rem' }}>
