@@ -327,13 +327,30 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     const body = req.body
 
     console.log('\n=== PUT /ninos/:id ===')
+    console.log('Body recibido:', body)
 
-    if (body.codigo !== undefined && (!body.codigo || !body.codigo.trim())) {
-      return res.status(400).json({ 
-        error: 'El código del niño no puede estar vacío' 
-      })
+    // ⚠️ SOLO validar código si se está intentando cambiar
+    if (body.codigo !== undefined) {
+      if (!body.codigo || !body.codigo.trim()) {
+        return res.status(400).json({ 
+          error: 'El código del niño no puede estar vacío' 
+        })
+      }
+
+      // Verificar que el código no esté duplicado (excepto el actual)
+      const codigoCheck = await pool.query(
+        'SELECT id, nombres, apellidos FROM ninos WHERE LOWER(codigo) = LOWER($1) AND id != $2',
+        [body.codigo.trim(), id]
+      )
+
+      if (codigoCheck.rows.length > 0) {
+        return res.status(400).json({ 
+          error: `El código "${body.codigo}" ya está en uso por ${codigoCheck.rows[0].nombres} ${codigoCheck.rows[0].apellidos}` 
+        })
+      }
     }
 
+    // Validar teléfono del encargado (SOLO si se envía)
     if (body.telefono_encargado !== undefined && body.telefono_encargado) {
       const telefonoLimpio = body.telefono_encargado.replace(/\s/g, '')
       
@@ -374,16 +391,26 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     const values: any[] = []
     let paramIndex = 1
 
+    // Campos permitidos para actualizar
     const allowedFields = [
       'nombres', 'apellidos', 'fecha_nacimiento', 'nivel_id', 'subnivel_id',
       'maestro_id', 'codigo', 'genero', 'direccion', 'telefono_contacto',
-      'nombre_encargado', 'telefono_encargado', 'direccion_encargado'
+      'nombre_encargado', 'telefono_encargado', 'direccion_encargado',
+      'activo', 'motivo_inactividad', 'fecha_inactivacion'
     ]
 
     for (const field of allowedFields) {
       if (field in body) {
         updates.push(`${field} = $${paramIndex}`)
-        values.push(typeof body[field] === 'string' ? body[field].trim() : body[field])
+        
+        // Limpiar strings, pero permitir null
+        if (body[field] === null) {
+          values.push(null)
+        } else if (typeof body[field] === 'string') {
+          values.push(body[field].trim())
+        } else {
+          values.push(body[field])
+        }
         paramIndex++
       }
     }
@@ -402,6 +429,9 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       RETURNING *
     `
 
+    console.log('Query:', query)
+    console.log('Values:', values)
+
     const result = await pool.query(query, values)
 
     if (result.rows.length === 0) {
@@ -412,11 +442,10 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
-    console.error('❌ Error:', error)
+    console.error('❌ Error al actualizar:', error)
     res.status(500).json({ error: 'Error al actualizar niño: ' + error.message })
   }
 })
-
 // DELETE /ninos/:id - Eliminar niño
 router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (req: any, res: any) => {
   try {

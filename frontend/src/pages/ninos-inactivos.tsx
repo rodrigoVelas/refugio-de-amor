@@ -105,6 +105,11 @@ export default function GestionNinos() {
     try {
       setProcesando(true)
       console.log('🚪 Inactivando niño:', ninoSeleccionado.id)
+      console.log('   Datos a enviar:', {
+        activo: false,
+        motivo_inactividad: motivoInactividad.trim(),
+        fecha_inactivacion: new Date().toISOString()
+      })
 
       const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}`, {
         method: 'PUT',
@@ -117,10 +122,28 @@ export default function GestionNinos() {
         })
       })
 
+      console.log('   Response status:', res.status)
+      console.log('   Response ok:', res.ok)
+
       if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.error || 'Error al inactivar')
+        const contentType = res.headers.get('content-type')
+        let errorMessage = 'Error al inactivar niño'
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await res.json()
+          console.error('   Error data:', errorData)
+          errorMessage = errorData.error || errorMessage
+        } else {
+          const errorText = await res.text()
+          console.error('   Error text:', errorText)
+          errorMessage = errorText || errorMessage
+        }
+        
+        throw new Error(errorMessage)
       }
+
+      const data = await res.json()
+      console.log('   ✅ Response data:', data)
 
       await Swal.fire({
         icon: 'success',
@@ -136,11 +159,11 @@ export default function GestionNinos() {
       cargarTodosLosNinos()
 
     } catch (error: any) {
-      console.error('❌ Error:', error)
+      console.error('❌ Error completo:', error)
       Swal.fire({
         icon: 'error',
-        title: 'Error',
-        text: error.message || 'Error al inactivar niño',
+        title: 'Error al inactivar',
+        text: error.message || 'Error desconocido',
         confirmButtonColor: '#3b82f6'
       })
     } finally {
@@ -169,6 +192,11 @@ export default function GestionNinos() {
 
     try {
       console.log('✅ Reactivando niño:', nino.id)
+      console.log('   Datos a enviar:', {
+        activo: true,
+        motivo_inactividad: null,
+        fecha_inactivacion: null
+      })
       
       const res = await fetch(`${API_URL}/ninos/${nino.id}`, {
         method: 'PUT',
@@ -181,10 +209,28 @@ export default function GestionNinos() {
         })
       })
 
+      console.log('   Response status:', res.status)
+      console.log('   Response ok:', res.ok)
+
       if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.error || 'Error al reactivar')
+        const contentType = res.headers.get('content-type')
+        let errorMessage = 'Error al reactivar niño'
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await res.json()
+          console.error('   Error data:', errorData)
+          errorMessage = errorData.error || errorMessage
+        } else {
+          const errorText = await res.text()
+          console.error('   Error text:', errorText)
+          errorMessage = errorText || errorMessage
+        }
+        
+        throw new Error(errorMessage)
       }
+
+      const data = await res.json()
+      console.log('   ✅ Response data:', data)
 
       await Swal.fire({
         icon: 'success',
@@ -197,11 +243,11 @@ export default function GestionNinos() {
       cargarTodosLosNinos()
 
     } catch (error: any) {
-      console.error('❌ Error:', error)
+      console.error('❌ Error completo:', error)
       Swal.fire({
         icon: 'error',
-        title: 'Error',
-        text: error.message || 'Error al reactivar niño',
+        title: 'Error al reactivar',
+        text: error.message || 'Error desconocido',
         confirmButtonColor: '#3b82f6'
       })
     }
@@ -514,16 +560,25 @@ export default function GestionNinos() {
                     className="textarea"
                     value={motivoInactividad}
                     onChange={e => setMotivoInactividad(e.target.value)}
-                    placeholder="Ejemplo: Cumplió 18 años, Se mudó de ciudad, Finalizó el programa..."
+                    placeholder="Ejemplo: Cumplió 18 años, Se mudó de ciudad, Finalizó el programa, Graduación..."
                     rows={4}
                     required
                     disabled={procesando}
+                    style={{ fontSize: '0.95rem' }}
                   />
+                  <small style={{ 
+                    display: 'block', 
+                    marginTop: '0.5rem', 
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.875rem'
+                  }}>
+                    📝 Especifica claramente el motivo por el cual el niño ya no estará activo.
+                  </small>
                 </div>
               </div>
             </div>
 
-            <div className="modal-actions">
+            <div className="modal-actions" style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)' }}>
               <button 
                 className="btn btn-ghost" 
                 onClick={() => setShowInactivarModal(false)}
@@ -535,9 +590,12 @@ export default function GestionNinos() {
                 className="btn"
                 onClick={inactivarNino}
                 disabled={procesando || !motivoInactividad.trim()}
-                style={{ background: '#ef4444' }}
+                style={{ 
+                  background: '#ef4444',
+                  opacity: (procesando || !motivoInactividad.trim()) ? 0.5 : 1
+                }}
               >
-                {procesando ? 'Inactivando...' : '🚪 Inactivar'}
+                {procesando ? 'Inactivando...' : '🚪 Inactivar Niño'}
               </button>
             </div>
           </div>
