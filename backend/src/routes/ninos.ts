@@ -320,6 +320,7 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
 })
 
 // PUT /ninos/:id - Actualizar niño
+// PUT /ninos/:id - Actualizar niño
 router.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
@@ -327,10 +328,34 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     const body = req.body
 
     console.log('\n=== PUT /ninos/:id ===')
-    console.log('Body recibido:', body)
+    console.log('ID:', id)
+    console.log('Body recibido:', JSON.stringify(body, null, 2))
 
-    // ⚠️ SOLO validar código si se está intentando cambiar
-    if (body.codigo !== undefined) {
+    // Verificar permisos del usuario
+    const userResult = await pool.query(
+      'SELECT rol FROM usuarios WHERE id = $1',
+      [userId]
+    )
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Usuario no encontrado' })
+    }
+
+    const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
+
+    if (!esDirectora) {
+      const check = await pool.query(
+        'SELECT id FROM ninos WHERE id = $1 AND maestro_id = $2',
+        [id, userId]
+      )
+
+      if (check.rows.length === 0) {
+        return res.status(403).json({ error: 'No tienes acceso a este niño' })
+      }
+    }
+
+    // Validar SOLO si se está intentando cambiar el código
+    if ('codigo' in body && body.codigo !== undefined) {
       if (!body.codigo || !body.codigo.trim()) {
         return res.status(400).json({ 
           error: 'El código del niño no puede estar vacío' 
@@ -350,8 +375,8 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       }
     }
 
-    // Validar teléfono del encargado (SOLO si se envía)
-    if (body.telefono_encargado !== undefined && body.telefono_encargado) {
+    // Validar teléfono del encargado SOLO si se envía
+    if ('telefono_encargado' in body && body.telefono_encargado !== null && body.telefono_encargado !== undefined && body.telefono_encargado) {
       const telefonoLimpio = body.telefono_encargado.replace(/\s/g, '')
       
       if (!/^\d+$/.test(telefonoLimpio)) {
@@ -369,24 +394,7 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       body.telefono_encargado = telefonoLimpio
     }
 
-    const userResult = await pool.query(
-      'SELECT rol FROM usuarios WHERE id = $1',
-      [userId]
-    )
-
-    const esDirectora = String(userResult.rows[0]?.rol) === '1' || userResult.rows[0]?.rol === 1
-
-    if (!esDirectora) {
-      const check = await pool.query(
-        'SELECT id FROM ninos WHERE id = $1 AND maestro_id = $2',
-        [id, userId]
-      )
-
-      if (check.rows.length === 0) {
-        return res.status(403).json({ error: 'No tienes acceso a este niño' })
-      }
-    }
-
+    // Construir query de actualización
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
@@ -403,7 +411,7 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       if (field in body) {
         updates.push(`${field} = $${paramIndex}`)
         
-        // Limpiar strings, pero permitir null
+        // Manejar diferentes tipos de valores
         if (body[field] === null) {
           values.push(null)
         } else if (typeof body[field] === 'string') {
@@ -419,6 +427,7 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       return res.status(400).json({ error: 'No hay campos para actualizar' })
     }
 
+    // Agregar fecha de modificación
     updates.push(`modificado_en = NOW()`)
     values.push(id)
 
@@ -438,14 +447,17 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
-    console.log('✅ Niño actualizado:', result.rows[0].nombres)
+    console.log('✅ Niño actualizado exitosamente:', result.rows[0].nombres, result.rows[0].apellidos)
 
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
-    console.error('❌ Error al actualizar:', error)
+    console.error('❌ Error al actualizar niño:')
+    console.error('   Mensaje:', error.message)
+    console.error('   Stack:', error.stack)
     res.status(500).json({ error: 'Error al actualizar niño: ' + error.message })
   }
 })
+
 // DELETE /ninos/:id - Eliminar niño
 router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (req: any, res: any) => {
   try {
