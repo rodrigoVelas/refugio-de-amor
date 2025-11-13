@@ -518,18 +518,6 @@ export default function Ninos() {
                     <button className="btn btn-ghost" onClick={() => abrirModal(nino)} style={{ flex: '1 1 auto' }}>
                       Editar
                     </button>
-                    <button 
-                      className="btn"
-                      onClick={() => abrirModalInactivar(nino)}
-                      style={{ 
-                        flex: '1 1 auto',
-                        background: '#f59e0b',
-                        color: 'white'
-                      }}
-                      title="Inactivar niño"
-                    >
-                      🚪 Inactivar
-                    </button>
                     <button className="btn btn-danger" onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} style={{ flex: '1 1 auto' }}>
                       Eliminar
                     </button>
@@ -629,7 +617,7 @@ export default function Ninos() {
               </div>
 
               <div>
-                <label className="label">Nivel (Opcional)</label>
+                <label className="label">Nivel </label>
                 <select className="select" value={nivelId} onChange={e => setNivelId(e.target.value)}>
                   <option value="">Sin nivel</option>
                   {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
