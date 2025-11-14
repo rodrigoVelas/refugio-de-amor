@@ -319,7 +319,7 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// PUT /ninos/:id - Actualizar niño (SIN VALIDACIÓN DE CÓDIGO)
+// PUT /ninos/:id - Actualizar niño (SIN VALIDACIONES)
 router.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
@@ -328,10 +328,7 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
     console.log('\n=== PUT /ninos/:id ===')
     console.log('ID:', id)
-    console.log('Body completo:', JSON.stringify(body, null, 2))
-    console.log('Keys en body:', Object.keys(body))
-    console.log('¿Tiene campo codigo?', 'codigo' in body)
-    console.log('Valor de codigo:', body.codigo)
+    console.log('Body:', body)
 
     // Verificar permisos del usuario
     const userResult = await pool.query(
@@ -340,7 +337,6 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     )
 
     if (userResult.rows.length === 0) {
-      console.log('❌ Usuario no encontrado')
       return res.status(401).json({ error: 'Usuario no encontrado' })
     }
 
@@ -353,30 +349,27 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       )
 
       if (check.rows.length === 0) {
-        console.log('❌ Sin acceso al niño')
         return res.status(403).json({ error: 'No tienes acceso a este niño' })
       }
     }
 
-    // ⚠️ SIN VALIDACIONES - Solo construir el query
+    // Construir query DIRECTO - SIN VALIDACIONES
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
 
-    // Campos permitidos para actualizar
+    // SOLO estos campos (sin codigo)
     const allowedFields = [
       'nombres', 'apellidos', 'fecha_nacimiento', 'nivel_id', 'subnivel_id',
-      'maestro_id', 'codigo', 'genero', 'direccion', 'telefono_contacto',
+      'maestro_id', 'genero', 'direccion', 'telefono_contacto',
       'nombre_encargado', 'telefono_encargado', 'direccion_encargado',
       'activo', 'motivo_inactividad', 'fecha_inactivacion'
     ]
 
     for (const field of allowedFields) {
       if (field in body) {
-        console.log(`   Agregando campo: ${field} = ${body[field]}`)
         updates.push(`${field} = $${paramIndex}`)
         
-        // Manejar diferentes tipos de valores
         if (body[field] === null) {
           values.push(null)
         } else if (typeof body[field] === 'string') {
@@ -389,11 +382,9 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     }
 
     if (updates.length === 0) {
-      console.log('❌ No hay campos para actualizar')
       return res.status(400).json({ error: 'No hay campos para actualizar' })
     }
 
-    // Agregar fecha de modificación
     updates.push(`modificado_en = NOW()`)
     values.push(id)
 
@@ -404,29 +395,24 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       RETURNING *
     `
 
-    console.log('   Query construido:', query)
-    console.log('   Values:', values)
+    console.log('Query:', query)
+    console.log('Values:', values)
 
     const result = await pool.query(query, values)
 
     if (result.rows.length === 0) {
-      console.log('❌ Niño no encontrado')
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
-    console.log('✅ Niño actualizado exitosamente')
-    console.log('   Nombre:', result.rows[0].nombres, result.rows[0].apellidos)
-    console.log('   Activo:', result.rows[0].activo)
-    console.log('   Motivo:', result.rows[0].motivo_inactividad)
+    console.log('✅ Actualizado:', result.rows[0].nombres, '- Activo:', result.rows[0].activo)
 
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
-    console.error('\n❌ ERROR AL ACTUALIZAR NIÑO:')
-    console.error('   Mensaje:', error.message)
-    console.error('   Stack:', error.stack)
-    res.status(500).json({ error: 'Error al actualizar niño: ' + error.message })
+    console.error('❌ Error:', error.message)
+    res.status(500).json({ error: 'Error al actualizar: ' + error.message })
   }
 })
+
 
 // DELETE /ninos/:id - Eliminar niño
 router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (req: any, res: any) => {
