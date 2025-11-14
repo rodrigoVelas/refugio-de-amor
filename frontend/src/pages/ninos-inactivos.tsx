@@ -71,175 +71,140 @@ export default function GestionNinos() {
     setShowInactivarModal(true)
   }
 
-  async function inactivarNino() {
-    if (!ninoSeleccionado) return
+async function inactivarNino() {
+  if (!ninoSeleccionado) return
 
-    if (!motivoInactividad.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Motivo requerido',
-        text: 'Debes especificar el motivo de inactividad',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
-    const result = await Swal.fire({
+  if (!motivoInactividad.trim()) {
+    Swal.fire({
       icon: 'warning',
-      title: '¿Inactivar niño?',
-      html: `
-        <p>¿Estás seguro de inactivar a:</p>
-        <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
-          ${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos}
-        </p>
-      `,
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Sí, inactivar',
-      cancelButtonText: 'Cancelar'
+      title: 'Motivo requerido',
+      text: 'Debes especificar el motivo de inactividad',
+      confirmButtonColor: '#3b82f6'
     })
-
-    if (!result.isConfirmed) return
-
-    try {
-      setProcesando(true)
-      console.log('\n🚪 Inactivando niño con POST')
-      console.log('   ID:', ninoSeleccionado.id)
-      console.log('   Motivo:', motivoInactividad.trim())
-
-      // USAR POST /ninos/:id/inactivar (endpoint que YA existe)
-      const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/inactivar`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          motivo: motivoInactividad.trim()
-        })
-      })
-
-      console.log('   Response status:', res.status)
-      console.log('   Response ok:', res.ok)
-
-      if (!res.ok) {
-        const contentType = res.headers.get('content-type')
-        let errorMessage = 'Error al inactivar niño'
-        
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await res.json()
-          console.error('   Error data:', errorData)
-          errorMessage = errorData.error || errorMessage
-        } else {
-          const errorText = await res.text()
-          console.error('   Error text:', errorText)
-          errorMessage = errorText || errorMessage
-        }
-        
-        throw new Error(errorMessage)
-      }
-
-      const data = await res.json()
-      console.log('   ✅ Response data:', data)
-
-      await Swal.fire({
-        icon: 'success',
-        title: '¡Inactivado!',
-        text: `${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos} fue inactivado`,
-        timer: 2000,
-        showConfirmButton: false
-      })
-      
-      setShowInactivarModal(false)
-      setNinoSeleccionado(null)
-      setMotivoInactividad('')
-      cargarTodosLosNinos()
-
-    } catch (error: any) {
-      console.error('❌ Error completo:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error al inactivar',
-        text: error.message || 'Error desconocido',
-        confirmButtonColor: '#3b82f6'
-      })
-    } finally {
-      setProcesando(false)
-    }
+    return
   }
 
-  async function reactivarNino(nino: Nino) {
-    const result = await Swal.fire({
-      icon: 'question',
-      title: '¿Reactivar niño?',
-      html: `
-        <p>¿Estás seguro de reactivar a:</p>
-        <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
-          ${nino.nombres} ${nino.apellidos}
-        </p>
-      `,
-      showCancelButton: true,
-      confirmButtonColor: '#10b981',
-      cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Sí, reactivar',
-      cancelButtonText: 'Cancelar'
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: '¿Inactivar niño?',
+    html: `
+      <p>¿Estás seguro de inactivar a:</p>
+      <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
+        ${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos}
+      </p>
+    `,
+    showCancelButton: true,
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280',
+    confirmButtonText: 'Sí, inactivar',
+    cancelButtonText: 'Cancelar'
+  })
+
+  if (!result.isConfirmed) return
+
+  try {
+    setProcesando(true)
+    console.log('🚪 Inactivando niño')
+
+    // ACTUALIZAR DIRECTO EN LA BASE DE DATOS SIN BACKEND
+    const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        activo: false,
+        motivo_inactividad: motivoInactividad.trim()
+      })
     })
 
-    if (!result.isConfirmed) return
-
-    try {
-      console.log('\n✅ Reactivando niño con POST')
-      console.log('   ID:', nino.id)
-      
-      // USAR POST /ninos/:id/reactivar (endpoint que YA existe)
-      const res = await fetch(`${API_URL}/ninos/${nino.id}/reactivar`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      console.log('   Response status:', res.status)
-      console.log('   Response ok:', res.ok)
-
-      if (!res.ok) {
-        const contentType = res.headers.get('content-type')
-        let errorMessage = 'Error al reactivar niño'
-        
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await res.json()
-          console.error('   Error data:', errorData)
-          errorMessage = errorData.error || errorMessage
-        } else {
-          const errorText = await res.text()
-          console.error('   Error text:', errorText)
-          errorMessage = errorText || errorMessage
-        }
-        
-        throw new Error(errorMessage)
-      }
-
-      const data = await res.json()
-      console.log('   ✅ Response data:', data)
-
-      await Swal.fire({
-        icon: 'success',
-        title: '¡Reactivado!',
-        text: `${nino.nombres} ${nino.apellidos} fue reactivado`,
-        timer: 2000,
-        showConfirmButton: false
-      })
-      
-      cargarTodosLosNinos()
-
-    } catch (error: any) {
-      console.error('❌ Error completo:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error al reactivar',
-        text: error.message || 'Error desconocido',
-        confirmButtonColor: '#3b82f6'
-      })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: 'Error desconocido' }))
+      throw new Error(data.error || 'Error al inactivar')
     }
+
+    await Swal.fire({
+      icon: 'success',
+      title: '¡Inactivado!',
+      text: `${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos} fue inactivado`,
+      timer: 2000,
+      showConfirmButton: false
+    })
+    
+    setShowInactivarModal(false)
+    setNinoSeleccionado(null)
+    setMotivoInactividad('')
+    cargarTodosLosNinos()
+
+  } catch (error: any) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message,
+      confirmButtonColor: '#3b82f6'
+    })
+  } finally {
+    setProcesando(false)
   }
+}
+
+async function reactivarNino(nino: Nino) {
+  const result = await Swal.fire({
+    icon: 'question',
+    title: '¿Reactivar niño?',
+    html: `
+      <p>¿Estás seguro de reactivar a:</p>
+      <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
+        ${nino.nombres} ${nino.apellidos}
+      </p>
+    `,
+    showCancelButton: true,
+    confirmButtonColor: '#10b981',
+    cancelButtonColor: '#6b7280',
+    confirmButtonText: 'Sí, reactivar',
+    cancelButtonText: 'Cancelar'
+  })
+
+  if (!result.isConfirmed) return
+
+  try {
+    console.log('✅ Reactivando niño')
+    
+    // ACTUALIZAR DIRECTO EN LA BASE DE DATOS SIN BACKEND
+    const res = await fetch(`${API_URL}/ninos/${nino.id}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        activo: true,
+        motivo_inactividad: null
+      })
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: 'Error desconocido' }))
+      throw new Error(data.error || 'Error al reactivar')
+    }
+
+    await Swal.fire({
+      icon: 'success',
+      title: '¡Reactivado!',
+      text: `${nino.nombres} ${nino.apellidos} fue reactivado`,
+      timer: 2000,
+      showConfirmButton: false
+    })
+    
+    cargarTodosLosNinos()
+
+  } catch (error: any) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message,
+      confirmButtonColor: '#3b82f6'
+    })
+  }
+}
+
 
   function verDetalles(nino: Nino) {
     const infoHTML = `
