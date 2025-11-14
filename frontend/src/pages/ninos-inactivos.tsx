@@ -16,48 +16,45 @@ interface Nino {
   motivo_inactividad: string | null
   fecha_inactivacion: string | null
   edad: number
-  activo: boolean
 }
 
 export default function GestionNinos() {
-  const [ninos, setNinos] = useState<Nino[]>([])
+  const [ninosActivos, setNinosActivos] = useState<Nino[]>([])
+  const [ninosInactivos, setNinosInactivos] = useState<Nino[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState<'todos' | 'activos' | 'inactivos'>('todos')
-
-  // Estados para modal de inactivar
   const [showInactivarModal, setShowInactivarModal] = useState(false)
   const [ninoSeleccionado, setNinoSeleccionado] = useState<Nino | null>(null)
   const [motivoInactividad, setMotivoInactividad] = useState('')
   const [procesando, setProcesando] = useState(false)
 
   useEffect(() => {
-    cargarTodosLosNinos()
+    cargarTodos()
   }, [])
 
-  async function cargarTodosLosNinos() {
+  async function cargarTodos() {
     try {
       setLoading(true)
-      console.log('📋 Cargando todos los niños...')
+      console.log('📋 Cargando niños activos e inactivos...')
       
-      const res = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
+      const resActivos = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
+      const activos = resActivos.ok ? await resActivos.json() : []
       
-      if (!res.ok) {
-        throw new Error('Error al cargar niños')
-      }
+      const resInactivos = await fetch(`${API_URL}/ninos/lista-inactivos`, { credentials: 'include' })
+      const inactivos = resInactivos.ok ? await resInactivos.json() : []
       
-      const data = await res.json()
-      console.log('   Total niños:', data.length)
-      console.log('   Activos:', data.filter((n: any) => n.activo !== false).length)
-      console.log('   Inactivos:', data.filter((n: any) => n.activo === false).length)
+      console.log('   Activos:', activos.length)
+      console.log('   Inactivos:', inactivos.length)
       
-      setNinos(data)
+      setNinosActivos(activos)
+      setNinosInactivos(inactivos)
     } catch (error: any) {
       console.error('❌ Error:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.message || 'Error al cargar niños',
+        text: 'Error al cargar niños',
         confirmButtonColor: '#3b82f6'
       })
     } finally {
@@ -70,160 +67,145 @@ export default function GestionNinos() {
     setMotivoInactividad('')
     setShowInactivarModal(true)
   }
-async function inactivarNino() {
-  if (!ninoSeleccionado) return
 
-  if (!motivoInactividad.trim()) {
-    Swal.fire({
+  async function inactivarNino() {
+    if (!ninoSeleccionado) return
+
+    if (!motivoInactividad.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Motivo requerido',
+        text: 'Debes especificar el motivo de inactividad',
+        confirmButtonColor: '#3b82f6'
+      })
+      return
+    }
+
+    const result = await Swal.fire({
       icon: 'warning',
-      title: 'Motivo requerido',
-      text: 'Debes especificar el motivo de inactividad',
-      confirmButtonColor: '#3b82f6'
-    })
-    return
-  }
-
-  const result = await Swal.fire({
-    icon: 'warning',
-    title: '¿Inactivar niño?',
-    html: `
-      <p>¿Estás seguro de inactivar a:</p>
-      <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
-        ${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos}
-      </p>
-    `,
-    showCancelButton: true,
-    confirmButtonColor: '#ef4444',
-    cancelButtonColor: '#6b7280',
-    confirmButtonText: 'Sí, inactivar',
-    cancelButtonText: 'Cancelar'
-  })
-
-  if (!result.isConfirmed) return
-
-  try {
-    setProcesando(true)
-    
-    // Hacer el cambio localmente y recargar
-    await Swal.fire({
-      icon: 'info',
-      title: 'Inactivando...',
-      text: 'Por favor espera un momento',
-      allowOutsideClick: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading()
-      }
-    })
-
-    // Simular delay para que el usuario vea que está procesando
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // Mostrar éxito
-    await Swal.fire({
-      icon: 'success',
-      title: '¡Niño marcado para inactivar!',
+      title: '¿Inactivar niño?',
       html: `
-        <p>${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos} será inactivado.</p>
-        <p style="margin-top: 1rem; font-size: 0.875rem; color: #666;">
-          Por favor, ve a la base de datos de PostgreSQL y ejecuta:
+        <p>¿Estás seguro de inactivar a:</p>
+        <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
+          ${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos}
         </p>
-        <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px; text-align: left; margin-top: 0.5rem; overflow-x: auto;">
-UPDATE ninos 
-SET activo = false, 
-    motivo_inactividad = '${motivoInactividad.trim()}',
-    fecha_inactivacion = NOW()
-WHERE id = '${ninoSeleccionado.id}';
-        </pre>
+        <p style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">
+          Se moverá a la tabla de niños inactivos
+        </p>
       `,
-      confirmButtonText: 'Entendido',
-      confirmButtonColor: '#3b82f6',
-      width: '600px'
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, inactivar',
+      cancelButtonText: 'Cancelar'
     })
-    
-    setShowInactivarModal(false)
-    setNinoSeleccionado(null)
-    setMotivoInactividad('')
 
-  } catch (error: any) {
-    console.error('❌ Error:', error)
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: error.message || 'Error desconocido',
-      confirmButtonColor: '#3b82f6'
-    })
-  } finally {
-    setProcesando(false)
-  }
-}
+    if (!result.isConfirmed) return
 
-async function reactivarNino(nino: Nino) {
-  const result = await Swal.fire({
-    icon: 'question',
-    title: '¿Reactivar niño?',
-    html: `
-      <p>¿Estás seguro de reactivar a:</p>
-      <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
-        ${nino.nombres} ${nino.apellidos}
-      </p>
-    `,
-    showCancelButton: true,
-    confirmButtonColor: '#10b981',
-    cancelButtonColor: '#6b7280',
-    confirmButtonText: 'Sí, reactivar',
-    cancelButtonText: 'Cancelar'
-  })
+    try {
+      setProcesando(true)
+      console.log('🚪 Inactivando niño:', ninoSeleccionado.id)
 
-  if (!result.isConfirmed) return
+      const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/inactivar-manual`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: motivoInactividad.trim() })
+      })
 
-  try {
-    await Swal.fire({
-      icon: 'info',
-      title: 'Reactivando...',
-      text: 'Por favor espera un momento',
-      allowOutsideClick: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading()
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Error al inactivar')
       }
-    })
 
-    await new Promise(resolve => setTimeout(resolve, 1000))
+      const data = await res.json()
+      console.log('✅ Éxito:', data)
 
-    await Swal.fire({
-      icon: 'success',
-      title: '¡Niño marcado para reactivar!',
-      html: `
-        <p>${nino.nombres} ${nino.apellidos} será reactivado.</p>
-        <p style="margin-top: 1rem; font-size: 0.875rem; color: #666;">
-          Por favor, ve a la base de datos de PostgreSQL y ejecuta:
-        </p>
-        <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px; text-align: left; margin-top: 0.5rem; overflow-x: auto;">
-UPDATE ninos 
-SET activo = true, 
-    motivo_inactividad = NULL,
-    fecha_inactivacion = NULL
-WHERE id = '${nino.id}';
-        </pre>
-      `,
-      confirmButtonText: 'Entendido',
-      confirmButtonColor: '#3b82f6',
-      width: '600px'
-    })
+      await Swal.fire({
+        icon: 'success',
+        title: '¡Inactivado!',
+        text: `${ninoSeleccionado.nombres} ${ninoSeleccionado.apellidos} fue movido a inactivos`,
+        timer: 2000,
+        showConfirmButton: false
+      })
+      
+      setShowInactivarModal(false)
+      setNinoSeleccionado(null)
+      setMotivoInactividad('')
+      cargarTodos()
 
-  } catch (error: any) {
-    console.error('❌ Error:', error)
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: error.message || 'Error desconocido',
-      confirmButtonColor: '#3b82f6'
-    })
+    } catch (error: any) {
+      console.error('❌ Error completo:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error al inactivar',
+        text: error.message || 'Error desconocido',
+        confirmButtonColor: '#3b82f6'
+      })
+    } finally {
+      setProcesando(false)
+    }
   }
-}
 
+  async function reactivarNino(nino: Nino) {
+    const result = await Swal.fire({
+      icon: 'question',
+      title: '¿Reactivar niño?',
+      html: `
+        <p>¿Estás seguro de reactivar a:</p>
+        <p style="font-size: 1.125rem; font-weight: 600; margin: 1rem 0;">
+          ${nino.nombres} ${nino.apellidos}
+        </p>
+        <p style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">
+          Se moverá de vuelta a la tabla de niños activos
+        </p>
+      `,
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, reactivar',
+      cancelButtonText: 'Cancelar'
+    })
 
+    if (!result.isConfirmed) return
+
+    try {
+      console.log('✅ Reactivando niño:', nino.id)
+      
+      const res = await fetch(`${API_URL}/ninos/${nino.id}/reactivar-manual`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Error al reactivar')
+      }
+
+      const data = await res.json()
+      console.log('✅ Éxito:', data)
+
+      await Swal.fire({
+        icon: 'success',
+        title: '¡Reactivado!',
+        text: `${nino.nombres} ${nino.apellidos} fue movido a activos`,
+        timer: 2000,
+        showConfirmButton: false
+      })
+      
+      cargarTodos()
+
+    } catch (error: any) {
+      console.error('❌ Error completo:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error al reactivar',
+        text: error.message || 'Error desconocido',
+        confirmButtonColor: '#3b82f6'
+      })
+    }
+  }
 
   function verDetalles(nino: Nino) {
     const infoHTML = `
@@ -236,10 +218,10 @@ WHERE id = '${nino.id}';
         <p style="margin: 0.5rem 0;"><strong>👨‍🏫 Maestro/a:</strong> ${nino.maestro_nombre || nino.maestro_email || 'Sin asignar'}</p>
         ${nino.nombre_encargado ? `<p style="margin: 0.5rem 0;"><strong>👤 Encargado:</strong> ${nino.nombre_encargado}</p>` : ''}
         ${nino.telefono_encargado ? `<p style="margin: 0.5rem 0;"><strong>📱 Teléfono:</strong> ${nino.telefono_encargado}</p>` : ''}
-        ${nino.activo === false ? `
+        ${nino.motivo_inactividad ? `
           <hr style="margin: 1rem 0; border: none; border-top: 1px solid #e5e7eb;">
           <p style="margin: 0.5rem 0; color: #ef4444;"><strong>🚪 Estado:</strong> Inactivo</p>
-          ${nino.motivo_inactividad ? `<p style="margin: 0.5rem 0;"><strong>Motivo:</strong> ${nino.motivo_inactividad}</p>` : ''}
+          <p style="margin: 0.5rem 0;"><strong>Motivo:</strong> ${nino.motivo_inactividad}</p>
           ${nino.fecha_inactivacion ? `<p style="margin: 0.5rem 0;"><strong>Fecha:</strong> ${formatearFecha(nino.fecha_inactivacion)}</p>` : ''}
         ` : ''}
       </div>
@@ -273,13 +255,17 @@ WHERE id = '${nino.id}';
     return edad
   }
 
-  // Filtrar niños
-  const ninosFiltrados = ninos.filter(nino => {
-    // Filtro por estado
-    if (filtro === 'activos' && nino.activo === false) return false
-    if (filtro === 'inactivos' && nino.activo !== false) return false
+  // Combinar activos e inactivos
+  const todosLosNinos = [
+    ...ninosActivos.map(n => ({ ...n, esActivo: true })),
+    ...ninosInactivos.map(n => ({ ...n, esActivo: false }))
+  ]
 
-    // Filtro por búsqueda
+  // Filtrar
+  const ninosFiltrados = todosLosNinos.filter((nino: any) => {
+    if (filtro === 'activos' && !nino.esActivo) return false
+    if (filtro === 'inactivos' && nino.esActivo) return false
+
     if (!busqueda.trim()) return true
     const searchTerm = busqueda.toLowerCase()
     return (
@@ -290,9 +276,6 @@ WHERE id = '${nino.id}';
     )
   })
 
-  const totalActivos = ninos.filter(n => n.activo !== false).length
-  const totalInactivos = ninos.filter(n => n.activo === false).length
-
   return (
     <div className="content">
       <div className="card">
@@ -300,12 +283,11 @@ WHERE id = '${nino.id}';
           <div>
             <h1 className="card-title">📋 Gestión de Niños</h1>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-              Ver todos los niños y cambiar su estado (activo/inactivo)
+              Los niños se mueven entre tablas: activos ↔ inactivos
             </p>
           </div>
         </div>
 
-        {/* Filtros y búsqueda */}
         <div className="toolbar" style={{ flexDirection: 'column', gap: '1rem', alignItems: 'stretch' }}>
           {/* Estadísticas */}
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -315,7 +297,7 @@ WHERE id = '${nino.id}';
               borderRadius: 'var(--radius)',
               border: '2px solid #10b981'
             }}>
-              <span style={{ fontSize: '1.5rem', fontWeight: '600', color: '#10b981' }}>{totalActivos}</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: '600', color: '#10b981' }}>{ninosActivos.length}</span>
               <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)' }}>Activos</span>
             </div>
             <div style={{ 
@@ -324,7 +306,7 @@ WHERE id = '${nino.id}';
               borderRadius: 'var(--radius)',
               border: '2px solid #ef4444'
             }}>
-              <span style={{ fontSize: '1.5rem', fontWeight: '600', color: '#ef4444' }}>{totalInactivos}</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: '600', color: '#ef4444' }}>{ninosInactivos.length}</span>
               <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)' }}>Inactivos</span>
             </div>
             <div style={{ 
@@ -333,34 +315,33 @@ WHERE id = '${nino.id}';
               borderRadius: 'var(--radius)',
               border: '2px solid var(--primary)'
             }}>
-              <span style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--primary)' }}>{ninos.length}</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--primary)' }}>{todosLosNinos.length}</span>
               <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)' }}>Total</span>
             </div>
           </div>
 
-          {/* Filtros y búsqueda */}
+          {/* Filtros */}
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            {/* Botones de filtro */}
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 className={filtro === 'todos' ? 'btn' : 'btn btn-ghost'}
                 onClick={() => setFiltro('todos')}
               >
-                Todos ({ninos.length})
+                Todos ({todosLosNinos.length})
               </button>
               <button
                 className={filtro === 'activos' ? 'btn' : 'btn btn-ghost'}
                 onClick={() => setFiltro('activos')}
                 style={filtro === 'activos' ? { background: '#10b981' } : {}}
               >
-                ✅ Activos ({totalActivos})
+                ✅ Activos ({ninosActivos.length})
               </button>
               <button
                 className={filtro === 'inactivos' ? 'btn' : 'btn btn-ghost'}
                 onClick={() => setFiltro('inactivos')}
                 style={filtro === 'inactivos' ? { background: '#ef4444' } : {}}
               >
-                🚪 Inactivos ({totalInactivos})
+                🚪 Inactivos ({ninosInactivos.length})
               </button>
             </div>
 
@@ -372,7 +353,7 @@ WHERE id = '${nino.id}';
               <input
                 type="text"
                 className="input"
-                placeholder="Buscar por código, nombre o motivo..."
+                placeholder="Buscar por nombre, código o motivo..."
                 value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
                 style={{ paddingLeft: '40px' }}
@@ -392,19 +373,19 @@ WHERE id = '${nino.id}';
           ) : ninosFiltrados.length === 0 ? (
             <div className="alert" style={{ textAlign: 'center', padding: '2rem' }}>
               <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
-                {busqueda ? `No se encontraron resultados para "${busqueda}"` : 'No se encontraron niños'}
+                {busqueda ? `No se encontraron resultados para "${busqueda}"` : 'No hay niños'}
               </p>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-              {ninosFiltrados.map(nino => (
+              {ninosFiltrados.map((nino: any) => (
                 <div 
                   key={nino.id} 
                   style={{ 
                     padding: '1.25rem', 
                     background: 'var(--surface-elevated)', 
                     borderRadius: 'var(--radius)', 
-                    border: nino.activo === false ? '2px solid #fee2e2' : '2px solid #d1fae5',
+                    border: nino.esActivo ? '2px solid #d1fae5' : '2px solid #fee2e2',
                     position: 'relative'
                   }}
                 >
@@ -413,14 +394,14 @@ WHERE id = '${nino.id}';
                     position: 'absolute',
                     top: '0.75rem',
                     right: '0.75rem',
-                    background: nino.activo === false ? '#fee2e2' : '#d1fae5',
-                    color: nino.activo === false ? '#991b1b' : '#065f46',
+                    background: nino.esActivo ? '#d1fae5' : '#fee2e2',
+                    color: nino.esActivo ? '#065f46' : '#991b1b',
                     padding: '0.25rem 0.75rem',
                     borderRadius: '12px',
                     fontSize: '0.75rem',
                     fontWeight: '600'
                   }}>
-                    {nino.activo === false ? '🚪 INACTIVO' : '✅ ACTIVO'}
+                    {nino.esActivo ? '✅ ACTIVO' : '🚪 INACTIVO'}
                   </div>
 
                   <h3 style={{ marginBottom: '0.75rem', fontSize: '1.125rem', fontWeight: '500', paddingRight: '6rem' }}>
@@ -428,11 +409,11 @@ WHERE id = '${nino.id}';
                   </h3>
 
                   <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.6' }}>
-                    <div>🎂 Fecha Nac: {formatearFecha(nino.fecha_nacimiento)}</div>
-                    <div>📅 Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
-                    {nino.codigo && <div>🔢 Código: {nino.codigo}</div>}
-                    {nino.nivel_nombre && <div>📚 Nivel: {nino.nivel_nombre}</div>}
-                    {nino.activo === false && nino.motivo_inactividad && (
+                    <div>🎂 {formatearFecha(nino.fecha_nacimiento)}</div>
+                    <div>📅 {calcularEdad(nino.fecha_nacimiento)} años</div>
+                    {nino.codigo && <div>🔢 {nino.codigo}</div>}
+                    {nino.nivel_nombre && <div>📚 {nino.nivel_nombre}</div>}
+                    {!nino.esActivo && nino.motivo_inactividad && (
                       <div style={{ 
                         marginTop: '0.5rem', 
                         padding: '0.5rem', 
@@ -454,7 +435,7 @@ WHERE id = '${nino.id}';
                     >
                       👁️ Ver
                     </button>
-                    {nino.activo !== false ? (
+                    {nino.esActivo ? (
                       <button 
                         className="btn"
                         onClick={() => abrirModalInactivar(nino)}
@@ -519,6 +500,9 @@ WHERE id = '${nino.id}';
                     <p style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem' }}>
                       {ninoSeleccionado.nombres} {ninoSeleccionado.apellidos}
                     </p>
+                    <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                      Se moverá a la tabla de niños inactivos
+                    </p>
                   </div>
                 </div>
               </div>
@@ -544,7 +528,7 @@ WHERE id = '${nino.id}';
                     color: 'var(--text-secondary)',
                     fontSize: '0.875rem'
                   }}>
-                    📝 Especifica claramente el motivo por el cual el niño ya no estará activo.
+                    📝 Especifica claramente el motivo de inactividad
                   </small>
                 </div>
               </div>
