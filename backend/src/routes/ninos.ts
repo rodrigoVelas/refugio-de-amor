@@ -328,7 +328,8 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
     console.log('\n=== PUT /ninos/:id ===')
     console.log('ID:', id)
-    console.log('Body:', body)
+    console.log('Body recibido:', body)
+    console.log('Keys:', Object.keys(body))
 
     const userResult = await pool.query(
       'SELECT rol FROM usuarios WHERE id = $1',
@@ -352,27 +353,30 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       }
     }
 
+    // Construir UPDATE solo con los campos que VIENEN en el body
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
 
-    const allowedFields = [
-      'nombres', 'apellidos', 'fecha_nacimiento', 'nivel_id', 'subnivel_id',
-      'maestro_id', 'genero', 'direccion', 'telefono_contacto',
-      'nombre_encargado', 'telefono_encargado', 'direccion_encargado',
-      'activo', 'motivo_inactividad', 'fecha_inactivacion'
-    ]
+    // IMPORTANTE: Solo actualizar campos que están en el body
+    for (const [key, value] of Object.entries(body)) {
+      // Lista de campos permitidos
+      const allowedFields = [
+        'nombres', 'apellidos', 'fecha_nacimiento', 'nivel_id', 'subnivel_id',
+        'maestro_id', 'codigo', 'genero', 'direccion', 'telefono_contacto',
+        'nombre_encargado', 'telefono_encargado', 'direccion_encargado',
+        'activo', 'motivo_inactividad', 'fecha_inactivacion'
+      ]
 
-    for (const field of allowedFields) {
-      if (field in body) {
-        updates.push(`${field} = $${paramIndex}`)
+      if (allowedFields.includes(key)) {
+        updates.push(`${key} = $${paramIndex}`)
         
-        if (body[field] === null) {
+        if (value === null || value === undefined) {
           values.push(null)
-        } else if (typeof body[field] === 'string') {
-          values.push(body[field].trim())
+        } else if (typeof value === 'string') {
+          values.push(value.trim())
         } else {
-          values.push(body[field])
+          values.push(value)
         }
         paramIndex++
       }
@@ -392,17 +396,20 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       RETURNING *
     `
 
+    console.log('Query:', query)
+    console.log('Values:', values)
+
     const result = await pool.query(query, values)
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
-    console.log('✅ Actualizado:', result.rows[0].nombres)
+    console.log('✅ Actualizado:', result.rows[0].nombres, '- Activo:', result.rows[0].activo)
 
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
-    console.error('❌ Error:', error.message)
+    console.error('❌ Error al actualizar:', error.message)
     res.status(500).json({ error: 'Error al actualizar: ' + error.message })
   }
 })
