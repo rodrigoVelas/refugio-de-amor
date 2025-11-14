@@ -70,7 +70,6 @@ export default function GestionNinos() {
     setMotivoInactividad('')
     setShowInactivarModal(true)
   }
-
 async function inactivarNino() {
   if (!ninoSeleccionado) return
 
@@ -104,9 +103,12 @@ async function inactivarNino() {
 
   try {
     setProcesando(true)
-    console.log('🚪 Inactivando niño')
+    console.log('🚪 Inactivando niño:', ninoSeleccionado.id)
+    console.log('   Enviando datos:', {
+      activo: false,
+      motivo_inactividad: motivoInactividad.trim()
+    })
 
-    // ACTUALIZAR DIRECTO EN LA BASE DE DATOS SIN BACKEND
     const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}`, {
       method: 'PUT',
       credentials: 'include',
@@ -117,10 +119,28 @@ async function inactivarNino() {
       })
     })
 
+    console.log('📡 Status:', res.status)
+
     if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: 'Error desconocido' }))
-      throw new Error(data.error || 'Error al inactivar')
+      // Intentar leer como JSON
+      let errorMsg = 'Error desconocido'
+      const contentType = res.headers.get('content-type')
+      
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json()
+        console.error('❌ Error JSON:', data)
+        errorMsg = data.error || 'Error en el servidor'
+      } else {
+        const text = await res.text()
+        console.error('❌ Error TEXT:', text)
+        errorMsg = text
+      }
+      
+      throw new Error(errorMsg)
     }
+
+    const data = await res.json()
+    console.log('✅ Éxito:', data)
 
     await Swal.fire({
       icon: 'success',
@@ -136,10 +156,11 @@ async function inactivarNino() {
     cargarTodosLosNinos()
 
   } catch (error: any) {
+    console.error('❌ ERROR COMPLETO:', error)
     Swal.fire({
       icon: 'error',
-      title: 'Error',
-      text: error.message,
+      title: 'Error al inactivar',
+      text: error.message || 'Error desconocido',
       confirmButtonColor: '#3b82f6'
     })
   } finally {
@@ -167,9 +188,12 @@ async function reactivarNino(nino: Nino) {
   if (!result.isConfirmed) return
 
   try {
-    console.log('✅ Reactivando niño')
+    console.log('✅ Reactivando niño:', nino.id)
+    console.log('   Enviando datos:', {
+      activo: true,
+      motivo_inactividad: null
+    })
     
-    // ACTUALIZAR DIRECTO EN LA BASE DE DATOS SIN BACKEND
     const res = await fetch(`${API_URL}/ninos/${nino.id}`, {
       method: 'PUT',
       credentials: 'include',
@@ -180,10 +204,27 @@ async function reactivarNino(nino: Nino) {
       })
     })
 
+    console.log('📡 Status:', res.status)
+
     if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: 'Error desconocido' }))
-      throw new Error(data.error || 'Error al reactivar')
+      let errorMsg = 'Error desconocido'
+      const contentType = res.headers.get('content-type')
+      
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json()
+        console.error('❌ Error JSON:', data)
+        errorMsg = data.error || 'Error en el servidor'
+      } else {
+        const text = await res.text()
+        console.error('❌ Error TEXT:', text)
+        errorMsg = text
+      }
+      
+      throw new Error(errorMsg)
     }
+
+    const data = await res.json()
+    console.log('✅ Éxito:', data)
 
     await Swal.fire({
       icon: 'success',
@@ -196,15 +237,15 @@ async function reactivarNino(nino: Nino) {
     cargarTodosLosNinos()
 
   } catch (error: any) {
+    console.error('❌ ERROR COMPLETO:', error)
     Swal.fire({
       icon: 'error',
-      title: 'Error',
-      text: error.message,
+      title: 'Error al reactivar',
+      text: error.message || 'Error desconocido',
       confirmButtonColor: '#3b82f6'
     })
   }
 }
-
 
   function verDetalles(nino: Nino) {
     const infoHTML = `
