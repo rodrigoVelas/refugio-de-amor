@@ -104,21 +104,18 @@ export default function GestionNinos() {
 
     try {
       setProcesando(true)
-      console.log('🚪 Inactivando niño:', ninoSeleccionado.id)
-      console.log('   Datos a enviar:', {
-        activo: false,
-        motivo_inactividad: motivoInactividad.trim(),
-        fecha_inactivacion: new Date().toISOString()
-      })
+      console.log('\n🚪 Inactivando niño con PATCH')
+      console.log('   ID:', ninoSeleccionado.id)
+      console.log('   Motivo:', motivoInactividad.trim())
 
-      const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}`, {
-        method: 'PUT',
+      // USAR PATCH /ninos/:id/estado
+      const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/estado`, {
+        method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           activo: false,
-          motivo_inactividad: motivoInactividad.trim(),
-          fecha_inactivacion: new Date().toISOString()
+          motivo_inactividad: motivoInactividad.trim()
         })
       })
 
@@ -191,21 +188,17 @@ export default function GestionNinos() {
     if (!result.isConfirmed) return
 
     try {
-      console.log('✅ Reactivando niño:', nino.id)
-      console.log('   Datos a enviar:', {
-        activo: true,
-        motivo_inactividad: null,
-        fecha_inactivacion: null
-      })
+      console.log('\n✅ Reactivando niño con PATCH')
+      console.log('   ID:', nino.id)
       
-      const res = await fetch(`${API_URL}/ninos/${nino.id}`, {
-        method: 'PUT',
+      // USAR PATCH /ninos/:id/estado
+      const res = await fetch(`${API_URL}/ninos/${nino.id}/estado`, {
+        method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           activo: true,
-          motivo_inactividad: null,
-          fecha_inactivacion: null
+          motivo_inactividad: null
         })
       })
 

@@ -464,5 +464,45 @@ router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (r
     res.status(500).json({ error: error.message })
   }
 })
+// PATCH /ninos/:id/estado - Cambiar solo el estado del niño (SIN VALIDACIONES)
+router.patch('/:id/estado', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { activo, motivo_inactividad } = req.body
+
+    console.log('\n🔄 PATCH /ninos/:id/estado')
+    console.log('   ID:', id)
+    console.log('   Activo:', activo)
+    console.log('   Motivo:', motivo_inactividad)
+
+    // Query simple sin validaciones
+    const result = await pool.query(
+      `UPDATE ninos 
+       SET activo = $1, 
+           motivo_inactividad = $2, 
+           fecha_inactivacion = CASE WHEN $1 = false THEN NOW() ELSE NULL END,
+           modificado_en = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [activo, motivo_inactividad || null, id]
+    )
+
+    if (result.rows.length === 0) {
+      console.log('❌ Niño no encontrado')
+      return res.status(404).json({ error: 'Niño no encontrado' })
+    }
+
+    console.log('✅ Estado actualizado exitosamente')
+    console.log('   Nombre:', result.rows[0].nombres, result.rows[0].apellidos)
+    console.log('   Activo:', result.rows[0].activo)
+    console.log('   Motivo:', result.rows[0].motivo_inactividad)
+
+    res.json({ ok: true, nino: result.rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error al actualizar estado:', error.message)
+    res.status(500).json({ error: 'Error al actualizar estado: ' + error.message })
+  }
+})
+
 
 export default router
