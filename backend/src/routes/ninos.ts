@@ -319,7 +319,7 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// PUT /ninos/:id - Actualizar niño (SIN VALIDACIONES)
+// PUT /ninos/:id - Actualizar niño
 router.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
@@ -330,7 +330,6 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     console.log('ID:', id)
     console.log('Body:', body)
 
-    // Verificar permisos del usuario
     const userResult = await pool.query(
       'SELECT rol FROM usuarios WHERE id = $1',
       [userId]
@@ -353,12 +352,10 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       }
     }
 
-    // Construir query DIRECTO - SIN VALIDACIONES
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
 
-    // SOLO estos campos (sin codigo)
     const allowedFields = [
       'nombres', 'apellidos', 'fecha_nacimiento', 'nivel_id', 'subnivel_id',
       'maestro_id', 'genero', 'direccion', 'telefono_contacto',
@@ -395,16 +392,13 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       RETURNING *
     `
 
-    console.log('Query:', query)
-    console.log('Values:', values)
-
     const result = await pool.query(query, values)
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
-    console.log('✅ Actualizado:', result.rows[0].nombres, '- Activo:', result.rows[0].activo)
+    console.log('✅ Actualizado:', result.rows[0].nombres)
 
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
