@@ -38,9 +38,11 @@ export default function GestionNinos() {
       setLoading(true)
       console.log('📋 Cargando niños activos e inactivos...')
       
+      // Cargar activos desde GET /ninos
       const resActivos = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
       const activos = resActivos.ok ? await resActivos.json() : []
       
+      // Cargar inactivos desde GET /lista-inactivos
       const resInactivos = await fetch(`${API_URL}/ninos/lista-inactivos`, { credentials: 'include' })
       const inactivos = resInactivos.ok ? await resInactivos.json() : []
       
@@ -106,6 +108,7 @@ export default function GestionNinos() {
       setProcesando(true)
       console.log('🚪 Inactivando niño:', ninoSeleccionado.id)
 
+      // Usar POST /ninos/:id/inactivar-manual
       const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/inactivar-manual`, {
         method: 'POST',
         credentials: 'include',
@@ -113,13 +116,16 @@ export default function GestionNinos() {
         body: JSON.stringify({ motivo: motivoInactividad.trim() })
       })
 
+      console.log('   Response status:', res.status)
+
       if (!res.ok) {
         const data = await res.json()
+        console.error('   Error:', data)
         throw new Error(data.error || 'Error al inactivar')
       }
 
       const data = await res.json()
-      console.log('✅ Éxito:', data)
+      console.log('   ✅ Success:', data)
 
       await Swal.fire({
         icon: 'success',
@@ -172,19 +178,23 @@ export default function GestionNinos() {
     try {
       console.log('✅ Reactivando niño:', nino.id)
       
+      // Usar POST /ninos/:id/reactivar-manual
       const res = await fetch(`${API_URL}/ninos/${nino.id}/reactivar-manual`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' }
       })
 
+      console.log('   Response status:', res.status)
+
       if (!res.ok) {
         const data = await res.json()
+        console.error('   Error:', data)
         throw new Error(data.error || 'Error al reactivar')
       }
 
       const data = await res.json()
-      console.log('✅ Éxito:', data)
+      console.log('   ✅ Success:', data)
 
       await Swal.fire({
         icon: 'success',
@@ -283,7 +293,7 @@ export default function GestionNinos() {
           <div>
             <h1 className="card-title">📋 Gestión de Niños</h1>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-              Los niños se mueven entre tablas: activos ↔ inactivos
+              Los niños se mueven entre tablas: ninos ↔ ninos_inactivos
             </p>
           </div>
         </div>
