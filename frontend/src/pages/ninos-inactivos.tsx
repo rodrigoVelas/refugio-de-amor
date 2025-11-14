@@ -104,16 +104,14 @@ async function inactivarNino() {
   try {
     setProcesando(true)
     console.log('🚪 Inactivando niño:', ninoSeleccionado.id)
-    console.log('   Enviando datos:', {
-      activo: false,
-      motivo_inactividad: motivoInactividad.trim()
-    })
 
+    // ENVIAR EL CÓDIGO TAMBIÉN para que no se queje
     const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}`, {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        codigo: ninoSeleccionado.codigo || 'SIN-CODIGO', // ← AGREGAR ESTO
         activo: false,
         motivo_inactividad: motivoInactividad.trim()
       })
@@ -122,7 +120,6 @@ async function inactivarNino() {
     console.log('📡 Status:', res.status)
 
     if (!res.ok) {
-      // Intentar leer como JSON
       let errorMsg = 'Error desconocido'
       const contentType = res.headers.get('content-type')
       
@@ -189,16 +186,14 @@ async function reactivarNino(nino: Nino) {
 
   try {
     console.log('✅ Reactivando niño:', nino.id)
-    console.log('   Enviando datos:', {
-      activo: true,
-      motivo_inactividad: null
-    })
     
+    // ENVIAR EL CÓDIGO TAMBIÉN
     const res = await fetch(`${API_URL}/ninos/${nino.id}`, {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        codigo: nino.codigo || 'SIN-CODIGO', // ← AGREGAR ESTO
         activo: true,
         motivo_inactividad: null
       })
@@ -246,6 +241,8 @@ async function reactivarNino(nino: Nino) {
     })
   }
 }
+
+
 
   function verDetalles(nino: Nino) {
     const infoHTML = `
