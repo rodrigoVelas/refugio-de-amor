@@ -464,7 +464,8 @@ router.delete('/:id', authMiddleware, requirePerms(['ninos_eliminar']), async (r
     res.status(500).json({ error: error.message })
   }
 })
-// PATCH /ninos/:id/estado - Cambiar solo el estado del niño (SIN VALIDACIONES)
+
+// PATCH /ninos/:id/estado - Cambiar solo el estado del niño
 router.patch('/:id/estado', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
@@ -503,6 +504,5 @@ router.patch('/:id/estado', authMiddleware, async (req: any, res: any) => {
     res.status(500).json({ error: 'Error al actualizar estado: ' + error.message })
   }
 })
-
 
 export default router

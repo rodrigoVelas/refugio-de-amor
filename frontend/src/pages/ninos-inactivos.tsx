@@ -104,18 +104,17 @@ export default function GestionNinos() {
 
     try {
       setProcesando(true)
-      console.log('\n🚪 Inactivando niño con PATCH')
+      console.log('\n🚪 Inactivando niño con POST')
       console.log('   ID:', ninoSeleccionado.id)
       console.log('   Motivo:', motivoInactividad.trim())
 
-      // USAR PATCH /ninos/:id/estado
-      const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/estado`, {
-        method: 'PATCH',
+      // USAR POST /ninos/:id/inactivar (endpoint que YA existe)
+      const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/inactivar`, {
+        method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          activo: false,
-          motivo_inactividad: motivoInactividad.trim()
+          motivo: motivoInactividad.trim()
         })
       })
 
@@ -188,18 +187,14 @@ export default function GestionNinos() {
     if (!result.isConfirmed) return
 
     try {
-      console.log('\n✅ Reactivando niño con PATCH')
+      console.log('\n✅ Reactivando niño con POST')
       console.log('   ID:', nino.id)
       
-      // USAR PATCH /ninos/:id/estado
-      const res = await fetch(`${API_URL}/ninos/${nino.id}/estado`, {
-        method: 'PATCH',
+      // USAR POST /ninos/:id/reactivar (endpoint que YA existe)
+      const res = await fetch(`${API_URL}/ninos/${nino.id}/reactivar`, {
+        method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          activo: true,
-          motivo_inactividad: null
-        })
+        headers: { 'Content-Type': 'application/json' }
       })
 
       console.log('   Response status:', res.status)
