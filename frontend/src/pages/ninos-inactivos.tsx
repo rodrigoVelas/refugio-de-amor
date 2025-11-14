@@ -33,36 +33,53 @@ export default function GestionNinos() {
     cargarTodos()
   }, [])
 
-  async function cargarTodos() {
-    try {
-      setLoading(true)
-      console.log('📋 Cargando niños activos e inactivos...')
-      
-      // Cargar activos desde GET /ninos
-      const resActivos = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
-      const activos = resActivos.ok ? await resActivos.json() : []
-      
-      // Cargar inactivos desde GET /lista-inactivos
-      const resInactivos = await fetch(`${API_URL}/ninos/lista-inactivos`, { credentials: 'include' })
-      const inactivos = resInactivos.ok ? await resInactivos.json() : []
-      
-      console.log('   Activos:', activos.length)
-      console.log('   Inactivos:', inactivos.length)
-      
-      setNinosActivos(activos)
-      setNinosInactivos(inactivos)
-    } catch (error: any) {
-      console.error('❌ Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al cargar niños',
-        confirmButtonColor: '#3b82f6'
-      })
-    } finally {
-      setLoading(false)
+ async function cargarTodos() {
+  try {
+    setLoading(true)
+    console.log('📋 Cargando niños activos e inactivos...')
+    
+    // Cargar activos desde GET /ninos
+    const resActivos = await fetch(`${API_URL}/ninos`, { credentials: 'include' })
+    
+    if (!resActivos.ok) {
+      console.error('Error al cargar activos:', resActivos.status)
+      throw new Error('Error al cargar niños activos')
     }
+    
+    const activos = await resActivos.json()
+    console.log('   Activos cargados:', activos.length)
+    
+    // Cargar inactivos desde GET /ninos/lista-inactivos
+    const resInactivos = await fetch(`${API_URL}/ninos/lista-inactivos`, { credentials: 'include' })
+    
+    if (!resInactivos.ok) {
+      console.error('Error al cargar inactivos:', resInactivos.status)
+      // Si falla, solo usamos los inactivos de la tabla ninos (campo activo=false)
+      const inactivos = activos.filter((n: any) => n.activo === false)
+      const soloActivos = activos.filter((n: any) => n.activo !== false)
+      setNinosActivos(soloActivos)
+      setNinosInactivos(inactivos)
+      console.log('   ⚠️ Usando inactivos de tabla ninos')
+      return
+    }
+    
+    const inactivos = await resInactivos.json()
+    console.log('   Inactivos cargados:', inactivos.length)
+    
+    setNinosActivos(activos)
+    setNinosInactivos(inactivos)
+  } catch (error: any) {
+    console.error('❌ Error completo:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message || 'Error al cargar niños',
+      confirmButtonColor: '#3b82f6'
+    })
+  } finally {
+    setLoading(false)
   }
+}
 
   function abrirModalInactivar(nino: Nino) {
     setNinoSeleccionado(nino)

@@ -589,7 +589,6 @@ router.post('/:id/reactivar-manual', authMiddleware, async (req: any, res: any) 
 router.get('/lista-inactivos', authMiddleware, async (req: any, res: any) => {
   try {
     const userId = req.user.id
-
     console.log('\n📋 Listando niños inactivos')
 
     const userResult = await pool.query(
@@ -611,6 +610,8 @@ router.get('/lista-inactivos', authMiddleware, async (req: any, res: any) => {
         n.nivel_id,
         n.motivo_inactividad,
         n.fecha_inactivacion,
+        n.nombre_encargado,
+        n.telefono_encargado,
         u.email as maestro_email,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as maestro_nombre,
         nv.nombre as nivel_nombre,
@@ -630,7 +631,6 @@ router.get('/lista-inactivos', authMiddleware, async (req: any, res: any) => {
     query += ' ORDER BY n.fecha_inactivacion DESC, n.apellidos, n.nombres'
 
     const result = await pool.query(query, params)
-
     console.log('✅ Inactivos encontrados:', result.rows.length)
 
     res.json(result.rows)
@@ -639,5 +639,6 @@ router.get('/lista-inactivos', authMiddleware, async (req: any, res: any) => {
     res.status(500).json({ error: 'Error al listar inactivos' })
   }
 })
+
 
 export default router
