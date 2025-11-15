@@ -102,21 +102,25 @@ async function inactivarNino() {
 
   try {
     setProcesando(true)
-    console.log('🚪 Inactivando con POST:', ninoSeleccionado.id)
+    console.log('🚪 Inactivando con PATCH:', ninoSeleccionado.id)
 
-    // USAR POST /ninos/:id/inactivar
-    const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/inactivar`, {
-      method: 'POST',
+    // USAR PATCH /ninos/:id/estado (línea 475 de tu archivo)
+    const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/estado`, {
+      method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ motivo: motivoInactividad.trim() })
+      body: JSON.stringify({
+        activo: false,
+        motivo_inactividad: motivoInactividad.trim()
+      })
     })
 
     console.log('   Status:', res.status)
 
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.error || 'Error al inactivar')
+      const text = await res.text()
+      console.error('   Error:', text)
+      throw new Error('Error al inactivar')
     }
 
     await Swal.fire({
@@ -165,20 +169,25 @@ async function reactivarNino(nino: Nino) {
   if (!result.isConfirmed) return
 
   try {
-    console.log('✅ Reactivando con POST:', nino.id)
+    console.log('✅ Reactivando con PATCH:', nino.id)
     
-    // USAR POST /ninos/:id/reactivar
-    const res = await fetch(`${API_URL}/ninos/${nino.id}/reactivar`, {
-      method: 'POST',
+    // USAR PATCH /ninos/:id/estado
+    const res = await fetch(`${API_URL}/ninos/${nino.id}/estado`, {
+      method: 'PATCH',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        activo: true,
+        motivo_inactividad: null
+      })
     })
 
     console.log('   Status:', res.status)
 
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.error || 'Error al reactivar')
+      const text = await res.text()
+      console.error('   Error:', text)
+      throw new Error('Error al reactivar')
     }
 
     await Swal.fire({
