@@ -102,25 +102,21 @@ async function inactivarNino() {
 
   try {
     setProcesando(true)
-    console.log('🚪 Inactivando con PATCH:', ninoSeleccionado.id)
+    console.log('🚪 Inactivando con POST:', ninoSeleccionado.id)
 
-    // USAR PATCH /ninos/:id/estado (línea 475 de tu archivo)
-    const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/estado`, {
-      method: 'PATCH',
+    // USAR POST /ninos/:id/inactivar
+    const res = await fetch(`${API_URL}/ninos/${ninoSeleccionado.id}/inactivar`, {
+      method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        activo: false,
-        motivo_inactividad: motivoInactividad.trim()
-      })
+      body: JSON.stringify({ motivo: motivoInactividad.trim() })
     })
 
     console.log('   Status:', res.status)
 
     if (!res.ok) {
-      const text = await res.text()
-      console.error('   Error:', text)
-      throw new Error('Error al inactivar')
+      const data = await res.json()
+      throw new Error(data.error || 'Error al inactivar')
     }
 
     await Swal.fire({
@@ -169,25 +165,20 @@ async function reactivarNino(nino: Nino) {
   if (!result.isConfirmed) return
 
   try {
-    console.log('✅ Reactivando con PATCH:', nino.id)
+    console.log('✅ Reactivando con POST:', nino.id)
     
-    // USAR PATCH /ninos/:id/estado
-    const res = await fetch(`${API_URL}/ninos/${nino.id}/estado`, {
-      method: 'PATCH',
+    // USAR POST /ninos/:id/reactivar
+    const res = await fetch(`${API_URL}/ninos/${nino.id}/reactivar`, {
+      method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        activo: true,
-        motivo_inactividad: null
-      })
+      headers: { 'Content-Type': 'application/json' }
     })
 
     console.log('   Status:', res.status)
 
     if (!res.ok) {
-      const text = await res.text()
-      console.error('   Error:', text)
-      throw new Error('Error al reactivar')
+      const data = await res.json()
+      throw new Error(data.error || 'Error al reactivar')
     }
 
     await Swal.fire({
@@ -210,7 +201,6 @@ async function reactivarNino(nino: Nino) {
     })
   }
 }
-
   function verDetalles(nino: Nino) {
     const infoHTML = `
       <div style="text-align: left; padding: 1rem;">
