@@ -52,7 +52,7 @@ app.use(
       }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 )
@@ -82,14 +82,11 @@ app.get('/', (req, res) => {
 // Rutas públicas (sin autenticación)
 app.use('/auth', auth)
 
-// ⚠️ NO PONER authMiddleware GLOBAL AQUÍ
-// Cada ruta maneja su propia autenticación internamente
-
 // Rutas protegidas (la autenticación está en cada archivo de ruta)
 app.use(perfil)
 app.use('/niveles', niveles)
 app.use('/subniveles', subniveles)
-app.use('/ninos', ninos)  // ← IMPORTANTE: Esto debe funcionar ahora
+app.use('/ninos', ninos)
 app.use('/usuarios', usuarios)
 app.use('/roles', roles)
 app.use('/facturas', facturas)
@@ -98,7 +95,7 @@ app.use('/actividades', actividades)
 app.use('/documentos', documentos)
 app.use(reportes)
 
-// Manejo de rutas no encontradas (SOLO UNO)
+// Manejo de rutas no encontradas
 app.use((req, res) => {
   console.log('❌ 404:', req.method, req.path)
   res.status(404).json({ 
@@ -120,17 +117,32 @@ app.use((err: any, req: any, res: any, next: any) => {
 // Iniciar servidor
 app.listen(PORT, () => {
   console.log(`\n✅ API lista en http://0.0.0.0:${PORT}`)
+  
+  // Logging REAL de rutas registradas
   console.log('\n📍 Rutas registradas:')
-  console.log('   - POST   /auth/login')
-  console.log('   - GET    /ninos')
-  console.log('   - GET    /ninos/:id')
-  console.log('   - POST   /ninos')
-  console.log('   - PUT    /ninos/:id')
-  console.log('   - POST   /ninos/:id/inactivar  ← NUEVA')
-  console.log('   - POST   /ninos/:id/reactivar  ← NUEVA')
-  console.log('   - DELETE /ninos/:id')
-  console.log('   - GET    /asistencia/*')
-  console.log('   - GET    /reportes/*')
+  
+  app._router.stack.forEach((middleware: any) => {
+    if (middleware.route) {
+      // Rutas directas
+      const method = Object.keys(middleware.route.methods)[0].toUpperCase()
+      console.log(`   ${method.padEnd(7)} ${middleware.route.path}`)
+    } else if (middleware.name === 'router') {
+      // Sub-routers
+      const basePath = middleware.regexp.source
+        .replace('^\\/','/')
+        .replace('\\/?(?=\\/|$)','')
+        .replace(/\\\//g,'/')
+      
+      middleware.handle.stack.forEach((handler: any) => {
+        if (handler.route) {
+          const method = Object.keys(handler.route.methods)[0].toUpperCase()
+          const fullPath = basePath + handler.route.path
+          console.log(`   ${method.padEnd(7)} ${fullPath}`)
+        }
+      })
+    }
+  })
+  
   console.log('')
   
   // Verificar variables de entorno críticas
