@@ -8,13 +8,13 @@ const router = Router()
 
 // ==================== RUTAS ESPECÍFICAS PRIMERO ====================
 
-// POST /ninos/:id/inactivar - Inactivar un niño
-router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
+// POST /ninos/inactivar/:id - Inactivar un niño
+router.post('/inactivar/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const { motivo } = req.body
 
-    console.log('\n🚪 POST /ninos/:id/inactivar')
+    console.log('\n🚪 POST /ninos/inactivar/:id')
     console.log('   ID:', id)
     console.log('   Motivo:', motivo)
 
@@ -51,12 +51,12 @@ router.post('/:id/inactivar', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// POST /ninos/:id/reactivar - Reactivar un niño
-router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
+// POST /ninos/reactivar/:id - Reactivar un niño
+router.post('/reactivar/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
 
-    console.log('\n✅ POST /ninos/:id/reactivar')
+    console.log('\n✅ POST /ninos/reactivar/:id')
     console.log('   ID:', id)
 
     const result = await pool.query(
@@ -88,13 +88,13 @@ router.post('/:id/reactivar', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// PATCH /ninos/:id/estado - Cambiar solo el estado del niño
-router.patch('/:id/estado', authMiddleware, async (req: any, res: any) => {
+// PATCH /ninos/estado/:id - Cambiar solo el estado del niño
+router.patch('/estado/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const { activo, motivo_inactividad } = req.body
 
-    console.log('\n🔄 PATCH /ninos/:id/estado')
+    console.log('\n🔄 PATCH /ninos/estado/:id')
     console.log('   ID:', id)
     console.log('   Activo:', activo)
     console.log('   Motivo:', motivo_inactividad)
@@ -127,8 +127,8 @@ router.patch('/:id/estado', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// POST /ninos/:id/inactivar-manual - Mover a tabla inactivos
-router.post('/:id/inactivar-manual', authMiddleware, async (req: any, res: any) => {
+// POST /ninos/inactivar-manual/:id - Mover a tabla inactivos
+router.post('/inactivar-manual/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const { motivo } = req.body
@@ -180,8 +180,8 @@ router.post('/:id/inactivar-manual', authMiddleware, async (req: any, res: any) 
   }
 })
 
-// POST /ninos/:id/reactivar-manual - Mover de inactivos a activos
-router.post('/:id/reactivar-manual', authMiddleware, async (req: any, res: any) => {
+// POST /ninos/reactivar-manual/:id - Mover de inactivos a activos
+router.post('/reactivar-manual/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
 
