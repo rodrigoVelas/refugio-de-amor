@@ -1,66 +1,135 @@
 import { Router } from 'express'
+import { authMiddleware } from '../core/auth_middleware'
 import { pool } from '../core/db'
 import bcrypt from 'bcryptjs'
+
 const r = Router()
 
-r.get('/usuarios', async (_req:any, res:any)=>{
-  const q = `
-    select u.id, u.email, u.nombres, u.apellidos,
-      array(select r.nombre from usuarios_roles ur join roles r on r.id=ur.role_id where ur.usuario_id=u.id) as roles
-    from usuarios u
-    order by u.email
-  `
-  const { rows } = await pool.query(q)
-  res.json(rows)
-})
-
-r.post('/usuarios', async (req:any, res:any)=>{
-  const { email, nombres, apellidos, password, role } = req.body
-  const pass = await bcrypt.hash(password || 'demo123', 10)
-  const u = await pool.query('insert into usuarios (email, password_hash, nombres, apellidos) values ($1,$2,$3,$4) returning *', [email, pass, nombres, apellidos])
-  if (role){ await pool.query('insert into usuarios_roles (usuario_id, role_id) select $1, r.id from roles r where r.nombre=$2 on conflict do nothing', [u.rows[0].id, role]) }
-  res.json(u.rows[0])
-})
-
-r.put('/usuarios/:id', async (req:any, res:any)=>{
-  const { id } = req.params
-  const { email, nombres, apellidos, password, role } = req.body
-  if (password){ const pass = await bcrypt.hash(password, 10); await pool.query('update usuarios set password_hash=$1 where id=$2', [pass, id]) }
-  await pool.query('update usuarios set email=coalesce($1,email), nombres=coalesce($2,nombres), apellidos=coalesce($3,apellidos), modificado_en=now() where id=$4', [email, nombres, apellidos, id])
-  if (role){ await pool.query('delete from usuarios_roles where usuario_id=$1', [id]); await pool.query('insert into usuarios_roles (usuario_id, role_id) select $1, r.id from roles r where r.nombre=$2 on conflict do nothing', [id, role]) }
-  const { rows } = await pool.query('select id, email, nombres, apellidos from usuarios where id=$1', [id])
-  res.json(rows[0])
-})
-
-r.delete('/usuarios/:id', async (req:any, res:any)=>{
-  const { id } = req.params
-  await pool.query('delete from usuarios_roles where usuario_id=$1',[id])
-  await pool.query('delete from usuarios where id=$1', [id])
-  res.json({ ok:true })
-})
-
-r.get('/usuarios', async (req:any, res:any)=>{
-  const role = (req.query.role || '').toString()
-  if (role) {
+// GET / - Listar usuarios
+r.get('/', authMiddleware, async (req: any, res: any) => {
+  try {
     const { rows } = await pool.query(`
-      select u.id, u.email, u.nombres, u.apellidos
-      from usuarios u
-      join usuarios_roles ur on ur.usuario_id=u.id
-      join roles r on r.id=ur.role_id
-      where r.nombre=$1
-      order by u.nombres, u.apellidos
-    `,[role])
-    return res.json(rows)
+      SELECT id, email, nombres, apellidos, rol, creado_en
+      FROM usuarios
+      ORDER BY creado_en DESC
+    `)
+    res.json(rows)
+  } catch (error: any) {
+    console.error('❌ Error en GET /usuarios:', error)
+    res.status(500).json({ error: error.message })
   }
-  const q = `
-    select u.id, u.email, u.nombres, u.apellidos,
-      array(select r.nombre from usuarios_roles ur join roles r on r.id=ur.role_id where ur.usuario_id=u.id) as roles
-    from usuarios u
-    order by u.email
-  `
-  const { rows } = await pool.query(q)
-  res.json(rows)
 })
 
+// POST / - Crear usuario
+r.post('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { email, password, nombres, apellidos, rol } = req.body
+
+    if (!email || !password || !nombres) {
+      return res.status(400).json({ error: 'Email, password y nombres son requeridos' })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    const { rows } = await pool.query(`
+      INSERT INTO usuarios (email, password_hash, nombres, apellidos, rol, creado_en)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      RETURNING id, email, nombres, apellidos, rol, creado_en
+    `, [email, hashedPassword, nombres, apellidos || null, rol || null])
+
+    res.json({ ok: true, usuario: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en POST /usuarios:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// PUT /:id - Actualizar usuario
+r.put('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { email, nombres, apellidos, rol, password } = req.body
+
+    const updates: string[] = []
+    const values: any[] = []
+    let paramIndex = 1
+
+    if (email !== undefined) {
+      updates.push(`email = $${paramIndex}`)
+      values.push(email)
+      paramIndex++
+    }
+
+    if (nombres !== undefined) {
+      updates.push(`nombres = $${paramIndex}`)
+      values.push(nombres)
+      paramIndex++
+    }
+
+    if (apellidos !== undefined) {
+      updates.push(`apellidos = $${paramIndex}`)
+      values.push(apellidos)
+      paramIndex++
+    }
+
+    if (rol !== undefined) {
+      updates.push(`rol = $${paramIndex}`)
+      values.push(rol)
+      paramIndex++
+    }
+
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10)
+      updates.push(`password_hash = $${paramIndex}`)
+      values.push(hashedPassword)
+      paramIndex++
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' })
+    }
+
+    values.push(id)
+    const query = `
+      UPDATE usuarios 
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING id, email, nombres, apellidos, rol
+    `
+
+    const { rows } = await pool.query(query, values)
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' })
+    }
+
+    res.json({ ok: true, usuario: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en PUT /usuarios/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /:id - Eliminar usuario
+r.delete('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    if (id === req.user?.id) {
+      return res.status(400).json({ error: 'No puedes eliminar tu propio usuario' })
+    }
+
+    const { rows } = await pool.query('DELETE FROM usuarios WHERE id = $1 RETURNING id', [id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' })
+    }
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('❌ Error en DELETE /usuarios/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
 
 export default r

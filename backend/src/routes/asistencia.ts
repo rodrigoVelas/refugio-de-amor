@@ -1,234 +1,209 @@
 import { Router } from 'express'
+import { authMiddleware } from '../core/auth_middleware'
 import { pool } from '../core/db'
-import { getUserPerms } from '../core/rbac'
-import { randomUUID } from 'crypto'
 
 const r = Router()
 
-// helpers fecha/hora
-function pad(n:number){ return String(n).padStart(2,'0') }
-function today(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` }
-function nowHHMM(){ const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
-function isIsoDate(s:any){ return typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s) }
-function normTimeOrNull(s:any){ if(!s||typeof s!=='string') return null; const m=s.match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:null }
-
-// ping
-r.get('/asistencia/ping', (_req, res)=> res.json({ ok:true }))
-
-/**
- * lista de sesiones agrupadas por sesion_id (solo fecha/hora contables)
- */
-r.get('/asistencia', async (req:any, res:any)=>{
-  const userId = req.user.id
-  const perms = await getUserPerms(userId)
-  const verTodas = perms.includes('asistencia_ver_todas')
-
-  const sql = verTodas ? `
-    select sesion_id as id,
-           max(fecha) as fecha,
-           max(hora)  as hora,
-           count(*) filter (where estado='presente')::int as presentes
-    from asistencia
-    group by sesion_id
-    order by fecha desc nulls last, hora desc nulls last
-    limit 500
-  ` : `
-    select sesion_id as id,
-           max(fecha) as fecha,
-           max(hora)  as hora,
-           count(*) filter (where estado='presente')::int as presentes
-    from asistencia
-    where maestro_id = $1
-    group by sesion_id
-    order by fecha desc nulls last, hora desc nulls last
-    limit 500
-  `
-  const params = verTodas ? [] : [userId]
-  const { rows } = await pool.query(sql, params)
-  res.json(rows)
+// GET /ping - Health check
+r.get('/ping', (req: any, res: any) => {
+  res.json({ ok: true, message: 'asistencia ok' })
 })
 
-/**
- * crear sesion: genera sesion_id y regresa {id, fecha, hora} (no inserta filas aun)
- */
-r.post('/asistencia', async (req:any, res:any)=>{
-  const userId = req.user?.id
-  if(!userId) return res.status(401).send('no auth')
-
-  const perms = await getUserPerms(userId)
-  if (!perms.includes('asistencia_crear')) return res.status(403).send('no autorizado')
-
-  const bodyFecha = req.body?.fecha
-  const bodyHora  = req.body?.hora
-  const fecha = isIsoDate(bodyFecha) ? bodyFecha : today()
-  const hora  = normTimeOrNull(bodyHora) || nowHHMM()
-
-  const sesionId = randomUUID()
-  // no insertamos nada aun; el detalle se guarda en /detalles
-  res.json({ id: sesionId, fecha, hora })
-})
-
-/**
- * cargar para editar: lista ninos (por maestro) y detalles existentes
- */
-r.get('/asistencia/:id/editar', async (req:any, res:any)=>{
-  const userId = req.user.id
-  const sesionId = req.params.id
-
-  const ninos = await pool.query(
-    `select id, codigo, nombres, apellidos
-       from ninos
-      where maestro_id = $1
-      order by apellidos, nombres`, [userId]
-  )
-
-  const det = await pool.query(
-    `select nino_id, estado, coalesce(nota,'') as nota,
-            max(fecha) as fecha, max(hora) as hora
-       from asistencia
-      where sesion_id = $1 and maestro_id = $2
-      group by nino_id, estado, nota`, [sesionId, userId]
-  )
-
-  const fecha = det.rows[0]?.fecha || null
-  const hora  = det.rows[0]?.hora  || null
-
-  res.json({ sesion:{ id: sesionId, fecha, hora }, ninos: ninos.rows, detalles: det.rows })
-})
-
-/**
- * guardar detalles (upsert por sesion_id + nino_id)
- * valida fecha/hora y usa defaults seguros si no vienen.
- */
-r.post('/asistencia/:id/detalles', async (req:any, res:any)=>{
-  const userId  = req.user.id
-  const sesionId = req.params.id
-
-  // normaliza fecha/hora (evita 'undefined'::date / ::time)
-  const bodyFecha = req.body?.fecha
-  const bodyHora  = req.body?.hora
-  const fecha = isIsoDate(bodyFecha) ? bodyFecha : today()
-  const hora  = normTimeOrNull(bodyHora) || nowHHMM()
-
-  const items = Array.isArray(req.body?.items) ? req.body.items : []
-  if(!items.length) return res.json({ ok:true, count:0 })
-
-  // validar pertenencia de ninos al maestro
-  const ids: string[] = items.map((it:any)=> it.nino_id).filter(Boolean)
-  if(!ids.length) return res.json({ ok:true, count:0 })
-
-  const owns = await pool.query(
-    `select id from ninos where maestro_id = $1 and id = any($2::uuid[])`,
-    [userId, ids]
-  )
-  const setOwn = new Set(owns.rows.map((r:any)=> r.id))
-  const valid = items.filter((it:any)=> setOwn.has(it.nino_id))
-
-  // solo estados permitidos
-  const allowed = new Set(['presente','ausente','suplente'])
-
-  const sql = `
-    insert into asistencia
-      (sesion_id, subnivel_id, maestro_id, fecha, hora, estado, nino_id, nota, creado_en, modificado_en)
-    values
-      ($1, NULL, $2, $3::date, $4::time, $5, $6, $7, now(), now())
-    on conflict (sesion_id, nino_id)
-    do update set estado = excluded.estado,
-                  nota = excluded.nota,
-                  fecha = excluded.fecha,
-                  hora  = excluded.hora,
-                  modificado_en = now()
-  `
-  let count = 0
-  for(const it of valid){
-    const estado = String(it.estado||'').toLowerCase()
-    if(!allowed.has(estado)) continue
-    await pool.query(sql, [sesionId, userId, fecha, hora, estado, it.nino_id, it.nota || null])
-    count++
+// GET / - Listar registros de asistencia
+r.get('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT a.*, u.nombres as creado_por_nombre, u.apellidos as creado_por_apellidos
+      FROM asistencia a
+      LEFT JOIN usuarios u ON a.creado_por = u.id
+      ORDER BY a.fecha DESC, a.hora DESC
+    `)
+    res.json(rows)
+  } catch (error: any) {
+    console.error('❌ Error en GET /asistencia:', error)
+    res.status(500).json({ error: error.message })
   }
-
-  res.json({ ok:true, count })
 })
 
-/** export csv de una sesion (abre en excel) */
-r.get('/asistencia/:id/export.csv', async (req:any, res:any)=>{
-  const userId  = req.user.id
-  const sesionId = req.params.id
+// POST / - Crear registro de asistencia
+r.post('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { fecha, hora, notas } = req.body
+    const userId = req.user?.id
 
-  // permisos: directora puede ver todas; maestro solo sus sesiones
-  const perms = await getUserPerms(userId)
-  const verTodas = perms.includes('asistencia_ver_todas')
+    if (!fecha) {
+      return res.status(400).json({ error: 'La fecha es requerida' })
+    }
 
-  // valida acceso
-  if (!verTodas) {
-    const chk = await pool.query(
-      `select 1 
-         from asistencia 
-        where sesion_id = $1 and maestro_id = $2
-        limit 1`,
-      [sesionId, userId]
+    const { rows } = await pool.query(`
+      INSERT INTO asistencia (fecha, hora, notas, creado_por, creado_en)
+      VALUES ($1, $2, $3, $4, NOW())
+      RETURNING *
+    `, [fecha, hora || null, notas || null, userId])
+
+    res.json({ ok: true, asistencia: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en POST /asistencia:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// GET /:id/editar - Obtener datos para editar
+r.get('/:id/editar', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    // Obtener registro de asistencia
+    const asistenciaQuery = await pool.query(
+      'SELECT * FROM asistencia WHERE id = $1',
+      [id]
     )
-    if (!chk.rowCount) return res.status(403).send('no autorizado')
+
+    if (asistenciaQuery.rows.length === 0) {
+      return res.status(404).json({ error: 'Registro de asistencia no encontrado' })
+    }
+
+    // Obtener detalles de asistencia
+    const detallesQuery = await pool.query(`
+      SELECT ad.*, n.nombres as nino_nombres, n.apellidos as nino_apellidos, n.codigo as nino_codigo
+      FROM asistencia_detalles ad
+      LEFT JOIN ninos n ON ad.nino_id = n.id
+      WHERE ad.asistencia_id = $1
+      ORDER BY n.apellidos, n.nombres
+    `, [id])
+
+    res.json({
+      asistencia: asistenciaQuery.rows[0],
+      detalles: detallesQuery.rows
+    })
+  } catch (error: any) {
+    console.error('❌ Error en GET /asistencia/:id/editar:', error)
+    res.status(500).json({ error: error.message })
   }
-
-  // filas de la sesion
-  const q = `
-    select 
-      to_char(a.fecha,'YYYY-MM-DD') as fecha,
-      to_char(a.hora,'HH24:MI')     as hora,
-      a.estado,
-      coalesce(a.nota,'')           as nota,
-      n.codigo,
-      n.nombres,
-      n.apellidos
-    from asistencia a
-    join ninos n on n.id = a.nino_id
-    where a.sesion_id = $1
-    order by n.apellidos, n.nombres
-  `
-  const { rows } = await pool.query(q, [sesionId])
-
-  // arma csv
-  const headers = ['fecha','hora','estado','nota','codigo','nombres','apellidos']
-  const escape = (s:any)=>{
-    const v = (s===null || s===undefined) ? '' : String(s)
-    return /[",\n\r]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v
-  }
-  const lines = [
-    headers.join(','),
-    ...rows.map(r => headers.map(h => escape((r as any)[h])).join(','))
-  ]
-  const csv = lines.join('\n')
-
-  res.setHeader('content-type','text/csv; charset=utf-8')
-  res.setHeader('content-disposition', `attachment; filename="asistencia_${sesionId}.csv"`)
-  res.send(csv)
 })
 
-// alias: /asistencia/:id/export -> csv
-r.get('/asistencia/:id/export', async (req:any, res:any)=>{
-  req.url = `/asistencia/${req.params.id}/export.csv`
-  ;(r as any).handle(req, res)
-})
+// POST /:id/detalles - Guardar detalles de asistencia
+r.post('/:id/detalles', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { items, fecha, hora } = req.body
 
-r.delete('/asistencia/:id', async (req:any, res:any)=>{
-  const userId = req.user.id
-  const sesionId = req.params.id
-  const perms = await getUserPerms(userId)
-  const verTodas = perms.includes('asistencia_ver_todas')
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: 'Items inválidos' })
+    }
 
-  // si no es directora, verificar que la sesion sea suya
-  if(!verTodas){
-    const chk = await pool.query(
-      `select 1 from asistencia where sesion_id=$1 and maestro_id=$2 limit 1`,
-      [sesionId, userId]
-    )
-    if(!chk.rowCount) return res.status(403).send('no autorizado')
+    // Actualizar fecha/hora si se proporcionan
+    if (fecha || hora) {
+      await pool.query(
+        'UPDATE asistencia SET fecha = COALESCE($1, fecha), hora = COALESCE($2, hora) WHERE id = $3',
+        [fecha, hora, id]
+      )
+    }
+
+    // Eliminar detalles existentes
+    await pool.query('DELETE FROM asistencia_detalles WHERE asistencia_id = $1', [id])
+
+    // Insertar nuevos detalles
+    for (const item of items) {
+      await pool.query(`
+        INSERT INTO asistencia_detalles (asistencia_id, nino_id, presente, observaciones)
+        VALUES ($1, $2, $3, $4)
+      `, [id, item.nino_id, item.presente || false, item.observaciones || null])
+    }
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('❌ Error en POST /asistencia/:id/detalles:', error)
+    res.status(500).json({ error: error.message })
   }
-
-  await pool.query(`delete from asistencia where sesion_id=$1`, [sesionId])
-  res.json({ok:true})
 })
 
+// GET /:id/export.csv - Exportar a CSV
+r.get('/:id/export.csv', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    const { rows } = await pool.query(`
+      SELECT 
+        n.codigo,
+        n.nombres,
+        n.apellidos,
+        CASE WHEN ad.presente THEN 'Presente' ELSE 'Ausente' END as estado,
+        ad.observaciones
+      FROM asistencia_detalles ad
+      LEFT JOIN ninos n ON ad.nino_id = n.id
+      WHERE ad.asistencia_id = $1
+      ORDER BY n.apellidos, n.nombres
+    `, [id])
+
+    // Crear CSV
+    let csv = 'Código,Nombres,Apellidos,Estado,Observaciones\n'
+    rows.forEach(row => {
+      csv += `"${row.codigo}","${row.nombres}","${row.apellidos}","${row.estado}","${row.observaciones || ''}"\n`
+    })
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="asistencia_${id}.csv"`)
+    res.send(csv)
+  } catch (error: any) {
+    console.error('❌ Error en GET /asistencia/:id/export.csv:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// GET /:id/export - Alias para export.csv
+r.get('/:id/export', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    const { rows } = await pool.query(`
+      SELECT 
+        n.codigo,
+        n.nombres,
+        n.apellidos,
+        CASE WHEN ad.presente THEN 'Presente' ELSE 'Ausente' END as estado,
+        ad.observaciones
+      FROM asistencia_detalles ad
+      LEFT JOIN ninos n ON ad.nino_id = n.id
+      WHERE ad.asistencia_id = $1
+      ORDER BY n.apellidos, n.nombres
+    `, [id])
+
+    // Crear CSV
+    let csv = 'Código,Nombres,Apellidos,Estado,Observaciones\n'
+    rows.forEach(row => {
+      csv += `"${row.codigo}","${row.nombres}","${row.apellidos}","${row.estado}","${row.observaciones || ''}"\n`
+    })
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="asistencia_${id}.csv"`)
+    res.send(csv)
+  } catch (error: any) {
+    console.error('❌ Error en GET /asistencia/:id/export:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /:id - Eliminar registro de asistencia
+r.delete('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    // Eliminar detalles primero
+    await pool.query('DELETE FROM asistencia_detalles WHERE asistencia_id = $1', [id])
+
+    // Eliminar registro principal
+    const { rows } = await pool.query('DELETE FROM asistencia WHERE id = $1 RETURNING id', [id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Registro de asistencia no encontrado' })
+    }
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('❌ Error en DELETE /asistencia/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
 
 export default r

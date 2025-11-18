@@ -1,91 +1,113 @@
 import { Router } from 'express'
+import { authMiddleware } from '../core/auth_middleware'
 import { pool } from '../core/db'
 
 const r = Router()
 
-// listar roles con sus permisos
-r.get('/roles', async (_req:any, res:any)=>{
-  const roles = await pool.query('select id, nombre, codigo from roles order by codigo nulls last, nombre')
-  const perms = await pool.query('select id, clave from permisos order by clave')
-  const mapa = new Map<string,string[]>()
-
-  const rp = await pool.query(`
-    select r.id as role_id, p.clave
-    from roles r
-    join roles_permisos rp on rp.role_id = r.id
-    join permisos p on p.id = rp.permiso_id
-  `)
-  rp.rows.forEach((x:any)=>{
-    const arr = mapa.get(x.role_id) || []
-    arr.push(x.clave)
-    mapa.set(x.role_id, arr)
-  })
-
-  res.json({
-    roles: roles.rows.map((r:any)=> ({ ...r, permisos: mapa.get(r.id) || [] })),
-    permisos: perms.rows
-  })
-})
-
-// crear rol (opcional codigo)
-r.post('/roles', async (req:any, res:any)=>{
-  const { nombre, codigo } = req.body
-  if (!nombre || !String(nombre).trim()) return res.status(400).json({ error:'nombre requerido' })
-  const { rows } = await pool.query(
-    'insert into roles (nombre, codigo) values ($1,$2) returning id, nombre, codigo',
-    [nombre.trim(), codigo ?? null]
-  )
-  res.json(rows[0])
-})
-
-// actualizar nombre/codigo
-r.put('/roles/:id', async (req:any, res:any)=>{
-  const { id } = req.params
-  const { nombre, codigo } = req.body
-  const { rows } = await pool.query(
-    'update roles set nombre=coalesce($1,nombre), codigo=$2, modificado_en=now() where id=$3 returning id, nombre, codigo',
-    [nombre ? String(nombre).trim() : null, codigo ?? null, id]
-  )
-  res.json(rows[0])
-})
-
-// eliminar rol (y sus asignaciones)
-r.delete('/roles/:id', async (req:any, res:any)=>{
-  const { id } = req.params
-  await pool.query('delete from usuarios_roles where usuario_id in (select id from usuarios) and role_id=$1', [id])
-  await pool.query('delete from roles_permisos where role_id=$1', [id])
-  await pool.query('delete from roles where id=$1', [id])
-  res.json({ ok:true })
-})
-
-// setear permisos de un rol (reemplaza todo)
-r.post('/roles/:id/permisos', async (req:any, res:any)=>{
-  const { id } = req.params
-  const { claves } = req.body as { claves: string[] }
-  await pool.query('begin')
-  try{
-    await pool.query('delete from roles_permisos where role_id=$1', [id])
-    if (Array.isArray(claves) && claves.length){
-      const ins = await pool.query(
-        'insert into roles_permisos (role_id, permiso_id) select $1, p.id from permisos p where p.clave = any($2::text[]) returning *',
-        [id, claves]
-      )
-      await pool.query('commit')
-      return res.json({ ok:true, agregados: ins.rowCount })
-    }else{
-      await pool.query('commit')
-      return res.json({ ok:true, agregados: 0 })
-    }
-  }catch(e){
-    await pool.query('rollback')
-    throw e
+// GET / - Listar roles
+r.get('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM roles ORDER BY nombre')
+    res.json(rows)
+  } catch (error: any) {
+    console.error('❌ Error en GET /roles:', error)
+    res.status(500).json({ error: error.message })
   }
 })
 
-// listar todos los permisos
-r.get('/permisos', async (_req:any, res:any)=>{
-  const { rows } = await pool.query('select id, clave from permisos order by clave')
-  res.json(rows)
+// POST / - Crear rol
+r.post('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { nombre } = req.body
+
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre es requerido' })
+    }
+
+    const { rows } = await pool.query(
+      'INSERT INTO roles (nombre) VALUES ($1) RETURNING *',
+      [nombre.trim()]
+    )
+
+    res.json({ ok: true, rol: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en POST /roles:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// PUT /:id - Actualizar rol
+r.put('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { nombre } = req.body
+
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre es requerido' })
+    }
+
+    const { rows } = await pool.query(
+      'UPDATE roles SET nombre = $1 WHERE id = $2 RETURNING *',
+      [nombre.trim(), id]
+    )
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Rol no encontrado' })
+    }
+
+    res.json({ ok: true, rol: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en PUT /roles/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /:id - Eliminar rol
+r.delete('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    const check = await pool.query('SELECT COUNT(*) as count FROM usuarios WHERE rol = $1', [id])
+    
+    if (parseInt(check.rows[0].count) > 0) {
+      return res.status(400).json({ 
+        error: 'No se puede eliminar el rol porque hay usuarios asignados' 
+      })
+    }
+
+    const { rows } = await pool.query('DELETE FROM roles WHERE id = $1 RETURNING id', [id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Rol no encontrado' })
+    }
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('❌ Error en DELETE /roles/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// GET /permisos - Listar permisos disponibles
+r.get('/permisos', authMiddleware, async (req: any, res: any) => {
+  try {
+    const permisos = [
+      'usuarios_ver',
+      'usuarios_crear',
+      'usuarios_editar',
+      'usuarios_eliminar',
+      'ninos_ver',
+      'ninos_crear',
+      'ninos_editar',
+      'ninos_eliminar',
+      'ver_reportes',
+      'exportar_reportes'
+    ]
+    res.json(permisos)
+  } catch (error: any) {
+    console.error('❌ Error en GET /roles/permisos:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
 export default r

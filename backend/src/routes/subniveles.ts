@@ -1,32 +1,88 @@
 import { Router } from 'express'
+import { authMiddleware } from '../core/auth_middleware'
 import { pool } from '../core/db'
+
 const r = Router()
 
-r.get('/subniveles', async (_req:any, res:any)=>{
-  const q = `select s.id, s.nombre, s.dias, s.horario, n.nombre as nivel_nombre from subniveles s join niveles n on n.id=s.nivel_id order by n.nombre, s.nombre`
-  const { rows } = await pool.query(q)
-  rows.forEach((x:any)=>{ if (typeof x.dias === 'string') { try{ x.dias = JSON.parse(x.dias) }catch{} } })
-  res.json(rows)
+// GET / - Listar subniveles
+r.get('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT s.*, n.nombre as nivel_nombre
+      FROM subniveles s
+      LEFT JOIN niveles n ON s.nivel_id = n.id
+      ORDER BY n.nombre, s.nombre
+    `)
+    res.json(rows)
+  } catch (error: any) {
+    console.error('❌ Error en GET /subniveles:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-r.post('/subniveles', async (req:any, res:any)=>{
-  const { nivel_id, nombre, dias, horario } = req.body
-  const { rows } = await pool.query('insert into subniveles (nivel_id, nombre, dias, horario) values ($1,$2,$3,$4) returning *',
-    [nivel_id, nombre, JSON.stringify(dias||[]), horario||null])
-  res.json(rows[0])
+// POST / - Crear subnivel
+r.post('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { nombre, nivel_id } = req.body
+
+    if (!nombre || !nombre.trim() || !nivel_id) {
+      return res.status(400).json({ error: 'Nombre y nivel son requeridos' })
+    }
+
+    const { rows } = await pool.query(
+      'INSERT INTO subniveles (nombre, nivel_id) VALUES ($1, $2) RETURNING *',
+      [nombre.trim(), nivel_id]
+    )
+
+    res.json({ ok: true, subnivel: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en POST /subniveles:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-r.put('/subniveles/:id', async (req:any, res:any)=>{
-  const { id } = req.params; const { nombre, dias, horario } = req.body
-  const { rows } = await pool.query('update subniveles set nombre=coalesce($1,nombre), dias=coalesce($2,dias), horario=coalesce($3,horario), modificado_en=now() where id=$4 returning *',
-    [nombre, dias?JSON.stringify(dias):null, horario, id])
-  res.json(rows[0])
+// PUT /:id - Actualizar subnivel
+r.put('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { nombre, nivel_id } = req.body
+
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre es requerido' })
+    }
+
+    const { rows } = await pool.query(
+      'UPDATE subniveles SET nombre = $1, nivel_id = $2 WHERE id = $3 RETURNING *',
+      [nombre.trim(), nivel_id, id]
+    )
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Subnivel no encontrado' })
+    }
+
+    res.json({ ok: true, subnivel: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en PUT /subniveles/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-r.delete('/subniveles/:id', async (req:any, res:any)=>{
-  const { id } = req.params
-  await pool.query('delete from subniveles where id=$1',[id])
-  res.json({ ok:true })
+// DELETE /:id - Eliminar subnivel
+r.delete('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    const { rows } = await pool.query('DELETE FROM subniveles WHERE id = $1 RETURNING id', [id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Subnivel no encontrado' })
+    }
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('❌ Error en DELETE /subniveles/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
 export default r

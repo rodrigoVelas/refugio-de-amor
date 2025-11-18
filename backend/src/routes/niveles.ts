@@ -4,27 +4,89 @@ import { pool } from '../core/db'
 
 const r = Router()
 
-r.get('/', authMiddleware, async (_req:any, res:any)=>{
-  const { rows } = await pool.query('select id, nombre, descripcion from niveles order by nombre')
-  res.json(rows)
+// GET / - Listar niveles
+r.get('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { rows } = await pool.query('SELECT id, nombre, descripcion FROM niveles ORDER BY nombre')
+    res.json(rows)
+  } catch (error: any) {
+    console.error('❌ Error en GET /niveles:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-r.post('/', authMiddleware, async (req:any, res:any)=>{
-  const { nombre, descripcion } = req.body
-  const { rows } = await pool.query('insert into niveles (nombre, descripcion) values ($1,$2) returning *', [nombre, descripcion||null])
-  res.json(rows[0])
+// POST / - Crear nivel
+r.post('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { nombre, descripcion } = req.body
+
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre es requerido' })
+    }
+
+    const { rows } = await pool.query(
+      'INSERT INTO niveles (nombre, descripcion) VALUES ($1, $2) RETURNING *',
+      [nombre.trim(), descripcion || null]
+    )
+
+    res.json({ ok: true, nivel: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en POST /niveles:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-r.put('/:id', authMiddleware, async (req:any, res:any)=>{
-  const { id } = req.params; const { nombre, descripcion } = req.body
-  const { rows } = await pool.query('update niveles set nombre=coalesce($1,nombre), descripcion=$2, modificado_en=now() where id=$3 returning *', [nombre, descripcion||null, id])
-  res.json(rows[0])
+// PUT /:id - Actualizar nivel
+r.put('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { nombre, descripcion } = req.body
+
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre es requerido' })
+    }
+
+    const { rows } = await pool.query(
+      'UPDATE niveles SET nombre = $1, descripcion = $2, modificado_en = NOW() WHERE id = $3 RETURNING *',
+      [nombre.trim(), descripcion || null, id]
+    )
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Nivel no encontrado' })
+    }
+
+    res.json({ ok: true, nivel: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en PUT /niveles/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-r.delete('/:id', authMiddleware, async (req:any, res:any)=>{
-  const { id } = req.params
-  await pool.query('delete from niveles where id=$1',[id])
-  res.json({ ok:true })
+// DELETE /:id - Eliminar nivel
+r.delete('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+
+    // Verificar si tiene niños asociados
+    const check = await pool.query('SELECT COUNT(*) as count FROM ninos WHERE nivel_id = $1', [id])
+    
+    if (parseInt(check.rows[0].count) > 0) {
+      return res.status(400).json({ 
+        error: 'No se puede eliminar el nivel porque tiene niños asociados' 
+      })
+    }
+
+    const { rows } = await pool.query('DELETE FROM niveles WHERE id = $1 RETURNING id', [id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Nivel no encontrado' })
+    }
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('❌ Error en DELETE /niveles/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
 export default r

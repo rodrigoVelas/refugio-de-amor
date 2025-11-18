@@ -1,91 +1,95 @@
 import { Router } from 'express'
+import { authMiddleware } from '../core/auth_middleware'
 import { pool } from '../core/db'
-import { getUserPerms } from '../core/rbac'
 
 const r = Router()
 
-// listar actividades por rango (mes visible)
-// GET /actividades?from=YYYY-MM-DD&to=YYYY-MM-DD
-r.get('/actividades', async (req:any, res:any)=>{
-  const { from, to } = req.query;
-  // valida rango
-  if(!from || !to) return res.status(400).send('from y to requeridos');
-
-  const q = `
-    select
-      id,
-      to_char(fecha,'YYYY-MM-DD') as fecha,
-      to_char(hora,'HH24:MI')    as hora,
-      titulo,
-      coalesce(descripcion,'')   as descripcion,
-      estado
-    from actividades
-    where fecha between $1::date and $2::date
-    order by fecha asc, hora asc nulls last, titulo asc
-  `;
-  const { rows } = await pool.query(q, [from, to]);
-  res.json(rows);
-});
-
-
-// crear (solo directora con actividades_admin)
-r.post('/actividades', async (req: any, res) => {
-  const userId = req.user.id
-  const perms = await getUserPerms(userId)
-  if (!perms.includes('actividades_admin')) return res.status(403).send('no autorizado')
-
-  const b = req.body || {}
-  const fecha = b.fecha
-  const titulo = (b.titulo || '').toString().trim()
-  const hora = b.hora || null
-  const descripcion = (b.descripcion || '').toString().trim()
-  if (!fecha || !titulo) return res.status(400).send('fecha y titulo requeridos')
-
-  const { rows } = await pool.query(
-    `insert into actividades (fecha, hora, titulo, descripcion, creado_por)
-     values ($1,$2,$3,$4,$5)
-     returning id, fecha, hora, titulo, descripcion, estado, creado_por, creado_en, modificado_en`,
-    [fecha, hora, titulo, descripcion, userId]
-  )
-  res.json(rows[0])
+// GET / - Listar actividades
+r.get('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { from, to } = req.query
+    
+    let query = 'SELECT * FROM actividades'
+    const params: any[] = []
+    
+    if (from && to) {
+      query += ' WHERE fecha >= $1 AND fecha <= $2'
+      params.push(from, to)
+    }
+    
+    query += ' ORDER BY fecha DESC, hora DESC'
+    
+    const { rows } = await pool.query(query, params)
+    res.json(rows)
+  } catch (error: any) {
+    console.error('❌ Error en GET /actividades:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-// actualizar (solo directora)
-r.put('/actividades/:id', async (req: any, res) => {
-  const userId = req.user.id
-  const perms = await getUserPerms(userId)
-  if (!perms.includes('actividades_admin')) return res.status(403).send('no autorizado')
+// POST / - Crear actividad
+r.post('/', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { titulo, descripcion, fecha, hora } = req.body
 
-  const { id } = req.params
-  const b = req.body || {}
-  const fecha = b.fecha
-  const titulo = (b.titulo || '').toString().trim()
-  const hora = b.hora || null
-  const descripcion = (b.descripcion || '').toString().trim()
-  const estado = (b.estado || 'pendiente').toString().trim()
-  if (!fecha || !titulo) return res.status(400).send('fecha y titulo requeridos')
-  if (!['pendiente','completada'].includes(estado)) return res.status(400).send('estado invalido')
+    if (!titulo || !fecha) {
+      return res.status(400).json({ error: 'Título y fecha son requeridos' })
+    }
 
-  const { rows } = await pool.query(
-    `update actividades set
-      fecha = $1, hora = $2, titulo = $3, descripcion = $4, estado = $5, modificado_en = now()
-     where id = $6
-     returning id, fecha, hora, titulo, descripcion, estado, creado_por, creado_en, modificado_en`,
-    [fecha, hora, titulo, descripcion, estado, id]
-  )
-  if (!rows[0]) return res.status(404).send('no encontrado')
-  res.json(rows[0])
+    const { rows } = await pool.query(
+      'INSERT INTO actividades (titulo, descripcion, fecha, hora) VALUES ($1, $2, $3, $4) RETURNING *',
+      [titulo, descripcion || null, fecha, hora || null]
+    )
+
+    res.json({ ok: true, actividad: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en POST /actividades:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
-// eliminar (solo directora)
-r.delete('/actividades/:id', async (req: any, res) => {
-  const userId = req.user.id
-  const perms = await getUserPerms(userId)
-  if (!perms.includes('actividades_admin')) return res.status(403).send('no autorizado')
+// PUT /:id - Actualizar actividad
+r.put('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    const { titulo, descripcion, fecha, hora } = req.body
 
-  const { id } = req.params
-  await pool.query('delete from actividades where id=$1', [id])
-  res.json({ ok: true })
+    if (!titulo || !fecha) {
+      return res.status(400).json({ error: 'Título y fecha son requeridos' })
+    }
+
+    const { rows } = await pool.query(
+      'UPDATE actividades SET titulo = $1, descripcion = $2, fecha = $3, hora = $4 WHERE id = $5 RETURNING *',
+      [titulo, descripcion || null, fecha, hora || null, id]
+    )
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Actividad no encontrada' })
+    }
+
+    res.json({ ok: true, actividad: rows[0] })
+  } catch (error: any) {
+    console.error('❌ Error en PUT /actividades/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /:id - Eliminar actividad
+r.delete('/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { id } = req.params
+    
+    const { rows } = await pool.query('DELETE FROM actividades WHERE id = $1 RETURNING id', [id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Actividad no encontrada' })
+    }
+
+    res.json({ ok: true })
+  } catch (error: any) {
+    console.error('❌ Error en DELETE /actividades/:id:', error)
+    res.status(500).json({ error: error.message })
+  }
 })
 
 export default r
