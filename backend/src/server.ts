@@ -116,7 +116,7 @@ app.listen(PORT, () => {
   console.log(`✅ API lista en http://0.0.0.0:${PORT}`)
   
   // Verificar variables de entorno críticas
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'tu_secreto_super_seguro_aqui') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'super_secreto') {
     console.warn('⚠️  JWT_SECRET no está configurado correctamente')
   }
   
