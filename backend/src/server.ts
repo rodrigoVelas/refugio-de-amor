@@ -4,18 +4,18 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser'
 
 // Importar rutas
-import auth from './routes/auth'
-import perfil from './routes/perfil'
-import niveles from './routes/niveles'
-import subniveles from './routes/subniveles'
-import ninos from './routes/ninos'
-import usuarios from './routes/usuarios'
-import roles from './routes/roles'
-import facturas from './routes/facturas'
-import asistencia from './routes/asistencia'
-import actividades from './routes/actividades'
-import documentos from './routes/documentos'
-import reportes from './routes/reportes'
+import authRoutes from './routes/auth'
+import perfilRoutes from './routes/perfil'
+import nivelesRoutes from './routes/niveles'
+import subnivelesRoutes from './routes/subniveles'
+import ninosRoutes from './routes/ninos'
+import usuariosRoutes from './routes/usuarios'
+import rolesRoutes from './routes/roles'
+import facturasRoutes from './routes/facturas'
+import asistenciaRoutes from './routes/asistencia'
+import actividadesRoutes from './routes/actividades'
+import documentosRoutes from './routes/documentos'
+import reportesRoutes from './routes/reportes'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -86,20 +86,20 @@ app.get('/health', (req, res) => {
 // ==================== RUTAS ====================
 
 // Rutas públicas
-app.use('/auth', auth)
+app.use('/auth', authRoutes)
 
 // Rutas protegidas (authMiddleware está DENTRO de cada archivo de ruta)
-app.use(perfil)
-app.use('/niveles', niveles)
-app.use('/subniveles', subniveles)
-app.use('/ninos', ninos)
-app.use('/usuarios', usuarios)
-app.use('/roles', roles)
-app.use('/facturas', facturas)
-app.use('/asistencia', asistencia)
-app.use('/actividades', actividades)
-app.use('/documentos', documentos)
-app.use('/reportes', reportes)
+app.use('/perfil', perfilRoutes)
+app.use('/niveles', nivelesRoutes)
+app.use('/subniveles', subnivelesRoutes)
+app.use('/ninos', ninosRoutes)
+app.use('/usuarios', usuariosRoutes)
+app.use('/roles', rolesRoutes)
+app.use('/facturas', facturasRoutes)
+app.use('/asistencia', asistenciaRoutes)
+app.use('/actividades', actividadesRoutes)
+app.use('/documentos', documentosRoutes)
+app.use('/reportes', reportesRoutes)
 
 // 404
 app.use((req, res) => {
@@ -123,6 +123,28 @@ app.use((err: any, req: any, res: any, next: any) => {
 // Start
 app.listen(PORT, () => {
   console.log(`\n✅ API lista en http://0.0.0.0:${PORT}\n`)
+  
+  console.log('📍 Rutas registradas:')
+  console.log('   POST    /auth/login')
+  console.log('   POST    /auth/logout')
+  console.log('   GET     /auth/me')
+  console.log('   GET     /perfil')
+  console.log('   PUT     /perfil')
+  console.log('   GET     /niveles')
+  console.log('   POST    /niveles')
+  console.log('   PUT     /niveles/:id')
+  console.log('   DELETE  /niveles/:id')
+  console.log('   GET     /subniveles')
+  console.log('   GET     /ninos')
+  console.log('   GET     /usuarios')
+  console.log('   GET     /roles')
+  console.log('   GET     /facturas')
+  console.log('   GET     /asistencia')
+  console.log('   GET     /actividades')
+  console.log('   GET     /documentos')
+  console.log('   GET     /reportes/financiero')
+  console.log('   GET     /reportes/ninos')
+  console.log('')
   
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'super_secreto') {
     console.warn('⚠️  JWT_SECRET no está configurado correctamente')
