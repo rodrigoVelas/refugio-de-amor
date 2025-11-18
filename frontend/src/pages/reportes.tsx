@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react'
-import { API_URL } from '../config'
+import { api } from '../lib/api'
 import Swal from 'sweetalert2'
-import * as XLSX from 'xlsx'
-import { saveAs } from 'file-saver'
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+
+// Extender el tipo jsPDF para autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF
+  }
+}
 
 interface Usuario {
   id: string
@@ -14,7 +21,7 @@ interface Usuario {
 export default function Reportes() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
-  const [reporteActivo, setReporteActivo] = useState<'financiero' | 'asistencia' | 'ninos'>('financiero')
+  const [reporteActivo, setReporteActivo] = useState<'financiero' | 'ninos' | 'actividades'>('financiero')
 
   // Estados para Reporte Financiero
   const [fechaInicio, setFechaInicio] = useState('')
@@ -22,15 +29,15 @@ export default function Reportes() {
   const [datosFinancieros, setDatosFinancieros] = useState<any>(null)
   const [loadingFinanciero, setLoadingFinanciero] = useState(false)
 
-  // Estados para Reporte Asistencia
-  const [mes, setMes] = useState(new Date().getMonth() + 1)
-  const [anio, setAnio] = useState(new Date().getFullYear())
-  const [datosAsistencia, setDatosAsistencia] = useState<any>(null)
-  const [loadingAsistencia, setLoadingAsistencia] = useState(false)
-
   // Estados para Reporte Niños
   const [datosNinos, setDatosNinos] = useState<any>(null)
   const [loadingNinos, setLoadingNinos] = useState(false)
+
+  // Estados para Reporte Actividades
+  const [mesActividades, setMesActividades] = useState(new Date().getMonth() + 1)
+  const [anioActividades, setAnioActividades] = useState(new Date().getFullYear())
+  const [datosActividades, setDatosActividades] = useState<any>(null)
+  const [loadingActividades, setLoadingActividades] = useState(false)
 
   useEffect(() => {
     cargarUsuario()
@@ -38,9 +45,8 @@ export default function Reportes() {
 
   async function cargarUsuario() {
     try {
-      const res = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
+      const data = await api.me()
+      if (data) {
         setUsuario(data)
       }
     } catch (error) {
@@ -50,709 +56,703 @@ export default function Reportes() {
     }
   }
 
-  const puedeVerReportes = usuario ? 
-    (String(usuario.rol).toLowerCase() === 'directora' || 
-     String(usuario.rol).toLowerCase() === 'contabilidad') : false
-
-  // ==================== REPORTE FINANCIERO ====================
+  // ========== REPORTE FINANCIERO ==========
   async function generarReporteFinanciero() {
     if (!fechaInicio || !fechaFin) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Fechas requeridas',
-        text: 'Selecciona un rango de fechas',
-        confirmButtonColor: '#3b82f6'
-      })
+      Swal.fire('Error', 'Debes seleccionar fechas de inicio y fin', 'error')
       return
     }
 
+    setLoadingFinanciero(true)
     try {
-      setLoadingFinanciero(true)
-
-      const res = await fetch(
-        `${API_URL}/reportes/financiero?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`,
+      const response = await fetch(
+        `https://refugio-de-amor.onrender.com/reportes/financiero?desde=${fechaInicio}&hasta=${fechaFin}`,
         { credentials: 'include' }
       )
-
-      if (res.ok) {
-        const data = await res.json()
-        setDatosFinancieros(data)
-      } else {
-        const error = await res.json()
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.error,
-          confirmButtonColor: '#3b82f6'
-        })
-      }
-    } catch (error) {
+      
+      if (!response.ok) throw new Error('Error al obtener datos')
+      
+      const data = await response.json()
+      setDatosFinancieros(data)
+    } catch (error: any) {
       console.error('Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al generar reporte',
-        confirmButtonColor: '#3b82f6'
-      })
+      Swal.fire('Error', 'No se pudo generar el reporte', 'error')
     } finally {
       setLoadingFinanciero(false)
     }
   }
 
-  function descargarExcelFinanciero() {
+  function descargarPDFFinanciero() {
     if (!datosFinancieros) return
 
-    const datosExcel = datosFinancieros.facturas.map((f: any) => ({
-      'No. Factura': f.numero_factura,
-      'Descripción': f.descripcion,
-      'Tipo': f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso',
-      'Monto (Q)': parseFloat(f.monto).toFixed(2),
-      'Estado': f.estado,
-      'Fecha Emisión': new Date(f.fecha_emision).toLocaleDateString('es-GT'),
-      'Fecha Vencimiento': f.fecha_vencimiento ? new Date(f.fecha_vencimiento).toLocaleDateString('es-GT') : '',
-      'Fecha Subida': new Date(f.creado_en).toLocaleDateString('es-GT'),
-      'Creado Por': f.creado_por_nombre
-    }))
-
-    // Agregar resumen al final
-    datosExcel.push({})
-    datosExcel.push({ 'No. Factura': 'RESUMEN' })
-    datosExcel.push({ 'No. Factura': 'Total Ingresos', 'Monto (Q)': `Q ${datosFinancieros.resumen.ingresos}` })
-    datosExcel.push({ 'No. Factura': 'Total Egresos', 'Monto (Q)': `Q ${datosFinancieros.resumen.egresos}` })
-    datosExcel.push({ 'No. Factura': 'Balance', 'Monto (Q)': `Q ${datosFinancieros.resumen.balance}` })
-
-    const ws = XLSX.utils.json_to_sheet(datosExcel)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Reporte Financiero')
-
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    saveAs(blob, `Reporte_Financiero_${fechaInicio}_${fechaFin}.xlsx`)
+    const doc = new jsPDF()
+    
+    // Título
+    doc.setFontSize(18)
+    doc.text('Reporte Financiero', 14, 20)
+    
+    // Período
+    doc.setFontSize(12)
+    doc.text(`Período: ${fechaInicio} a ${fechaFin}`, 14, 30)
+    
+    // Resumen
+    doc.setFontSize(14)
+    doc.text('Resumen:', 14, 40)
+    doc.setFontSize(11)
+    doc.text(`Total Ingresos: Q${datosFinancieros.totalIngresos}`, 14, 48)
+    doc.text(`Total Egresos: Q${datosFinancieros.totalEgresos}`, 14, 54)
+    doc.setFontSize(12)
+    doc.setFont(undefined, 'bold')
+    doc.text(`Balance: Q${datosFinancieros.balance}`, 14, 62)
+    doc.setFont(undefined, 'normal')
+    
+    // Tabla de Ingresos
+    if (datosFinancieros.ingresos && datosFinancieros.ingresos.length > 0) {
+      doc.setFontSize(13)
+      doc.text('Ingresos:', 14, 72)
+      
+      doc.autoTable({
+        startY: 76,
+        head: [['Fecha', 'No. Factura', 'Descripción', 'Monto']],
+        body: datosFinancieros.ingresos.map((f: any) => [
+          f.fecha,
+          f.numero_factura || '-',
+          f.descripcion || '-',
+          `Q${parseFloat(f.monto).toFixed(2)}`
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [76, 175, 80] }
+      })
+    }
+    
+    // Tabla de Egresos
+    if (datosFinancieros.egresos && datosFinancieros.egresos.length > 0) {
+      const finalY = (doc as any).lastAutoTable.finalY || 80
+      
+      doc.setFontSize(13)
+      doc.text('Egresos:', 14, finalY + 10)
+      
+      doc.autoTable({
+        startY: finalY + 14,
+        head: [['Fecha', 'No. Factura', 'Descripción', 'Monto']],
+        body: datosFinancieros.egresos.map((f: any) => [
+          f.fecha,
+          f.numero_factura || '-',
+          f.descripcion || '-',
+          `Q${parseFloat(f.monto).toFixed(2)}`
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [244, 67, 54] }
+      })
+    }
+    
+    doc.save(`reporte_financiero_${fechaInicio}_${fechaFin}.pdf`)
+    Swal.fire('¡Éxito!', 'Reporte descargado correctamente', 'success')
   }
 
-  // ==================== REPORTE ASISTENCIA ====================
-  async function generarReporteAsistencia() {
+  // ========== REPORTE NIÑOS (ESTADÍSTICAS) ==========
+  async function generarReporteNinos() {
+    setLoadingNinos(true)
     try {
-      setLoadingAsistencia(true)
-
-      const res = await fetch(
-        `${API_URL}/reportes/asistencia?mes=${mes}&anio=${anio}`,
+      const response = await fetch(
+        'https://refugio-de-amor.onrender.com/reportes/ninos',
         { credentials: 'include' }
       )
-
-      if (res.ok) {
-        const data = await res.json()
-        setDatosAsistencia(data)
-      } else {
-        const error = await res.json()
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.error,
-          confirmButtonColor: '#3b82f6'
-        })
-      }
-    } catch (error) {
+      
+      if (!response.ok) throw new Error('Error al obtener datos')
+      
+      const data = await response.json()
+      setDatosNinos(data)
+    } catch (error: any) {
       console.error('Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al generar reporte',
-        confirmButtonColor: '#3b82f6'
-      })
-    } finally {
-      setLoadingAsistencia(false)
-    }
-  }
-
-  function descargarExcelAsistencia() {
-    if (!datosAsistencia) return
-
-    const datosExcel = datosAsistencia.asistencias.map((a: any) => ({
-      'Fecha': new Date(a.fecha).toLocaleDateString('es-GT'),
-      'Niño': a.nino_nombre,
-      'Nivel': a.nivel_nombre || 'Sin nivel',
-      'Subnivel': a.subnivel_nombre || 'Sin subnivel',
-      'Estado': a.estado === 'presente' ? 'Presente' : a.estado === 'ausente' ? 'Ausente' : 'Justificado',
-      'Registrado Por': a.registrado_por_nombre
-    }))
-
-    // Agregar resumen
-    datosExcel.push({})
-    datosExcel.push({ 'Fecha': 'RESUMEN' })
-    datosExcel.push({ 'Fecha': 'Total Registros', 'Niño': datosAsistencia.resumen.total_registros })
-    datosExcel.push({ 'Fecha': 'Presentes', 'Niño': datosAsistencia.resumen.presentes })
-    datosExcel.push({ 'Fecha': 'Ausentes', 'Niño': datosAsistencia.resumen.ausentes })
-    datosExcel.push({ 'Fecha': 'Justificados', 'Niño': datosAsistencia.resumen.justificados })
-    datosExcel.push({ 'Fecha': '% Asistencia', 'Niño': `${datosAsistencia.resumen.porcentaje_asistencia}%` })
-
-    const ws = XLSX.utils.json_to_sheet(datosExcel)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Reporte Asistencia')
-
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    saveAs(blob, `Reporte_Asistencia_${mes}_${anio}.xlsx`)
-  }
-
-  // ==================== REPORTE NIÑOS ====================
-  async function generarReporteNinos() {
-    try {
-      setLoadingNinos(true)
-
-      const res = await fetch(`${API_URL}/reportes/ninos`, { credentials: 'include' })
-
-      if (res.ok) {
-        const data = await res.json()
-        setDatosNinos(data)
-      } else {
-        const error = await res.json()
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.error,
-          confirmButtonColor: '#3b82f6'
-        })
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al generar reporte',
-        confirmButtonColor: '#3b82f6'
-      })
+      Swal.fire('Error', 'No se pudo generar el reporte', 'error')
     } finally {
       setLoadingNinos(false)
     }
   }
 
-  function descargarExcelNinos() {
+  function descargarPDFNinos() {
     if (!datosNinos) return
 
-    // Hoja 1: Lista de niños
-    const ninosExcel = datosNinos.ninos.map((n: any) => ({
-      'Nombres': n.nombres,
-      'Apellidos': n.apellidos,
-      'Fecha Nacimiento': new Date(n.fecha_nacimiento).toLocaleDateString('es-GT'),
-      'Edad': n.edad,
-      'Género': n.genero === 'M' ? 'Masculino' : 'Femenino',
-      'Nivel': n.nivel_nombre || 'Sin nivel',
-      'Subnivel': n.subnivel_nombre || 'Sin subnivel',
-      'Encargado': n.nombre_encargado,
-      'Teléfono': n.telefono_contacto,
-      'Dirección': n.direccion,
-      'Estado': n.activo ? 'Activo' : 'Inactivo'
-    }))
-
-    const ws1 = XLSX.utils.json_to_sheet(ninosExcel)
-
-    // Hoja 2: Resumen estadístico
-    const resumenExcel: any[] = []
+    const doc = new jsPDF()
     
-    resumenExcel.push({ 'Concepto': 'RESUMEN GENERAL' })
-    resumenExcel.push({ 'Concepto': 'Total Niños Activos', 'Valor': datosNinos.resumen.total_ninos })
-    resumenExcel.push({ 'Concepto': 'Total Niños Inactivos', 'Valor': datosNinos.resumen.ninos_inactivos })
-    resumenExcel.push({})
+    // Título
+    doc.setFontSize(18)
+    doc.text('Estadísticas de Niños', 14, 20)
     
-    resumenExcel.push({ 'Concepto': 'POR NIVEL' })
-    datosNinos.resumen.por_nivel.forEach((n: any) => {
-      resumenExcel.push({ 'Concepto': n.nivel || 'Sin nivel', 'Valor': n.cantidad })
-    })
-    resumenExcel.push({})
+    // Total de niños
+    doc.setFontSize(14)
+    doc.text(`Total de Niños Activos: ${datosNinos.totalNinos}`, 14, 32)
     
-    resumenExcel.push({ 'Concepto': 'POR GÉNERO' })
-    datosNinos.resumen.por_genero.forEach((g: any) => {
-      resumenExcel.push({ 'Concepto': g.genero === 'M' ? 'Masculino' : 'Femenino', 'Valor': g.cantidad })
-    })
-    resumenExcel.push({})
+    let currentY = 40
+
+    // Estadísticas por Nivel
+    if (datosNinos.porNivel && datosNinos.porNivel.length > 0) {
+      doc.setFontSize(13)
+      doc.text('Distribución por Nivel:', 14, currentY)
+      
+      doc.autoTable({
+        startY: currentY + 4,
+        head: [['Nivel', 'Cantidad']],
+        body: datosNinos.porNivel.map((n: any) => [
+          n.nivel || 'Sin nivel',
+          n.cantidad
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [33, 150, 243] }
+      })
+      
+      currentY = (doc as any).lastAutoTable.finalY + 10
+    }
+
+    // Estadísticas por Género
+    if (datosNinos.porGenero && datosNinos.porGenero.length > 0) {
+      doc.setFontSize(13)
+      doc.text('Distribución por Género:', 14, currentY)
+      
+      doc.autoTable({
+        startY: currentY + 4,
+        head: [['Género', 'Cantidad']],
+        body: datosNinos.porGenero.map((g: any) => [
+          g.genero,
+          g.cantidad
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [156, 39, 176] }
+      })
+      
+      currentY = (doc as any).lastAutoTable.finalY + 10
+    }
+
+    // Estadísticas por Edad
+    if (datosNinos.porEdad && datosNinos.porEdad.length > 0) {
+      doc.setFontSize(13)
+      doc.text('Distribución por Edad:', 14, currentY)
+      
+      doc.autoTable({
+        startY: currentY + 4,
+        head: [['Rango de Edad', 'Cantidad']],
+        body: datosNinos.porEdad.map((e: any) => [
+          e.rango_edad,
+          e.cantidad
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [255, 152, 0] }
+      })
+    }
+
+    // Lista completa de niños
+    if (datosNinos.ninos && datosNinos.ninos.length > 0) {
+      doc.addPage()
+      doc.setFontSize(16)
+      doc.text('Lista Completa de Niños', 14, 20)
+      
+      doc.autoTable({
+        startY: 26,
+        head: [['Código', 'Nombres', 'Apellidos', 'Edad', 'Nivel', 'Colaborador']],
+        body: datosNinos.ninos.map((n: any) => [
+          n.codigo,
+          n.nombres,
+          n.apellidos,
+          n.edad || '-',
+          n.nivel_nombre || '-',
+          n.colaborador || 'Sin asignar'
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [63, 81, 181] }
+      })
+    }
     
-    resumenExcel.push({ 'Concepto': 'POR EDAD' })
-    datosNinos.resumen.por_edad.forEach((e: any) => {
-      resumenExcel.push({ 'Concepto': e.rango_edad, 'Valor': e.cantidad })
-    })
-
-    const ws2 = XLSX.utils.json_to_sheet(resumenExcel)
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws1, 'Lista de Niños')
-    XLSX.utils.book_append_sheet(wb, ws2, 'Estadísticas')
-
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    saveAs(blob, `Reporte_Ninos_${new Date().toISOString().split('T')[0]}.xlsx`)
+    doc.save('estadisticas_ninos.pdf')
+    Swal.fire('¡Éxito!', 'Reporte descargado correctamente', 'success')
   }
 
-  // ==================== RENDER ====================
+  // ========== REPORTE ACTIVIDADES ==========
+  async function generarReporteActividades() {
+    setLoadingActividades(true)
+    try {
+      const response = await fetch(
+        `https://refugio-de-amor.onrender.com/reportes/actividades?mes=${mesActividades}&anio=${anioActividades}`,
+        { credentials: 'include' }
+      )
+      
+      if (!response.ok) throw new Error('Error al obtener datos')
+      
+      const data = await response.json()
+      setDatosActividades(data)
+    } catch (error: any) {
+      console.error('Error:', error)
+      Swal.fire('Error', 'No se pudo generar el reporte', 'error')
+    } finally {
+      setLoadingActividades(false)
+    }
+  }
+
+  function descargarPDFActividades() {
+    if (!datosActividades) return
+
+    const doc = new jsPDF()
+    
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ]
+    
+    // Título
+    doc.setFontSize(18)
+    doc.text('Reporte de Actividades', 14, 20)
+    
+    // Período
+    doc.setFontSize(12)
+    doc.text(`Mes: ${meses[mesActividades - 1]} ${anioActividades}`, 14, 30)
+    doc.text(`Total de Actividades: ${datosActividades.totalActividades}`, 14, 38)
+    
+    // Tabla de actividades
+    if (datosActividades.actividades && datosActividades.actividades.length > 0) {
+      doc.autoTable({
+        startY: 46,
+        head: [['Fecha', 'Título', 'Descripción', 'Hora']],
+        body: datosActividades.actividades.map((a: any) => [
+          new Date(a.fecha).toLocaleDateString('es-GT'),
+          a.titulo,
+          a.descripcion || '-',
+          a.hora || '-'
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [255, 87, 34] },
+        styles: { fontSize: 10 }
+      })
+    } else {
+      doc.setFontSize(11)
+      doc.text('No hay actividades registradas en este período', 14, 50)
+    }
+    
+    doc.save(`actividades_${meses[mesActividades - 1]}_${anioActividades}.pdf`)
+    Swal.fire('¡Éxito!', 'Reporte descargado correctamente', 'success')
+  }
+
   if (loading) {
     return <div className="loading">Cargando...</div>
   }
 
-  if (!puedeVerReportes) {
-    return (
-      <div className="content">
-        <div className="card">
-          <div className="card-content" style={{ textAlign: 'center', padding: '3rem' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🔒</div>
-            <h2 style={{ marginBottom: '0.5rem' }}>Acceso Restringido</h2>
-            <p style={{ color: 'var(--text-secondary)' }}>
-              Solo la directora y contabilidad pueden acceder a los reportes
-            </p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="content">
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h1 className="card-title">📊 Reportes</h1>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-              Generación y descarga de reportes en Excel
-            </p>
-          </div>
-        </div>
+    <div style={{ padding: '2rem' }}>
+      <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '2rem' }}>
+        📊 Reportes
+      </h1>
 
-        {/* Tabs de reportes */}
-        <div style={{ borderBottom: '1px solid var(--border)', padding: '0 1.5rem' }}>
+      {/* Pestañas */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '1rem', 
+        marginBottom: '2rem',
+        borderBottom: '2px solid #e5e7eb'
+      }}>
+        <button
+          onClick={() => setReporteActivo('financiero')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: reporteActivo === 'financiero' ? '#3b82f6' : 'transparent',
+            color: reporteActivo === 'financiero' ? 'white' : '#6b7280',
+            border: 'none',
+            borderBottom: reporteActivo === 'financiero' ? '3px solid #3b82f6' : 'none',
+            cursor: 'pointer',
+            fontWeight: reporteActivo === 'financiero' ? 'bold' : 'normal',
+            transition: 'all 0.2s'
+          }}
+        >
+          💰 Financiero
+        </button>
+        
+        <button
+          onClick={() => setReporteActivo('ninos')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: reporteActivo === 'ninos' ? '#3b82f6' : 'transparent',
+            color: reporteActivo === 'ninos' ? 'white' : '#6b7280',
+            border: 'none',
+            borderBottom: reporteActivo === 'ninos' ? '3px solid #3b82f6' : 'none',
+            cursor: 'pointer',
+            fontWeight: reporteActivo === 'ninos' ? 'bold' : 'normal',
+            transition: 'all 0.2s'
+          }}
+        >
+          👶 Estadísticas de Niños
+        </button>
+
+        <button
+          onClick={() => setReporteActivo('actividades')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: reporteActivo === 'actividades' ? '#3b82f6' : 'transparent',
+            color: reporteActivo === 'actividades' ? 'white' : '#6b7280',
+            border: 'none',
+            borderBottom: reporteActivo === 'actividades' ? '3px solid #3b82f6' : 'none',
+            cursor: 'pointer',
+            fontWeight: reporteActivo === 'actividades' ? 'bold' : 'normal',
+            transition: 'all 0.2s'
+          }}
+        >
+          📅 Actividades del Mes
+        </button>
+      </div>
+
+      {/* REPORTE FINANCIERO */}
+      {reporteActivo === 'financiero' && (
+        <div className="card">
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
+            Reporte Financiero
+          </h2>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Fecha Inicio:
+              </label>
+              <input
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                className="form-input"
+                style={{ width: '100%' }}
+              />
+            </div>
+            
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Fecha Fin:
+              </label>
+              <input
+                type="date"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                className="form-input"
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: '1rem' }}>
             <button
-              className={`tab ${reporteActivo === 'financiero' ? 'active' : ''}`}
-              onClick={() => setReporteActivo('financiero')}
-              style={{
-                padding: '1rem 1.5rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: reporteActivo === 'financiero' ? '2px solid var(--primary)' : '2px solid transparent',
-                color: reporteActivo === 'financiero' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontWeight: reporteActivo === 'financiero' ? '500' : '400',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
+              onClick={generarReporteFinanciero}
+              disabled={loadingFinanciero}
+              className="btn btn-primary"
             >
-              💰 Financiero
+              {loadingFinanciero ? 'Generando...' : '📊 Generar Reporte'}
             </button>
-            <button
-              className={`tab ${reporteActivo === 'asistencia' ? 'active' : ''}`}
-              onClick={() => setReporteActivo('asistencia')}
-              style={{
-                padding: '1rem 1.5rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: reporteActivo === 'asistencia' ? '2px solid var(--primary)' : '2px solid transparent',
-                color: reporteActivo === 'asistencia' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontWeight: reporteActivo === 'asistencia' ? '500' : '400',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              📅 Asistencia
-            </button>
-            <button
-              className={`tab ${reporteActivo === 'ninos' ? 'active' : ''}`}
-              onClick={() => setReporteActivo('ninos')}
-              style={{
-                padding: '1rem 1.5rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: reporteActivo === 'ninos' ? '2px solid var(--primary)' : '2px solid transparent',
-                color: reporteActivo === 'ninos' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontWeight: reporteActivo === 'ninos' ? '500' : '400',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              👶 Estadísticas Niños
-            </button>
-          </div>
-        </div>
 
-        <div className="card-content">
-          {/* REPORTE FINANCIERO */}
-          {reporteActivo === 'financiero' && (
-            <div>
-              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>💰 Reporte Financiero</h2>
-              
-              <div className="form" style={{ maxWidth: '600px', marginBottom: '2rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label className="label">Fecha Inicio</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={fechaInicio}
-                      onChange={e => setFechaInicio(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Fecha Fin</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={fechaFin}
-                      onChange={e => setFechaFin(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-               <button
-                className="btn"
-                 onClick={generarReporteFinanciero}
-                 disabled={loadingFinanciero}
-                  style={{ marginTop: '1rem' }}
-                    >
-                {loadingFinanciero ? 'Generando...' : 'Generar Reporte'}
-                </button>
-              </div>
-
-              {datosFinancieros && (
-                <div>
-                  {/* Resumen */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Total Facturas</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600' }}>{datosFinancieros.resumen.total_facturas}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Ingresos</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#10b981' }}>Q {datosFinancieros.resumen.ingresos}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Egresos</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#ef4444' }}>Q {datosFinancieros.resumen.egresos}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Balance</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: parseFloat(datosFinancieros.resumen.balance) >= 0 ? '#10b981' : '#ef4444' }}>
-                        Q {datosFinancieros.resumen.balance}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: '500' }}>Detalle de Facturas</h3>
-                    <button className="btn" onClick={descargarExcelFinanciero}>
-                      📥 Descargar Excel
-                    </button>
-                  </div>
-
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ background: 'var(--surface-elevated)', borderBottom: '2px solid var(--border)' }}>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>No. Factura</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Descripción</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Tipo</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: '500' }}>Monto</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Fecha Subida</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Creado Por</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {datosFinancieros.facturas.map((f: any) => (
-                          <tr key={f.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{f.numero_factura}</td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{f.descripcion}</td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              <span style={{
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                background: f.tipo === 'ingreso' ? '#dcfce7' : '#fee2e2',
-                                color: f.tipo === 'ingreso' ? '#166534' : '#991b1b'
-                              }}>
-                                {f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', textAlign: 'right', fontWeight: '500' }}>
-                              Q {parseFloat(f.monto).toFixed(2)}
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              {new Date(f.creado_en).toLocaleDateString('es-GT')}
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{f.creado_por_nombre}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* REPORTE ASISTENCIA */}
-          {reporteActivo === 'asistencia' && (
-            <div>
-              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>📅 Reporte de Asistencia</h2>
-              
-              <div className="form" style={{ maxWidth: '600px', marginBottom: '2rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label className="label">Mes</label>
-                    <select
-                      className="input"
-                      value={mes}
-                      onChange={e => setMes(parseInt(e.target.value))}
-                    >
-                      <option value={1}>Enero</option>
-                      <option value={2}>Febrero</option>
-                      <option value={3}>Marzo</option>
-                      <option value={4}>Abril</option>
-                      <option value={5}>Mayo</option>
-                      <option value={6}>Junio</option>
-                      <option value={7}>Julio</option>
-                      <option value={8}>Agosto</option>
-                      <option value={9}>Septiembre</option>
-                      <option value={10}>Octubre</option>
-                      <option value={11}>Noviembre</option>
-                      <option value={12}>Diciembre</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Año</label>
-                    <input
-                      type="number"
-                      className="input"
-                      value={anio}
-                      onChange={e => setAnio(parseInt(e.target.value))}
-                      min={2020}
-                      max={2030}
-                    />
-                  </div>
-                </div>
-
-                <button
-                  className="btn"
-                  onClick={generarReporteAsistencia}
-                  disabled={loadingAsistencia}
-                  style={{ marginTop: '1rem' }}
-                >
-                  {loadingAsistencia ? 'Generando...' : 'Generar Reporte'}
-                </button>
-              </div>
-
-              {datosAsistencia && (
-                <div>
-                  {/* Resumen */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Total Registros</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600' }}>{datosAsistencia.resumen.total_registros}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Presentes</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#10b981' }}>{datosAsistencia.resumen.presentes}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Ausentes</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#ef4444' }}>{datosAsistencia.resumen.ausentes}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Justificados</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#f59e0b' }}>{datosAsistencia.resumen.justificados}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>% Asistencia</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#3b82f6' }}>{datosAsistencia.resumen.porcentaje_asistencia}%</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: '500' }}>Detalle de Asistencia</h3>
-                    <button className="btn" onClick={descargarExcelAsistencia}>
-                      📥 Descargar Excel
-                    </button>
-                  </div>
-
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ background: 'var(--surface-elevated)', borderBottom: '2px solid var(--border)' }}>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Fecha</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Niño</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Nivel</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Estado</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Registrado Por</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {datosAsistencia.asistencias.slice(0, 50).map((a: any) => (
-                          <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              {new Date(a.fecha).toLocaleDateString('es-GT')}
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{a.nino_nombre}</td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              {a.nivel_nombre || 'Sin nivel'} {a.subnivel_nombre ? `- ${a.subnivel_nombre}` : ''}
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              <span style={{
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                background: a.estado === 'presente' ? '#dcfce7' : a.estado === 'ausente' ? '#fee2e2' : '#fef3c7',
-                                color: a.estado === 'presente' ? '#166534' : a.estado === 'ausente' ? '#991b1b' : '#92400e'
-                              }}>
-                                {a.estado === 'presente' ? 'Presente' : a.estado === 'ausente' ? 'Ausente' : 'Justificado'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{a.registrado_por_nombre}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {datosAsistencia.asistencias.length > 50 && (
-                    <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                      Mostrando 50 de {datosAsistencia.asistencias.length} registros. Descarga el Excel para ver todos.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* REPORTE NIÑOS */}
-          {reporteActivo === 'ninos' && (
-            <div>
-              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>👶 Estadísticas de Niños</h2>
-              
+            {datosFinancieros && (
               <button
+                onClick={descargarPDFFinanciero}
                 className="btn"
-                onClick={generarReporteNinos}
-                disabled={loadingNinos}
-                style={{ marginBottom: '2rem' }}
+                style={{ background: '#ef4444', color: 'white' }}
               >
-                {loadingNinos ? 'Generando...' : 'Generar Reporte'}
+                📄 Descargar PDF
               </button>
+            )}
+          </div>
 
-              {datosNinos && (
-                <div>
-                  {/* Resumen General */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Niños Activos</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#10b981' }}>{datosNinos.resumen.total_ninos}</div>
-                    </div>
-                    <div style={{ padding: '1.5rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Niños Inactivos</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#ef4444' }}>{datosNinos.resumen.ninos_inactivos}</div>
-                    </div>
+          {datosFinancieros && (
+            <div style={{ marginTop: '2rem' }}>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(3, 1fr)', 
+                gap: '1rem',
+                marginBottom: '2rem'
+              }}>
+                <div style={{ 
+                  padding: '1rem', 
+                  background: '#dcfce7', 
+                  borderRadius: '8px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '0.875rem', color: '#166534' }}>Total Ingresos</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#15803d' }}>
+                    Q{datosFinancieros.totalIngresos}
                   </div>
-
-                  {/* Estadísticas por Nivel */}
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '1rem' }}>Por Nivel</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                      {datosNinos.resumen.por_nivel.map((n: any, idx: number) => (
-                        <div key={idx} style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                          <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
-                            {n.nivel || 'Sin nivel'}
-                          </div>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '600' }}>{n.cantidad}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Estadísticas por Género */}
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '1rem' }}>Por Género</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                      {datosNinos.resumen.por_genero.map((g: any, idx: number) => (
-                        <div key={idx} style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                          <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
-                            {g.genero === 'M' ? '👦 Masculino' : '👧 Femenino'}
-                          </div>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '600' }}>{g.cantidad}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Estadísticas por Edad */}
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '1rem' }}>Por Rango de Edad</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                      {datosNinos.resumen.por_edad.map((e: any, idx: number) => (
-                        <div key={idx} style={{ padding: '1rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                          <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
-                            {e.rango_edad}
-                          </div>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '600' }}>{e.cantidad}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: '500' }}>Lista Completa de Niños</h3>
-                    <button className="btn" onClick={descargarExcelNinos}>
-                      📥 Descargar Excel Completo
-                    </button>
-                  </div>
-
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ background: 'var(--surface-elevated)', borderBottom: '2px solid var(--border)' }}>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Nombres</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Apellidos</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.875rem', fontWeight: '500' }}>Edad</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Género</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Nivel</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '500' }}>Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {datosNinos.ninos.slice(0, 30).map((n: any) => (
-                          <tr key={n.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{n.nombres}</td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{n.apellidos}</td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', textAlign: 'center' }}>{n.edad}</td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              {n.genero === 'M' ? '👦 M' : '👧 F'}
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              {n.nivel_nombre || 'Sin nivel'}
-                              {n.subnivel_nombre && ` - ${n.subnivel_nombre}`}
-                            </td>
-                            <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                              <span style={{
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                background: n.activo ? '#dcfce7' : '#fee2e2',
-                                color: n.activo ? '#166534' : '#991b1b'
-                              }}>
-                                {n.activo ? 'Activo' : 'Inactivo'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {datosNinos.ninos.length > 30 && (
-                    <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                      Mostrando 30 de {datosNinos.ninos.length} niños. Descarga el Excel para ver todos.
-                    </p>
-                  )}
                 </div>
+
+                <div style={{ 
+                  padding: '1rem', 
+                  background: '#fee2e2', 
+                  borderRadius: '8px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '0.875rem', color: '#991b1b' }}>Total Egresos</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#dc2626' }}>
+                    Q{datosFinancieros.totalEgresos}
+                  </div>
+                </div>
+
+                <div style={{ 
+                  padding: '1rem', 
+                  background: parseFloat(datosFinancieros.balance) >= 0 ? '#dbeafe' : '#fee2e2', 
+                  borderRadius: '8px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '0.875rem', color: parseFloat(datosFinancieros.balance) >= 0 ? '#1e3a8a' : '#991b1b' }}>
+                    Balance
+                  </div>
+                  <div style={{ 
+                    fontSize: '1.5rem', 
+                    fontWeight: 'bold', 
+                    color: parseFloat(datosFinancieros.balance) >= 0 ? '#2563eb' : '#dc2626'
+                  }}>
+                    Q{datosFinancieros.balance}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                Total de registros: {datosFinancieros.count}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* REPORTE NIÑOS */}
+      {reporteActivo === 'ninos' && (
+        <div className="card">
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
+            Estadísticas de Niños
+          </h2>
+
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button
+              onClick={generarReporteNinos}
+              disabled={loadingNinos}
+              className="btn btn-primary"
+            >
+              {loadingNinos ? 'Generando...' : '📊 Generar Estadísticas'}
+            </button>
+
+            {datosNinos && (
+              <button
+                onClick={descargarPDFNinos}
+                className="btn"
+                style={{ background: '#ef4444', color: 'white' }}
+              >
+                📄 Descargar PDF
+              </button>
+            )}
+          </div>
+
+          {datosNinos && (
+            <div style={{ marginTop: '2rem' }}>
+              <div style={{ 
+                padding: '1.5rem', 
+                background: '#f0f9ff', 
+                borderRadius: '8px',
+                marginBottom: '2rem',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '1rem', color: '#0369a1', marginBottom: '0.5rem' }}>
+                  Total de Niños Activos
+                </div>
+                <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#0284c7' }}>
+                  {datosNinos.totalNinos}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
+                {/* Por Nivel */}
+                {datosNinos.porNivel && datosNinos.porNivel.length > 0 && (
+                  <div>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
+                      Por Nivel
+                    </h3>
+                    {datosNinos.porNivel.map((n: any, idx: number) => (
+                      <div 
+                        key={idx}
+                        style={{ 
+                          padding: '0.75rem',
+                          background: '#f3f4f6',
+                          borderRadius: '6px',
+                          marginBottom: '0.5rem',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span>{n.nivel || 'Sin nivel'}</span>
+                        <span style={{ fontWeight: 'bold' }}>{n.cantidad}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Por Género */}
+                {datosNinos.porGenero && datosNinos.porGenero.length > 0 && (
+                  <div>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
+                      Por Género
+                    </h3>
+                    {datosNinos.porGenero.map((g: any, idx: number) => (
+                      <div 
+                        key={idx}
+                        style={{ 
+                          padding: '0.75rem',
+                          background: '#fce7f3',
+                          borderRadius: '6px',
+                          marginBottom: '0.5rem',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span>{g.genero}</span>
+                        <span style={{ fontWeight: 'bold' }}>{g.cantidad}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Por Edad */}
+                {datosNinos.porEdad && datosNinos.porEdad.length > 0 && (
+                  <div>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
+                      Por Edad
+                    </h3>
+                    {datosNinos.porEdad.map((e: any, idx: number) => (
+                      <div 
+                        key={idx}
+                        style={{ 
+                          padding: '0.75rem',
+                          background: '#fef3c7',
+                          borderRadius: '6px',
+                          marginBottom: '0.5rem',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span>{e.rango_edad}</span>
+                        <span style={{ fontWeight: 'bold' }}>{e.cantidad}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* REPORTE ACTIVIDADES */}
+      {reporteActivo === 'actividades' && (
+        <div className="card">
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
+            Actividades del Mes
+          </h2>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Mes:
+              </label>
+              <select
+                value={mesActividades}
+                onChange={(e) => setMesActividades(parseInt(e.target.value))}
+                className="form-input"
+                style={{ width: '100%' }}
+              >
+                <option value="1">Enero</option>
+                <option value="2">Febrero</option>
+                <option value="3">Marzo</option>
+                <option value="4">Abril</option>
+                <option value="5">Mayo</option>
+                <option value="6">Junio</option>
+                <option value="7">Julio</option>
+                <option value="8">Agosto</option>
+                <option value="9">Septiembre</option>
+                <option value="10">Octubre</option>
+                <option value="11">Noviembre</option>
+                <option value="12">Diciembre</option>
+              </select>
+            </div>
+            
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Año:
+              </label>
+              <input
+                type="number"
+                value={anioActividades}
+                onChange={(e) => setAnioActividades(parseInt(e.target.value))}
+                className="form-input"
+                style={{ width: '100%' }}
+                min="2020"
+                max="2030"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button
+              onClick={generarReporteActividades}
+              disabled={loadingActividades}
+              className="btn btn-primary"
+            >
+              {loadingActividades ? 'Generando...' : '📊 Generar Reporte'}
+            </button>
+
+            {datosActividades && (
+              <button
+                onClick={descargarPDFActividades}
+                className="btn"
+                style={{ background: '#ef4444', color: 'white' }}
+              >
+                📄 Descargar PDF
+              </button>
+            )}
+          </div>
+
+          {datosActividades && (
+            <div style={{ marginTop: '2rem' }}>
+              <div style={{ 
+                padding: '1rem', 
+                background: '#fef3c7', 
+                borderRadius: '8px',
+                marginBottom: '1.5rem',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '1rem', color: '#78350f' }}>Total de Actividades</div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#92400e' }}>
+                  {datosActividades.totalActividades}
+                </div>
+              </div>
+
+              {datosActividades.actividades && datosActividades.actividades.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Título</th>
+                        <th>Descripción</th>
+                        <th>Hora</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {datosActividades.actividades.map((a: any) => (
+                        <tr key={a.id}>
+                          <td>{new Date(a.fecha).toLocaleDateString('es-GT')}</td>
+                          <td>{a.titulo}</td>
+                          <td>{a.descripcion || '-'}</td>
+                          <td>{a.hora || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p style={{ textAlign: 'center', color: '#6b7280', padding: '2rem' }}>
+                  No hay actividades registradas en este período
+                </p>
               )}
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

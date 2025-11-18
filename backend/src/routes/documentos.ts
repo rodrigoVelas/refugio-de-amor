@@ -14,7 +14,7 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
       SELECT d.*, u.nombres as subido_por_nombre, u.apellidos as subido_por_apellidos
       FROM documentos_mensuales d
       LEFT JOIN usuarios u ON d.subido_por = u.id
-      ORDER BY d.mes DESC, d.anio DESC, d.creado_en DESC
+      ORDER BY d.anio DESC, d.mes DESC
     `)
 
     console.log('✅ Encontrados:', rows.length)
@@ -36,8 +36,8 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
     }
 
     const { rows } = await pool.query(`
-      INSERT INTO documentos_mensuales (titulo, descripcion, mes, anio, url, tipo, subido_por, creado_en)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      INSERT INTO documentos_mensuales (titulo, descripcion, mes, anio, url, tipo, subido_por)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `, [titulo, descripcion || null, mes, anio, url || null, tipo || 'pdf', userId])
 

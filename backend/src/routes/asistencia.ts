@@ -13,10 +13,10 @@ r.get('/ping', (req: any, res: any) => {
 r.get('/', authMiddleware, async (req: any, res: any) => {
   try {
     const { rows } = await pool.query(`
-      SELECT a.*, u.nombres as creado_por_nombre, u.apellidos as creado_por_apellidos
+      SELECT a.*, u.nombres as usuario_nombre, u.apellidos as usuario_apellidos
       FROM asistencia a
-      LEFT JOIN usuarios u ON a.creado_por = u.id
-      ORDER BY a.fecha DESC, a.hora DESC
+      LEFT JOIN usuarios u ON a.usuario_id = u.id
+      ORDER BY a.fecha DESC, a.creado_en DESC
     `)
     res.json(rows)
   } catch (error: any) {
@@ -36,7 +36,7 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
     }
 
     const { rows } = await pool.query(`
-      INSERT INTO asistencia (fecha, hora, notas, creado_por, creado_en)
+      INSERT INTO asistencia (fecha, hora, notas, usuario_id, creado_en)
       VALUES ($1, $2, $3, $4, NOW())
       RETURNING *
     `, [fecha, hora || null, notas || null, userId])
@@ -139,7 +139,7 @@ r.get('/:id/export.csv', authMiddleware, async (req: any, res: any) => {
     // Crear CSV
     let csv = 'Código,Nombres,Apellidos,Estado,Observaciones\n'
     rows.forEach(row => {
-      csv += `"${row.codigo}","${row.nombres}","${row.apellidos}","${row.estado}","${row.observaciones || ''}"\n`
+      csv += `"${row.codigo || ''}","${row.nombres || ''}","${row.apellidos || ''}","${row.estado}","${row.observaciones || ''}"\n`
     })
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
@@ -169,10 +169,9 @@ r.get('/:id/export', authMiddleware, async (req: any, res: any) => {
       ORDER BY n.apellidos, n.nombres
     `, [id])
 
-    // Crear CSV
     let csv = 'Código,Nombres,Apellidos,Estado,Observaciones\n'
     rows.forEach(row => {
-      csv += `"${row.codigo}","${row.nombres}","${row.apellidos}","${row.estado}","${row.observaciones || ''}"\n`
+      csv += `"${row.codigo || ''}","${row.nombres || ''}","${row.apellidos || ''}","${row.estado}","${row.observaciones || ''}"\n`
     })
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
