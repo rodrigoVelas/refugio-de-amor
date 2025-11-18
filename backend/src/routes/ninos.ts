@@ -149,78 +149,66 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// POST /ninos - Crear niño
-router.post('/', authMiddleware, requirePerms(['ninos_crear']), async (req: any, res: any) => {
+// POST / - Crear niño
+router.post('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { 
-      nombres, 
-      apellidos, 
-      fecha_nacimiento, 
-      nivel_id, 
-      subnivel_id, 
+    console.log('📝 POST /ninos - Crear niño')
+    console.log('Usuario:', req.user?.email)
+    console.log('Datos recibidos:', req.body)
+    
+    const {
+      codigo,
+      nombres,
+      apellidos,
+      fecha_nacimiento,
+      genero,
+      direccion,
+      telefono_contacto,
+      nivel_id,
+      subnivel_id,
       maestro_id,
-      codigo, 
-      nombre_encargado, 
-      telefono_encargado, 
-      direccion_encargado 
+      foto_url
     } = req.body
 
-    console.log('\n=== POST /ninos ===')
-    console.log('Datos recibidos:')
-    console.log('  - nombres:', nombres)
-    console.log('  - apellidos:', apellidos)
-    console.log('  - maestro_id:', maestro_id)
-    console.log('  - nivel_id:', nivel_id)
-    console.log('  - subnivel_id:', subnivel_id)
-
-    if (!nombres || !apellidos || !fecha_nacimiento || !maestro_id) {
-      console.log('❌ Faltan campos requeridos')
-      return res.status(400).json({ 
-        error: 'Faltan campos requeridos: nombres, apellidos, fecha_nacimiento, maestro_id' 
-      })
+    if (!codigo || !nombres || !apellidos) {
+      return res.status(400).json({ error: 'Código, nombres y apellidos son requeridos' })
     }
 
-    // Verificar que el maestro existe
-    const maestroCheck = await pool.query(
-      'SELECT id, email FROM usuarios WHERE id = $1',
-      [maestro_id]
+    // Verificar si el código ya existe
+    const checkCodigo = await pool.query(
+      'SELECT id FROM ninos WHERE codigo = $1',
+      [codigo]
     )
 
-    if (maestroCheck.rows.length === 0) {
-      console.log('❌ Maestro no existe:', maestro_id)
-      return res.status(400).json({ error: 'El maestro seleccionado no existe' })
+    if (checkCodigo.rows.length > 0) {
+      return res.status(400).json({ error: 'El código ya existe' })
     }
 
-    console.log('✅ Maestro verificado:', maestroCheck.rows[0].email)
-
     const result = await pool.query(
-      `INSERT INTO ninos 
-        (nombres, apellidos, fecha_nacimiento, nivel_id, subnivel_id, maestro_id, 
-         activo, codigo, nombre_encargado, telefono_encargado, direccion_encargado, creado_en)
-      VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, NOW())
+      `INSERT INTO ninos (
+        codigo, nombres, apellidos, fecha_nacimiento, genero, direccion,
+        telefono_contacto, nivel_id, subnivel_id, maestro_id, foto_url, activo
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
       RETURNING *`,
       [
-        nombres, 
-        apellidos, 
-        fecha_nacimiento, 
-        nivel_id || null, 
-        subnivel_id || null, 
-        maestro_id,
-        codigo || null, 
-        nombre_encargado || null, 
-        telefono_encargado || null, 
-        direccion_encargado || null
+        codigo,
+        nombres,
+        apellidos,
+        fecha_nacimiento || null,
+        genero || null,
+        direccion || null,
+        telefono_contacto || null,
+        nivel_id || null,
+        subnivel_id || null,
+        maestro_id || null,
+        foto_url || null
       ]
     )
 
-    console.log('✅ Niño creado exitosamente:')
-    console.log('   - ID:', result.rows[0].id)
-    console.log('   - maestro_id guardado:', result.rows[0].maestro_id)
-    console.log('===================\n')
-
+    console.log('✅ Niño creado exitosamente:', result.rows[0].id)
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
-    console.error('❌ Error al crear niño:', error.message)
+    console.error('❌ Error en POST /ninos:', error)
     res.status(500).json({ error: error.message })
   }
 })
