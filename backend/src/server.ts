@@ -2,7 +2,6 @@
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-import { authMiddleware } from './core/auth_middleware'
 
 // Importar rutas
 import auth from './routes/auth'
@@ -21,23 +20,21 @@ import reportes from './routes/reportes'
 const app = express()
 const PORT = process.env.PORT || 3000
 
-// CORS - Permitir frontend
+// CORS
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:4173',
   'https://refugio-app-crud2.vercel.app',
-  'https://refugio-de-amor.vercel.app', // ← AÑADIDO
+  'https://refugio-de-amor.vercel.app',
   /^https:\/\/refugio-app-crud2-.*\.vercel\.app$/,
-  /^https:\/\/refugio-de-amor-.*\.vercel\.app$/, // ← AÑADIDO
+  /^https:\/\/refugio-de-amor-.*\.vercel\.app$/,
 ]
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Permitir requests sin origin (mobile apps, Postman, etc)
       if (!origin) return callback(null, true)
       
-      // Verificar si el origin está en la lista o coincide con los regex
       const isAllowed = allowedOrigins.some(allowed => {
         if (typeof allowed === 'string') {
           return allowed === origin
@@ -53,17 +50,17 @@ app.use(
       }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 )
 
-// Middlewares globales
+// Middlewares
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(cookieParser())
 
-// Logging de requests
+// Logging
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`)
   next()
@@ -78,13 +75,20 @@ app.get('/', (req, res) => {
   })
 })
 
-// Rutas públicas (sin autenticación)
+app.get('/health', (req, res) => {
+  res.json({ 
+    ok: true, 
+    status: 'healthy',
+    timestamp: new Date().toISOString()
+  })
+})
+
+// ==================== RUTAS ====================
+
+// Rutas públicas
 app.use('/auth', auth)
 
-// Middleware de autenticación para todas las rutas siguientes
-app.use(authMiddleware)
-
-// Rutas protegidas (requieren autenticación)
+// Rutas protegidas (authMiddleware está DENTRO de cada archivo de ruta)
 app.use(perfil)
 app.use('/niveles', niveles)
 app.use('/subniveles', subniveles)
@@ -97,25 +101,29 @@ app.use('/actividades', actividades)
 app.use('/documentos', documentos)
 app.use('/reportes', reportes)
 
-// Manejo de rutas no encontradas
+// 404
 app.use((req, res) => {
-  res.status(404).json({ error: 'Ruta no encontrada' })
+  console.log('❌ 404:', req.method, req.path)
+  res.status(404).json({ 
+    error: 'Ruta no encontrada',
+    path: req.path,
+    method: req.method
+  })
 })
 
-// Manejo de errores global
+// Error handler
 app.use((err: any, req: any, res: any, next: any) => {
-  console.error('❌ Error no manejado:', err)
+  console.error('❌ Error:', err)
   res.status(500).json({ 
     error: 'Error interno del servidor',
     message: err.message 
   })
 })
 
-// Iniciar servidor
+// Start
 app.listen(PORT, () => {
-  console.log(`✅ API lista en http://0.0.0.0:${PORT}`)
+  console.log(`\n✅ API lista en http://0.0.0.0:${PORT}\n`)
   
-  // Verificar variables de entorno críticas
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'super_secreto') {
     console.warn('⚠️  JWT_SECRET no está configurado correctamente')
   }
