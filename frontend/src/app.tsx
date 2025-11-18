@@ -19,10 +19,6 @@ import Actividades from './pages/actividades'
 import Documentos from './pages/documentos'
 import Reportes from './pages/reportes'
 
-
-
-
-
 function RequirePerms({ user, perms, children }: { user: any; perms: string[]; children: any }) {
   if (!can(user, perms)) return <div className="alert">No autorizado</div>
   return children
@@ -34,46 +30,28 @@ export default function App() {
 
   const loadUser = async () => {
     try {
-      // Primero intentar desde localStorage
-      const storedUser = localStorage.getItem('userData')
-      const storedPerms = localStorage.getItem('userPerms')
+      console.log('🔍 Cargando usuario desde /auth/me...')
       
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser)
-          const userPerms = storedPerms ? JSON.parse(storedPerms) : []
-          
-          // Validar que tenga datos mínimos necesarios
-          if (userData && userData.id && userData.email) {
-            console.log('✅ Usuario desde localStorage:', userData)
-            setUser({ ...userData, perms: userPerms })
-            setLoading(false)
-            return
-          } else {
-            console.log('❌ Datos inválidos en localStorage, limpiando...')
-            localStorage.removeItem('userData')
-            localStorage.removeItem('userPerms')
-          }
-        } catch (parseError) {
-          console.error('❌ Error parseando localStorage:', parseError)
-          localStorage.removeItem('userData')
-          localStorage.removeItem('userPerms')
+      const response = await api.me()
+      
+      if (response && response.id) {
+        console.log('✅ Usuario cargado:', response)
+        setUser(response)
+        
+        // Guardar en localStorage
+        localStorage.setItem('userData', JSON.stringify(response))
+        if (response.perms) {
+          localStorage.setItem('userPerms', JSON.stringify(response.perms))
         }
-      }
-      
-      // Si no hay datos válidos en localStorage, intentar desde API
-      console.log('🔍 Intentando cargar usuario desde API...')
-      const u = await api.me()
-      console.log('Usuario desde API:', u)
-      
-      if (u && u.id) {
-        setUser(u)
       } else {
+        console.log('❌ No hay sesión activa')
         setUser(null)
+        localStorage.clear()
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error cargando usuario:', error)
       setUser(null)
+      localStorage.clear()
     } finally {
       setLoading(false)
     }
@@ -102,10 +80,14 @@ export default function App() {
     return <Login onDone={(userData) => {
       console.log('✅ Login completado con datos:', userData)
       
-      // Validar que los datos sean correctos
       if (userData && userData.id && userData.email) {
         setUser(userData)
-        setLoading(false)
+        
+        // Guardar en localStorage
+        localStorage.setItem('userData', JSON.stringify(userData))
+        if (userData.perms) {
+          localStorage.setItem('userPerms', JSON.stringify(userData.perms))
+        }
       } else {
         console.error('❌ Datos de usuario inválidos recibidos del login')
         alert('Error al iniciar sesión. Por favor, intenta de nuevo.')
@@ -185,6 +167,18 @@ export default function App() {
             <Actividades user={user} />
           </RequirePerms>
         } />
+        
+        <Route path="/documentos" element={
+          <RequirePerms user={user} perms={['documentos_ver', 'documentos_subir']}>
+            <Documentos />
+          </RequirePerms>
+        } />
+        
+        <Route path="/reportes" element={
+          <RequirePerms user={user} perms={['ver_reportes']}>
+            <Reportes />
+          </RequirePerms>
+        } />
 
         {/* Rutas de dashboards por rol */}
         <Route path="/directora/dashboard" element={
@@ -210,10 +204,7 @@ export default function App() {
             Página no encontrada
           </div>
         } />
-        <Route path="/documentos" element={<Documentos />} />
-        <Route path="/reportes" element={<Reportes />} />
-
       </Routes>
     </AppLayout>
   )
-}// force v5
+}
