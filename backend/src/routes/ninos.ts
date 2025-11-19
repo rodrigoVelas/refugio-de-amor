@@ -158,25 +158,24 @@ router.post('/', authMiddleware, async (req: any, res: any) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO ninos (
-        codigo, nombres, apellidos, fecha_nacimiento, genero, direccion,
-        telefono_contacto, nivel_id, subnivel_id, maestro_id, activo
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
-      RETURNING *`,
-      [
-        codigo,
-        nombres,
-        apellidos,
-        fecha_nacimiento || null,
-        genero || null,
-        direccion || null,
-        telefono_contacto || null,
-        nivel_id || null,
-        subnivel_id || null,
-        maestro_id || null
-        
-      ]
-    )
+  `INSERT INTO ninos (
+    codigo, nombres, apellidos, fecha_nacimiento, genero, direccion,
+    telefono_contacto, nivel_id, subnivel_id, maestro_id, activo
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+  RETURNING *`,
+  [
+    codigo,
+    nombres,
+    apellidos,
+    fecha_nacimiento || null,
+    genero || null,
+    direccion || null,
+    telefono_contacto || null,
+    nivel_id || null,
+    subnivel_id || null,
+    maestro_id || null
+  ]
+)
 
     console.log('✅ Niño creado:', result.rows[0].id)
     res.json({ ok: true, nino: result.rows[0] })
