@@ -124,7 +124,7 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
 })
 
 // POST / - Crear niño (SIN requirePerms)
-router.post('/', authMiddleware, async (req: any, res: any) => {
+router.post('/', async (req: any, res: any) => {
   try {
     console.log('📝 POST /ninos - Crear niño')
     console.log('Usuario:', req.user?.email)
