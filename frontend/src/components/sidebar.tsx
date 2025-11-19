@@ -19,7 +19,7 @@ export default function Sidebar({ user }: { user: any }) {
     { label: 'Documentos', route: '/documentos', perms: ['*'], icon: '' },
     { label: 'Actividades', route: '/actividades', perms: ['actividades_ver_calendario'], icon: '' },
     // Reportes - solo para directora y contabilidad
-    ...(puedeVerReportes ? [{ label: 'Reportes', route: '/reportes', perms: ['*'], icon: '📊' }] : []),
+    ...(puedeVerReportes ? [{ label: 'Reportes', route: '/reportes', perms: ['*'], icon: '' }] : []),
     { label: 'Usuarios', route: '/admin/usuarios', perms: ['ver_usuarios'], icon: '' },
     // { label: 'Roles', route: '/admin/roles', perms: ['ver_roles'], icon: 'admin_panel_settings' },
   ]
