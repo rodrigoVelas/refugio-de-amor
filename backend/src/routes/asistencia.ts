@@ -13,10 +13,16 @@ r.get('/ping', (req: any, res: any) => {
 r.get('/', authMiddleware, async (req: any, res: any) => {
   try {
     const { rows } = await pool.query(`
-      SELECT a.*, u.nombres as usuario_nombre, u.apellidos as usuario_apellidos
+      SELECT 
+        a.id,
+        a.fecha,
+        a.hora,
+        a.notas,
+        u.nombres as usuario_nombre,
+        u.apellidos as usuario_apellidos
       FROM asistencia a
       LEFT JOIN usuarios u ON a.usuario_id = u.id
-      ORDER BY a.fecha DESC, a.creado_en DESC
+      ORDER BY a.fecha DESC
     `)
     res.json(rows)
   } catch (error: any) {
@@ -36,8 +42,8 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
     }
 
     const { rows } = await pool.query(`
-      INSERT INTO asistencia (fecha, hora, notas, usuario_id, creado_en)
-      VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO asistencia (fecha, hora, notas, usuario_id)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
     `, [fecha, hora || null, notas || null, userId])
 
@@ -151,7 +157,7 @@ r.get('/:id/export.csv', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// GET /:id/export - Alias para export.csv
+// GET /:id/export - Alias
 r.get('/:id/export', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
