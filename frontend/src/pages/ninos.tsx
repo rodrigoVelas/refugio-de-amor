@@ -1,220 +1,188 @@
 import { useState, useEffect } from 'react'
-import { API_URL } from '../config'
+import { useNavigate } from 'react-router-dom'
+import { api } from '../lib/api'
 import Swal from 'sweetalert2'
-
-interface Maestro {
-  id: string
-  nombres: string
-  apellidos: string
-}
-
-interface Nivel {
-  id: string
-  nombre: string
-}
 
 interface Nino {
   id: string
+  codigo: string
   nombres: string
   apellidos: string
-  fecha_nacimiento: string
+  fecha_nacimiento: string | null
+  genero: string | null
+  direccion: string | null
+  telefono_contacto: string | null
   nivel_id: string | null
-  maestro_id: string
-  codigo: string | null
-  nombre_encargado: string | null
-  telefono_encargado: string | null
-  direccion_encargado: string | null
-  maestro_nombre: string
-  maestro_email: string
+  subnivel_id: string | null
+  maestro_id: string | null
   nivel_nombre: string | null
+  subnivel_nombre: string | null
+  colaborador_nombre: string | null
+  colaborador_apellidos: string | null
+  activo: boolean
+}
+
+interface Usuario {
+  id: string
+  email: string
+  nombres: string
+  rol: string
 }
 
 export default function Ninos() {
+  const navigate = useNavigate()
   const [ninos, setNinos] = useState<Nino[]>([])
-  const [maestros, setMaestros] = useState<Maestro[]>([])
-  const [niveles, setNiveles] = useState<Nivel[]>([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  // Búsqueda
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [busqueda, setBusqueda] = useState('')
-
-  // Form state
+  const [mostrarModal, setMostrarModal] = useState(false)
+  
+  // Formulario
+  const [codigo, setCodigo] = useState('')
   const [nombres, setNombres] = useState('')
   const [apellidos, setApellidos] = useState('')
   const [fechaNacimiento, setFechaNacimiento] = useState('')
+  const [genero, setGenero] = useState('')
+  const [direccion, setDireccion] = useState('')
+  const [telefono, setTelefono] = useState('')
   const [nivelId, setNivelId] = useState('')
+  const [subnivelId, setSubnivelId] = useState('')
   const [maestroId, setMaestroId] = useState('')
-  const [codigo, setCodigo] = useState('')
-  const [nombreEncargado, setNombreEncargado] = useState('')
-  const [telefonoEncargado, setTelefonoEncargado] = useState('')
-  const [direccionEncargado, setDireccionEncargado] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  
+  // Datos auxiliares
+  const [niveles, setNiveles] = useState<any[]>([])
+  const [subniveles, setSubniveles] = useState<any[]>([])
+  const [usuarios, setUsuarios] = useState<any[]>([])
 
   useEffect(() => {
     cargarDatos()
+  }, [])
+
+  useEffect(() => {
+    if (busqueda) {
+      const timer = setTimeout(() => cargarNinos(), 500)
+      return () => clearTimeout(timer)
+    } else {
+      cargarNinos()
+    }
   }, [busqueda])
+
+  useEffect(() => {
+    if (nivelId) {
+      cargarSubniveles(nivelId)
+    } else {
+      setSubniveles([])
+      setSubnivelId('')
+    }
+  }, [nivelId])
 
   async function cargarDatos() {
     try {
-      setLoading(true)
-
-      const [maestrosRes, nivRes] = await Promise.all([
-        fetch(`${API_URL}/usuarios`, { credentials: 'include' }),
-        fetch(`${API_URL}/niveles`, { credentials: 'include' })
+      const [ninosData, userData, nivelesData, usuariosData] = await Promise.all([
+        api.ninos_list(),
+        api.me(),
+        api.niveles_list(),
+        api.usuarios_list()
       ])
-
-      if (maestrosRes.ok) setMaestros(await maestrosRes.json())
-      if (nivRes.ok) setNiveles(await nivRes.json())
-
-      const params = new URLSearchParams()
-      if (busqueda.trim()) params.append('buscar', busqueda.trim())
-
-      const ninosUrl = `${API_URL}/ninos?${params.toString()}`
-      const ninosRes = await fetch(ninosUrl, { credentials: 'include' })
       
-      if (ninosRes.ok) {
-        setNinos(await ninosRes.json())
-      }
+      setNinos(ninosData)
+      setUsuario(userData)
+      setNiveles(nivelesData)
+      setUsuarios(usuariosData.filter((u: any) => u.rol === 'colaboradores' || u.rol === 'directora'))
     } catch (error) {
       console.error('Error:', error)
+      Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  function abrirModal(nino?: Nino) {
-    if (nino) {
-      setEditingId(nino.id)
-      setNombres(nino.nombres)
-      setApellidos(nino.apellidos)
-      const fechaSolo = nino.fecha_nacimiento.split('T')[0]
-      setFechaNacimiento(fechaSolo)
-      setNivelId(nino.nivel_id || '')
-      setMaestroId(nino.maestro_id)
-      setCodigo(nino.codigo || '')
-      setNombreEncargado(nino.nombre_encargado || '')
-      setTelefonoEncargado(nino.telefono_encargado || '')
-      setDireccionEncargado(nino.direccion_encargado || '')
-    } else {
-      resetForm()
+  async function cargarNinos() {
+    try {
+      const data = await api.ninos_list(busqueda)
+      setNinos(data)
+    } catch (error) {
+      console.error('Error:', error)
     }
-    setShowModal(true)
   }
 
-  function resetForm() {
-    setEditingId(null)
+  async function cargarSubniveles(nivel_id: string) {
+  try {
+    const data = await api.subniveles_list()  // ✅ Sin parámetro
+    const filtrados = data.filter((s: any) => s.nivel_id === nivel_id)
+    setSubniveles(filtrados)
+  } catch (error) {
+    console.error('Error:', error)
+    setSubniveles([])
+  }
+}
+
+  function handleTelefonoChange(valor: string) {
+    const soloNumeros = valor.replace(/\D/g, '')
+    if (soloNumeros.length <= 8) {
+      setTelefono(soloNumeros)
+    }
+  }
+
+  function abrirModal() {
+    setCodigo('')
     setNombres('')
     setApellidos('')
     setFechaNacimiento('')
+    setGenero('')
+    setDireccion('')
+    setTelefono('')
     setNivelId('')
+    setSubnivelId('')
     setMaestroId('')
-    setCodigo('')
-    setNombreEncargado('')
-    setTelefonoEncargado('')
-    setDireccionEncargado('')
-  }
-
-  function verInfo(nino: Nino) {
-    const edad = calcularEdad(nino.fecha_nacimiento)
-    const infoHTML = `
-      <div style="text-align: left; padding: 1rem;">
-        <p style="margin: 0.5rem 0;"><strong>👤 Nombre:</strong> ${nino.nombres} ${nino.apellidos}</p>
-        <p style="margin: 0.5rem 0;"><strong>🎂 Fecha de Nacimiento:</strong> ${formatearFecha(nino.fecha_nacimiento)}</p>
-        <p style="margin: 0.5rem 0;"><strong>📅 Edad:</strong> ${edad} años</p>
-        ${nino.codigo ? `<p style="margin: 0.5rem 0;"><strong>🔢 Código:</strong> ${nino.codigo}</p>` : ''}
-        <p style="margin: 0.5rem 0;"><strong>👨‍🏫 Maestro/a:</strong> ${nino.maestro_nombre || nino.maestro_email || 'Sin asignar'}</p>
-        ${nino.nivel_nombre ? `<p style="margin: 0.5rem 0;"><strong>📚 Nivel:</strong> ${nino.nivel_nombre}</p>` : ''}
-        ${nino.nombre_encargado ? `<p style="margin: 0.5rem 0;"><strong>👤 Encargado:</strong> ${nino.nombre_encargado}</p>` : ''}
-        ${nino.telefono_encargado ? `<p style="margin: 0.5rem 0;"><strong>📱 Teléfono:</strong> ${nino.telefono_encargado}</p>` : ''}
-        ${nino.direccion_encargado ? `<p style="margin: 0.5rem 0;"><strong>🏠 Dirección:</strong> ${nino.direccion_encargado}</p>` : ''}
-      </div>
-    `
-    
-    Swal.fire({
-      title: 'Información del Niño',
-      html: infoHTML,
-      icon: 'info',
-      confirmButtonText: 'Cerrar',
-      confirmButtonColor: '#3b82f6',
-      width: '500px'
-    })
+    setMostrarModal(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!nombres.trim() || !apellidos.trim() || !fechaNacimiento || !maestroId) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Campos incompletos',
-        text: 'Completa nombres, apellidos, fecha de nacimiento y maestro',
-        confirmButtonColor: '#3b82f6'
-      })
+    if (!codigo.trim() || !nombres.trim() || !apellidos.trim()) {
+      Swal.fire('Error', 'Código, nombres y apellidos son obligatorios', 'error')
       return
     }
 
+    if (telefono && telefono.length !== 8) {
+      Swal.fire('Error', 'El teléfono debe tener exactamente 8 dígitos', 'error')
+      return
+    }
+
+    setGuardando(true)
     try {
-      setSaving(true)
-
-      const data = {
-        nombres,
-        apellidos,
-        fecha_nacimiento: fechaNacimiento,
+      await api.ninos_create({
+        codigo: codigo.trim(),
+        nombres: nombres.trim(),
+        apellidos: apellidos.trim(),
+        fecha_nacimiento: fechaNacimiento || null,
+        genero: genero || null,
+        direccion: direccion.trim() || null,
+        telefono_contacto: telefono || null,
         nivel_id: nivelId || null,
-        subnivel_id: null,
-        maestro_id: maestroId,
-        codigo: codigo || null,
-        nombre_encargado: nombreEncargado || null,
-        telefono_encargado: telefonoEncargado || null,
-        direccion_encargado: direccionEncargado || null
-      }
-
-      const url = editingId ? `${API_URL}/ninos/${editingId}` : `${API_URL}/ninos`
-      const res = await fetch(url, {
-        method: editingId ? 'PUT' : 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        subnivel_id: subnivelId || null,
+        maestro_id: maestroId || null
       })
 
-      if (res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: editingId ? '¡Actualizado!' : '¡Registrado!',
-          timer: 2000,
-          showConfirmButton: false
-        })
-        setShowModal(false)
-        resetForm()
-        cargarDatos()
-      } else {
-        const err = await res.json()
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: err.error,
-          confirmButtonColor: '#3b82f6'
-        })
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al guardar',
-        confirmButtonColor: '#3b82f6'
-      })
+      await Swal.fire('¡Éxito!', 'Niño agregado correctamente', 'success')
+      setMostrarModal(false)
+      cargarNinos()
+    } catch (error: any) {
+      console.error('Error:', error)
+      Swal.fire('Error', error.message || 'No se pudo agregar el niño', 'error')
     } finally {
-      setSaving(false)
+      setGuardando(false)
     }
   }
 
   async function handleEliminar(id: string, nombre: string) {
     const result = await Swal.fire({
+      title: '¿Eliminar niño?',
+      text: `Se eliminará a ${nombre}`,
       icon: 'warning',
-      title: '¿Eliminar?',
-      text: `¿Eliminar a ${nombre}?`,
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
       cancelButtonColor: '#6b7280',
@@ -222,271 +190,163 @@ export default function Ninos() {
       cancelButtonText: 'Cancelar'
     })
 
-    if (!result.isConfirmed) return
-
-    try {
-      const res = await fetch(`${API_URL}/ninos/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
-
-      if (res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: '¡Eliminado!',
-          timer: 2000,
-          showConfirmButton: false
-        })
-        cargarDatos()
-      } else {
-        const err = await res.json()
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: err.error,
-          confirmButtonColor: '#3b82f6'
-        })
+    if (result.isConfirmed) {
+      try {
+        await api.ninos_delete(id)
+        await Swal.fire('¡Eliminado!', 'Niño eliminado correctamente', 'success')
+        cargarNinos()
+      } catch (error: any) {
+        console.error('Error:', error)
+        Swal.fire('Error', 'No se pudo eliminar el niño', 'error')
       }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al eliminar',
-        confirmButtonColor: '#3b82f6'
-      })
     }
   }
 
-  function calcularEdad(fechaNac: string): number {
-    const hoy = new Date()
-    const fechaSolo = fechaNac.split('T')[0]
-    const [año, mes, dia] = fechaSolo.split('-').map(Number)
-    const nac = new Date(año, mes - 1, dia)
-    
-    let edad = hoy.getFullYear() - nac.getFullYear()
-    const m = hoy.getMonth() - nac.getMonth()
-    if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--
-    return edad
-  }
+  const puedeGestionar = usuario?.rol === 'directora'
 
-  function formatearFecha(fecha: string): string {
-    const fechaSolo = fecha.split('T')[0]
-    const [año, mes, dia] = fechaSolo.split('-')
-    return `${dia}/${mes}/${año}`
+  if (loading) {
+    return <div className="loading">Cargando niños...</div>
   }
-
-  function esCumpleañeroDelMes(fechaNac: string): boolean {
-    const hoy = new Date()
-    const fechaSolo = fechaNac.split('T')[0]
-    const [año, mes, dia] = fechaSolo.split('-').map(Number)
-    const nac = new Date(año, mes - 1, dia)
-    return nac.getMonth() === hoy.getMonth()
-  }
-
-  // Filtrar cumpleañeros del mes
-  const cumpleañerosDelMes = ninos
-    .filter(nino => esCumpleañeroDelMes(nino.fecha_nacimiento))
-    .sort((a, b) => {
-      const fechaA = a.fecha_nacimiento.split('T')[0]
-      const fechaB = b.fecha_nacimiento.split('T')[0]
-      const diaA = new Date(fechaA).getDate()
-      const diaB = new Date(fechaB).getDate()
-      return diaA - diaB
-    })
 
   return (
-    <div className="content">
-      <div className="card">
-        <div className="card-header">
-          <h1 className="card-title">Listado Oficial de Niños</h1>
-          <button className="btn" onClick={() => abrirModal()}>
-            Registrar Niño
+    <div style={{ padding: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div>
+          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>👶 Niños</h1>
+          <p style={{ color: '#6b7280' }}>Gestión de niños registrados</p>
+        </div>
+        {puedeGestionar && (
+          <button onClick={abrirModal} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>➕</span>Agregar Niño
           </button>
-        </div>
-
-        {/* Buscador */}
-        <div className="toolbar">
-          <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>
-              🔍
-            </span>
-            <input
-              type="text"
-              className="input"
-              placeholder="Buscar por código, nombre o apellido..."
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              style={{ paddingLeft: '40px' }}
-            />
-          </div>
-          {busqueda && (
-            <button className="btn btn-ghost" onClick={() => setBusqueda('')}>
-              Limpiar
-            </button>
-          )}
-        </div>
-
-        <div className="card-content">
-          {loading ? (
-            <div className="loading">Cargando...</div>
-          ) : ninos.length === 0 ? (
-            <div className="alert" style={{ textAlign: 'center', padding: '2rem' }}>
-              <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
-                {busqueda ? `No se encontraron resultados para "${busqueda}"` : 'No se encontraron los niños'}
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-              {ninos.map(nino => (
-                <div key={nino.id} style={{ padding: '1.25rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                  <h3 style={{ marginBottom: '0.75rem', fontSize: '1.125rem', fontWeight: '500' }}>
-                    {nino.nombres} {nino.apellidos}
-                  </h3>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.6' }}>
-                    <div>🎂 Fecha Nac: {formatearFecha(nino.fecha_nacimiento)}</div>
-                    <div>📅 Edad: {calcularEdad(nino.fecha_nacimiento)} años</div>
-                    {esCumpleañeroDelMes(nino.fecha_nacimiento) && (
-                      <div style={{ color: '#f59e0b', fontWeight: '500', marginTop: '0.25rem' }}>
-                        🎉 ¡Cumpleaños este mes!
-                      </div>
-                    )}
-                    {nino.codigo && <div>🔢 Código: {nino.codigo}</div>}
-                    <div style={{ fontWeight: '500', color: 'var(--text-primary)', marginTop: '0.5rem' }}>
-                      👨‍🏫 Maestro/a: {nino.maestro_nombre || nino.maestro_email || 'Sin asignar'}
-                    </div>
-                    {nino.nivel_nombre && <div>📚 Nivel: {nino.nivel_nombre}</div>}
-                    {nino.nombre_encargado && <div>👤 Encargado: {nino.nombre_encargado}</div>}
-                    {nino.telefono_encargado && <div>📱 Tel: {nino.telefono_encargado}</div>}
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <button className="btn btn-ghost" onClick={() => verInfo(nino)} style={{ flex: '1 1 auto' }}>
-                      Ver Info
-                    </button>
-                    <button className="btn btn-ghost" onClick={() => abrirModal(nino)} style={{ flex: '1 1 auto' }}>
-                      Editar
-                    </button>
-                    <button className="btn btn-danger" onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} style={{ flex: '1 1 auto' }}>
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Sección de Cumpleañeros del Mes */}
-      {!loading && cumpleañerosDelMes.length > 0 && (
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <div className="card-header" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-            <h2 className="card-title" style={{ color: 'white' }}>
-              🎉 Cumpleañeros de {new Date().toLocaleString('es', { month: 'long' }).charAt(0).toUpperCase() + new Date().toLocaleString('es', { month: 'long' }).slice(1)}
-            </h2>
-            <span style={{ background: 'rgba(255,255,255,0.2)', padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.875rem' }}>
-              {cumpleañerosDelMes.length} niño{cumpleañerosDelMes.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <div className="card-content">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-              {cumpleañerosDelMes.map(nino => (
-                <div 
-                  key={nino.id} 
-                  style={{ 
-                    padding: '1rem', 
-                    background: 'var(--surface-elevated)', 
-                    borderRadius: 'var(--radius)', 
-                    border: '1px solid var(--border)'
-                  }}
-                >
-                  <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem', fontWeight: '500' }}>
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="🔍 Buscar por nombre, apellido o código..."
+          className="form-input"
+        />
+      </div>
+
+      {ninos.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p style={{ fontSize: '3rem', marginBottom: '1rem' }}>👶</p>
+          <p style={{ fontSize: '1.25rem', color: '#6b7280' }}>No hay niños registrados</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          {ninos.map((nino) => (
+            <div key={nino.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }}>
                     {nino.nombres} {nino.apellidos}
-                  </h4>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                    <div>🎂 {formatearFecha(nino.fecha_nacimiento)}</div>
-                    <div>📅 Cumple {calcularEdad(nino.fecha_nacimiento) + 1} años</div>
-                    <div style={{ fontWeight: '500', marginTop: '0.25rem', color: '#f59e0b' }}>
-                      🎉 ¡Cumpleaños este mes!
-                    </div>
-                  </div>
+                  </h3>
+                  <span style={{ padding: '0.25rem 0.75rem', background: '#dbeafe', color: '#1e40af', borderRadius: '9999px', fontSize: '0.875rem', fontWeight: '500' }}>
+                    {nino.codigo}
+                  </span>
                 </div>
-              ))}
+                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                  {nino.nivel_nombre && <span>📚 {nino.nivel_nombre}</span>}
+                  {nino.colaborador_nombre && <span>👤 {nino.colaborador_nombre}</span>}
+                  {nino.telefono_contacto && <span>📞 {nino.telefono_contacto}</span>}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => navigate(`/ninos/${nino.id}`)} className="btn" style={{ background: '#3b82f6', color: 'white' }}>Ver</button>
+                {puedeGestionar && (
+                  <button onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} className="btn" style={{ background: '#ef4444', color: 'white' }}>🗑️</button>
+                )}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       )}
 
-      {showModal && (
-        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="modal-header">
-              <h2>{editingId ? 'Editar' : 'Registrar'} Niño</h2>
-              <button className="btn btn-ghost" onClick={() => setShowModal(false)}>✕</button>
+      {mostrarModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, overflow: 'auto' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', overflow: 'auto', margin: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>Agregar Niño</h2>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
             </div>
-            <form onSubmit={handleSubmit} className="form">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <form onSubmit={handleSubmit}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
                 <div>
-                  <label className="label">Nombres*</label>
-                  <input className="input" value={nombres} onChange={e => setNombres(e.target.value)} required />
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Código *</label>
+                  <input type="text" value={codigo} onChange={(e) => setCodigo(e.target.value)} className="form-input" placeholder="N001" required />
                 </div>
                 <div>
-                  <label className="label">Apellidos*</label>
-                  <input className="input" value={apellidos} onChange={e => setApellidos(e.target.value)} required />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="label">Fecha de Nacimiento*</label>
-                  <input type="date" className="input" value={fechaNacimiento} onChange={e => setFechaNacimiento(e.target.value)} required />
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Nombres *</label>
+                  <input type="text" value={nombres} onChange={(e) => setNombres(e.target.value)} className="form-input" required />
                 </div>
                 <div>
-                  <label className="label">Código</label>
-                  <input className="input" value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Opcional" />
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Apellidos *</label>
+                  <input type="text" value={apellidos} onChange={(e) => setApellidos(e.target.value)} className="form-input" required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Fecha de Nacimiento</label>
+                  <input type="date" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} className="form-input" />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Género</label>
+                  <select value={genero} onChange={(e) => setGenero(e.target.value)} className="form-input">
+                    <option value="">Seleccionar...</option>
+                    <option value="Masculino">Masculino</option>
+                    <option value="Femenino">Femenino</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                    Teléfono (8 dígitos) {telefono && `(${telefono.length}/8)`}
+                  </label>
+                  <input
+                    type="text"
+                    value={telefono}
+                    onChange={(e) => handleTelefonoChange(e.target.value)}
+                    className="form-input"
+                    placeholder="12345678"
+                    maxLength={8}
+                    style={{ borderColor: telefono && telefono.length !== 8 && telefono.length > 0 ? '#ef4444' : undefined }}
+                  />
+                  {telefono && telefono.length > 0 && telefono.length !== 8 && (
+                    <p style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.25rem' }}>⚠️ Debe tener 8 dígitos</p>
+                  )}
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Nivel</label>
+                  <select value={nivelId} onChange={(e) => setNivelId(e.target.value)} className="form-input">
+                    <option value="">Seleccionar...</option>
+                    {niveles.map((n) => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Subnivel</label>
+                  <select value={subnivelId} onChange={(e) => setSubnivelId(e.target.value)} className="form-input" disabled={!nivelId}>
+                    <option value="">Seleccionar...</option>
+                    {subniveles.map((s) => (<option key={s.id} value={s.id}>{s.nombre}</option>))}
+                  </select>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Colaborador</label>
+                  <select value={maestroId} onChange={(e) => setMaestroId(e.target.value)} className="form-input">
+                    <option value="">Sin asignar</option>
+                    {usuarios.map((u) => (<option key={u.id} value={u.id}>{u.nombres} {u.apellidos}</option>))}
+                  </select>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Dirección</label>
+                  <textarea value={direccion} onChange={(e) => setDireccion(e.target.value)} className="form-input" rows={2} />
                 </div>
               </div>
-
-              <div>
-                <label className="label">Asignar a Maestro/a*</label>
-                <select className="select" value={maestroId} onChange={e => setMaestroId(e.target.value)} required>
-                  <option value="">-- Selecciona un maestro/a --</option>
-                  {maestros.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.nombres} {m.apellidos || ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Nivel (Opcional)</label>
-                <select className="select" value={nivelId} onChange={e => setNivelId(e.target.value)}>
-                  <option value="">Sin nivel</option>
-                  {niveles.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Nombre del Encargado</label>
-                <input className="input" value={nombreEncargado} onChange={e => setNombreEncargado(e.target.value)} />
-              </div>
-
-              <div>
-                <label className="label">Teléfono del Encargado</label>
-                <input className="input" value={telefonoEncargado} onChange={e => setTelefonoEncargado(e.target.value)} />
-              </div>
-
-              <div>
-                <label className="label">Dirección del Encargado</label>
-                <textarea className="textarea" value={direccionEncargado} onChange={e => setDireccionEncargado(e.target.value)} rows={2} />
-              </div>
-
-              <div className="modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={saving}>
-                  Cancelar
-                </button>
-                <button type="submit" className="btn" disabled={saving}>
-                  {saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar'}
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setMostrarModal(false)} className="btn" disabled={guardando}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={guardando || (telefono.length > 0 && telefono.length !== 8)}>
+                  {guardando ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             </form>
