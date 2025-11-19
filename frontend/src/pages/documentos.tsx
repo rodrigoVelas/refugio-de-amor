@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react'
-import { API_URL } from '../config'
+import { api } from '../lib/api'
 import Swal from 'sweetalert2'
 
 interface Documento {
   id: string
   titulo: string
   descripcion: string | null
-  archivo_nombre: string
-  archivo_tipo: string
-  archivo_size: number
-  archivo_url: string
   mes: number
   anio: number
+  archivo_url: string | null
+  archivo_nombre: string | null
+  archivo_tipo: string | null
+  archivo_size: number | null
   subido_por: string
-  subido_por_nombre: string
+  subido_por_nombre: string | null
+  subido_por_apellidos: string | null
   fecha_subida: string
+  activo: boolean
 }
 
 interface Usuario {
@@ -26,15 +28,17 @@ interface Usuario {
 
 export default function Documentos() {
   const [documentos, setDocumentos] = useState<Documento[]>([])
-  const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [uploading, setUploading] = useState(false)
-
-  // Form state
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [mostrarModal, setMostrarModal] = useState(false)
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [archivo, setArchivo] = useState<File | null>(null)
+  const [mes, setMes] = useState(new Date().getMonth() + 1)
+  const [anio, setAnio] = useState(new Date().getFullYear())
+  const [archivoUrl, setArchivoUrl] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
   useEffect(() => {
     cargarDatos()
@@ -42,404 +46,147 @@ export default function Documentos() {
 
   async function cargarDatos() {
     try {
-      setLoading(true)
-
-      // Obtener usuario actual
-      const userRes = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
-      
-      if (userRes.ok) {
-        const userData = await userRes.json()
-        console.log('👤 Usuario:', userData.email, '| Rol:', userData.rol)
-        setUsuario(userData)
-      }
-
-      // Obtener documentos
-      const res = await fetch(`${API_URL}/documentos`, { credentials: 'include' })
-      
-      if (res.ok) {
-        const data = await res.json()
-        console.log('📄 Documentos:', data.length)
-        setDocumentos(data)
-      }
+      const [docsData, userData] = await Promise.all([api.documentos_list(), api.me()])
+      setDocumentos(docsData)
+      setUsuario(userData)
     } catch (error) {
-      console.error('❌ Error:', error)
+      console.error('Error:', error)
+      Swal.fire('Error', 'No se pudieron cargar los documentos', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  const esDirectora = usuario ? String(usuario.rol).toLowerCase() === 'directora' : false
-
-  function abrirModal() {
-    if (!esDirectora) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Acceso denegado',
-        text: 'Solo la directora puede subir documentos',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
-    setTitulo('')
-    setDescripcion('')
-    setArchivo(null)
-    setShowModal(true)
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-
-    if (!titulo.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Título requerido',
-        confirmButtonColor: '#3b82f6'
-      })
+    if (!titulo.trim() || !mes || !anio) {
+      Swal.fire('Error', 'Título, mes y año son obligatorios', 'error')
       return
     }
-
-    if (!archivo) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Archivo requerido',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
-    if (archivo.size > 10 * 1024 * 1024) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Archivo muy grande',
-        text: 'Máximo 10MB',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
+    setGuardando(true)
     try {
-      setUploading(true)
-
-      const formData = new FormData()
-      formData.append('titulo', titulo.trim())
-      if (descripcion.trim()) formData.append('descripcion', descripcion.trim())
-      formData.append('archivo', archivo)
-
-      console.log('📤 Subiendo:', archivo.name)
-
-      const res = await fetch(`${API_URL}/documentos`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      })
-
-      const data = await res.json()
-
-      if (res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: '¡Subido!',
-          timer: 2000,
-          showConfirmButton: false
-        })
-        setShowModal(false)
-        cargarDatos()
-      } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: data.error,
-          confirmButtonColor: '#3b82f6'
-        })
-      }
-    } catch (error) {
+      await api.documentos_create({ titulo: titulo.trim(), descripcion: descripcion.trim() || null, mes, anio, archivo_url: archivoUrl.trim() || null, archivo_nombre: titulo.trim(), archivo_tipo: 'pdf', archivo_size: null })
+      await Swal.fire('¡Éxito!', 'Documento agregado correctamente', 'success')
+      setTitulo('')
+      setDescripcion('')
+      setMes(new Date().getMonth() + 1)
+      setAnio(new Date().getFullYear())
+      setArchivoUrl('')
+      setMostrarModal(false)
+      cargarDatos()
+    } catch (error: any) {
       console.error('Error:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al subir',
-        confirmButtonColor: '#3b82f6'
-      })
+      Swal.fire('Error', error.message || 'No se pudo agregar el documento', 'error')
     } finally {
-      setUploading(false)
-    }
-  }
-
-  async function verDocumento(doc: Documento) {
-    try {
-      const esPDF = doc.archivo_tipo === 'application/pdf'
-      const esImagen = doc.archivo_tipo.startsWith('image/')
-
-      if (esImagen) {
-        Swal.fire({
-          title: doc.titulo,
-          imageUrl: doc.archivo_url,
-          imageAlt: doc.titulo,
-          width: 800,
-          confirmButtonColor: '#3b82f6',
-          showCloseButton: true
-        })
-      } else {
-        // Abrir en nueva pestaña
-        window.open(doc.archivo_url, '_blank')
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al ver documento',
-        confirmButtonColor: '#3b82f6'
-      })
+      setGuardando(false)
     }
   }
 
   async function handleEliminar(id: string, titulo: string) {
-    if (!esDirectora) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Acceso denegado',
-        text: 'Solo la directora puede eliminar',
-        confirmButtonColor: '#3b82f6'
-      })
-      return
-    }
-
-    const result = await Swal.fire({
-      icon: 'warning',
-      title: '¿Eliminar?',
-      text: `¿Eliminar "${titulo}"?`,
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar'
-    })
-
-    if (!result.isConfirmed) return
-
-    try {
-      const res = await fetch(`${API_URL}/documentos/${id}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      })
-
-      if (res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: '¡Eliminado!',
-          timer: 2000,
-          showConfirmButton: false
-        })
+    const result = await Swal.fire({ title: '¿Eliminar documento?', text: `Se eliminará "${titulo}"`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280', confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar' })
+    if (result.isConfirmed) {
+      try {
+        await api.documentos_delete(id)
+        await Swal.fire('¡Eliminado!', 'Documento eliminado correctamente', 'success')
         cargarDatos()
-      } else {
-        const err = await res.json()
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: err.error,
-          confirmButtonColor: '#3b82f6'
-        })
+      } catch (error: any) {
+        console.error('Error:', error)
+        Swal.fire('Error', 'No se pudo eliminar el documento', 'error')
       }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error al eliminar',
-        confirmButtonColor: '#3b82f6'
-      })
     }
   }
 
-  function getIconoTipo(tipo: string): string {
-    if (tipo === 'application/pdf') return '📄'
-    if (tipo.startsWith('image/')) return '🖼️'
-    if (tipo.includes('word')) return '📝'
-    if (tipo.includes('excel') || tipo.includes('spreadsheet')) return '📊'
-    return '📎'
-  }
+  const puedeGestionar = usuario?.rol === 'directora' || usuario?.rol === 'contabilidad'
 
-  function formatearTamano(bytes: number): string {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
-  }
-
-  function formatearFecha(fecha: string): string {
-    const date = new Date(fecha)
-    return date.toLocaleDateString('es-GT', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) {
-      setArchivo(file)
-    }
-  }
+  if (loading) return <div className="loading">Cargando documentos...</div>
 
   return (
-    <div className="content">
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h1 className="card-title">Documentos</h1>
-            {usuario && (
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                {esDirectora ? '👑 Directora - Puedes subir y eliminar' : '👤 Puedes ver y descargar'}
-              </p>
-            )}
-          </div>
-          {esDirectora ? (
-            <button className="btn" onClick={abrirModal}>
-              Subir Documento
-            </button>
-          ) : (
-            <div style={{ padding: '0.5rem 1rem', background: 'var(--surface-elevated)', borderRadius: '6px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Solo lectura
-            </div>
-          )}
+    <div style={{ padding: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div>
+          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>📄 Documentos Mensuales</h1>
+          <p style={{ color: '#6b7280' }}>Gestión de documentos y reportes mensuales</p>
         </div>
-
-        <div className="card-content">
-          {loading ? (
-            <div className="loading">Cargando...</div>
-          ) : documentos.length === 0 ? (
-            <div className="alert" style={{ textAlign: 'center', padding: '2rem' }}>
-              <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
-                No hay documentos
-              </p>
-              {esDirectora && (
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  Haz clic en "Subir Documento"
-                </p>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-              {documentos.map(doc => (
-                <div key={doc.id} style={{ padding: '1.25rem', background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
-                    <div style={{ fontSize: '2.5rem' }}>
-                      {getIconoTipo(doc.archivo_tipo)}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem', fontWeight: '500' }}>
-                        {doc.titulo}
-                      </h3>
-                      {doc.descripcion && (
-                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                          {doc.descripcion}
-                        </p>
-                      )}
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                        <div>📎 {doc.archivo_nombre}</div>
-                        <div>💾 {formatearTamano(doc.archivo_size)}</div>
-                        <div>📤 {doc.subido_por_nombre}</div>
-                        <div>📅 {formatearFecha(doc.fecha_subida)}</div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <button 
-                      className="btn btn-ghost"
-                      onClick={() => verDocumento(doc)}
-                      style={{ flex: '1 1 auto' }}
-                    >
-                      {doc.archivo_tipo.startsWith('image/') ? 'Ver' : 'Abrir'}
-                    </button>
-                    {esDirectora && (
-                      <button 
-                        className="btn btn-danger" 
-                        onClick={() => handleEliminar(doc.id, doc.titulo)}
-                        style={{ flex: '1 1 auto' }}
-                      >
-                        Eliminar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {puedeGestionar && (
+          <button onClick={() => setMostrarModal(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>➕</span>Agregar Documento
+          </button>
+        )}
       </div>
 
-      {showModal && (
-        <div className="modal-backdrop" onClick={() => !uploading && setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-            <div className="modal-header">
-              <h2>Subir Documento</h2>
-              <button className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={uploading}>✕</button>
-            </div>
-            <form onSubmit={handleSubmit} className="form">
-              <div>
-                <label className="label">Título*</label>
-                <input 
-                  className="input" 
-                  value={titulo} 
-                  onChange={e => setTitulo(e.target.value)} 
-                  placeholder="Nombre del documento"
-                  required
-                  disabled={uploading}
-                />
+      {documentos.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p style={{ fontSize: '3rem', marginBottom: '1rem' }}>📭</p>
+          <p style={{ fontSize: '1.25rem', color: '#6b7280' }}>No hay documentos registrados</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          {documentos.map((doc) => (
+            <div key={doc.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }}>{doc.titulo}</h3>
+                  <span style={{ padding: '0.25rem 0.75rem', background: '#dbeafe', color: '#1e40af', borderRadius: '9999px', fontSize: '0.875rem', fontWeight: '500' }}>
+                    {meses[doc.mes - 1]} {doc.anio}
+                  </span>
+                </div>
+                {doc.descripcion && <p style={{ color: '#6b7280', marginBottom: '0.5rem' }}>{doc.descripcion}</p>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.875rem', color: '#9ca3af' }}>
+                  <span>👤 {doc.subido_por_nombre} {doc.subido_por_apellidos || ''}</span>
+                  <span>📅 {new Date(doc.fecha_subida).toLocaleDateString('es-GT')}</span>
+                </div>
               </div>
-
-              <div>
-                <label className="label">Descripción</label>
-                <textarea 
-                  className="textarea" 
-                  value={descripcion} 
-                  onChange={e => setDescripcion(e.target.value)} 
-                  placeholder="Opcional"
-                  rows={3}
-                  disabled={uploading}
-                />
-              </div>
-
-              <div>
-                <label className="label">Archivo* (máx. 10MB)</label>
-                <input 
-                  type="file"
-                  className="input"
-                  onChange={handleFileChange}
-                  accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt"
-                  required
-                  disabled={uploading}
-                />
-                <small style={{ display: 'block', marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
-                  PDF, Imágenes, Word, Excel, Texto
-                </small>
-                {archivo && (
-                  <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: 'var(--surface-elevated)', borderRadius: '6px', fontSize: '0.875rem' }}>
-                    <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>📎 {archivo.name}</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>💾 {formatearTamano(archivo.size)}</div>
-                  </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {doc.archivo_url && (
+                  <a href={doc.archivo_url} target="_blank" rel="noopener noreferrer" className="btn" style={{ background: '#3b82f6', color: 'white' }}>📥 Ver</a>
+                )}
+                {puedeGestionar && (
+                  <button onClick={() => handleEliminar(doc.id, doc.titulo)} className="btn" style={{ background: '#ef4444', color: 'white' }}>🗑️</button>
                 )}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-              <div className="modal-actions">
-                <button 
-                  type="button" 
-                  className="btn btn-ghost" 
-                  onClick={() => setShowModal(false)}
-                  disabled={uploading}
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn"
-                  disabled={uploading}
-                >
-                  {uploading ? 'Subiendo...' : 'Subir'}
-                </button>
+      {mostrarModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>Agregar Documento</h2>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Título *</label>
+                  <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="form-input" placeholder="Ej: Reporte Mensual de Actividades" required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Descripción</label>
+                  <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="form-input" rows={3} placeholder="Descripción opcional del documento" />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Mes *</label>
+                    <select value={mes} onChange={(e) => setMes(parseInt(e.target.value))} className="form-input" required>
+                      {meses.map((m, idx) => (<option key={idx} value={idx + 1}>{m}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Año *</label>
+                    <input type="number" value={anio} onChange={(e) => setAnio(parseInt(e.target.value))} className="form-input" min="2020" max="2030" required />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>URL del Archivo (opcional)</label>
+                  <input type="url" value={archivoUrl} onChange={(e) => setArchivoUrl(e.target.value)} className="form-input" placeholder="https://ejemplo.com/documento.pdf" />
+                  <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.25rem' }}>Puedes pegar un enlace de Google Drive, Dropbox, etc.</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setMostrarModal(false)} className="btn" disabled={guardando}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </form>
           </div>
