@@ -10,11 +10,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     const userId = req.user.id
     const { q, incluirInactivos } = req.query
 
-    console.log('\n======================================================================')
-    console.log('GET /ninos - Niños')
-    console.log('======================================================================')
-    console.log('Usuario ID:', userId)
-
     // Obtener rol del usuario
     const userQuery = await pool.query(
       'SELECT email, nombres, rol FROM usuarios WHERE id = $1',
@@ -27,8 +22,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
 
     const userData = userQuery.rows[0]
     const esDirectora = userData.rol === 'directora'
-
-    console.log('Rol:', userData.rol, '- Es directora:', esDirectora)
 
     // Construir query
     let query = `
@@ -68,10 +61,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     query += ' ORDER BY n.nombres, n.apellidos'
 
     const result = await pool.query(query, params)
-
-    console.log('Niños encontrados:', result.rows.length)
-    console.log('======================================================================\n')
-
     res.json(result.rows)
   } catch (error: any) {
     console.error('❌ Error en GET /ninos:', error)
@@ -123,11 +112,12 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// POST / - Crear niño (SIN requirePerms)
-router.post('/', async (req: any, res: any) => {
+// POST / - Crear niño (CON VALIDACIÓN DE 8 DÍGITOS)
+router.post('/', authMiddleware, async (req: any, res: any) => {
   try {
     console.log('📝 POST /ninos - Crear niño')
     console.log('Usuario:', req.user?.email)
+    console.log('Datos:', req.body)
     
     const {
       codigo,
@@ -143,8 +133,19 @@ router.post('/', async (req: any, res: any) => {
       foto_url
     } = req.body
 
+    // Validaciones
     if (!codigo || !nombres || !apellidos) {
       return res.status(400).json({ error: 'Código, nombres y apellidos son requeridos' })
+    }
+
+    // VALIDACIÓN: Teléfono debe tener exactamente 8 dígitos
+    if (telefono_contacto) {
+      const telefonoLimpio = telefono_contacto.replace(/\D/g, '') // Quitar no-dígitos
+      if (telefonoLimpio.length !== 8) {
+        return res.status(400).json({ 
+          error: 'El teléfono debe tener exactamente 8 dígitos' 
+        })
+      }
     }
 
     // Verificar si el código ya existe
@@ -191,6 +192,16 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const updates = req.body
+
+    // VALIDACIÓN: Teléfono debe tener exactamente 8 dígitos
+    if (updates.telefono_contacto) {
+      const telefonoLimpio = updates.telefono_contacto.replace(/\D/g, '')
+      if (telefonoLimpio.length !== 8) {
+        return res.status(400).json({ 
+          error: 'El teléfono debe tener exactamente 8 dígitos' 
+        })
+      }
+    }
 
     const allowedFields = [
       'codigo', 'nombres', 'apellidos', 'fecha_nacimiento', 'genero',

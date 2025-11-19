@@ -11,7 +11,7 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
       SELECT f.*, u.nombres as usuario_nombre, u.apellidos as usuario_apellidos
       FROM facturas f
       LEFT JOIN usuarios u ON f.usuario_id = u.id
-      ORDER BY f.fecha DESC
+      ORDER BY f.fecha DESC, f.creado_en DESC
     `)
     res.json(rows)
   } catch (error: any) {
@@ -24,24 +24,23 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
 r.post('/upload', authMiddleware, async (req: any, res: any) => {
   try {
     const userId = req.user?.id
-    const { numero_factura, monto, fecha, descripcion, categoria, imagen_url } = req.body
+    const { descripcion, total, fecha, imagen_path, imagen_mime } = req.body
 
-    if (!monto || !fecha) {
-      return res.status(400).json({ error: 'Monto y fecha son requeridos' })
+    if (!total || !fecha) {
+      return res.status(400).json({ error: 'Total y fecha son requeridos' })
     }
 
     const { rows } = await pool.query(`
-      INSERT INTO facturas (numero_factura, monto, fecha, descripcion, categoria, usuario_id, imagen_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO facturas (usuario_id, descripcion, total, fecha, imagen_path, imagen_mime, creado_en, modificado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
     `, [
-      numero_factura || null,
-      monto,
-      fecha,
-      descripcion || null,
-      categoria || 'egreso',
       userId,
-      imagen_url || null
+      descripcion || null,
+      total,
+      fecha,
+      imagen_path || null,
+      imagen_mime || null
     ])
 
     res.json({ ok: true, factura: rows[0] })
@@ -57,16 +56,16 @@ r.get('/:id/imagen', async (req: any, res: any) => {
     const { id } = req.params
     
     const { rows } = await pool.query(
-      'SELECT imagen_url FROM facturas WHERE id = $1',
+      'SELECT imagen_path FROM facturas WHERE id = $1',
       [id]
     )
 
-    if (rows.length === 0 || !rows[0].imagen_url) {
+    if (rows.length === 0 || !rows[0].imagen_path) {
       return res.status(404).json({ error: 'Imagen no encontrada' })
     }
 
     // Redirigir a la URL de Cloudinary
-    res.redirect(rows[0].imagen_url)
+    res.redirect(rows[0].imagen_path)
   } catch (error: any) {
     console.error('❌ Error en GET /facturas/:id/imagen:', error)
     res.status(500).json({ error: error.message })
@@ -77,21 +76,21 @@ r.get('/:id/imagen', async (req: any, res: any) => {
 r.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
-    const { numero_factura, monto, fecha, descripcion, categoria } = req.body
+    const { descripcion, total, fecha } = req.body
 
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
 
-    if (numero_factura !== undefined) {
-      updates.push(`numero_factura = $${paramIndex}`)
-      values.push(numero_factura)
+    if (descripcion !== undefined) {
+      updates.push(`descripcion = $${paramIndex}`)
+      values.push(descripcion)
       paramIndex++
     }
 
-    if (monto !== undefined) {
-      updates.push(`monto = $${paramIndex}`)
-      values.push(monto)
+    if (total !== undefined) {
+      updates.push(`total = $${paramIndex}`)
+      values.push(total)
       paramIndex++
     }
 
@@ -101,22 +100,11 @@ r.put('/:id', authMiddleware, async (req: any, res: any) => {
       paramIndex++
     }
 
-    if (descripcion !== undefined) {
-      updates.push(`descripcion = $${paramIndex}`)
-      values.push(descripcion)
-      paramIndex++
-    }
-
-    if (categoria !== undefined) {
-      updates.push(`categoria = $${paramIndex}`)
-      values.push(categoria)
-      paramIndex++
-    }
-
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No hay campos para actualizar' })
     }
 
+    updates.push(`modificado_en = NOW()`)
     values.push(id)
 
     const { rows } = await pool.query(

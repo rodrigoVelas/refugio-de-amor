@@ -17,11 +17,10 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
     let query = `
       SELECT 
         f.id,
-        f.numero_factura,
-        f.monto,
-        f.fecha,
         f.descripcion,
-        f.categoria,
+        f.total as monto,
+        f.fecha,
+        f.imagen_path,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as usuario
       FROM facturas f
       LEFT JOIN usuarios u ON f.usuario_id = u.id
@@ -46,21 +45,12 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
 
     const { rows } = await pool.query(query, params)
 
-    // Calcular totales por categoría
-    const ingresos = rows.filter(r => r.categoria === 'ingreso')
-    const egresos = rows.filter(r => r.categoria === 'egreso')
-    
-    const totalIngresos = ingresos.reduce((sum, row) => sum + parseFloat(row.monto || 0), 0)
-    const totalEgresos = egresos.reduce((sum, row) => sum + parseFloat(row.monto || 0), 0)
-    const balance = totalIngresos - totalEgresos
+    // Calcular total
+    const total = rows.reduce((sum, row) => sum + parseFloat(row.monto || 0), 0)
 
     res.json({
       facturas: rows,
-      ingresos: ingresos,
-      egresos: egresos,
-      totalIngresos: totalIngresos.toFixed(2),
-      totalEgresos: totalEgresos.toFixed(2),
-      balance: balance.toFixed(2),
+      total: total.toFixed(2),
       count: rows.length
     })
   } catch (error: any) {
@@ -69,64 +59,9 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// GET /asistencia/datos - Datos de asistencia
-r.get('/asistencia/datos', authMiddleware, async (req: any, res: any) => {
-  try {
-    const { desde, hasta } = req.query
-
-    let query = `
-      SELECT 
-        a.id,
-        a.fecha,
-        a.hora,
-        COUNT(ad.id) as total_ninos,
-        SUM(CASE WHEN ad.presente THEN 1 ELSE 0 END) as presentes,
-        SUM(CASE WHEN NOT ad.presente THEN 1 ELSE 0 END) as ausentes,
-        ROUND(SUM(CASE WHEN ad.presente THEN 1 ELSE 0 END)::numeric * 100.0 / NULLIF(COUNT(ad.id), 0), 2) as porcentaje_asistencia
-      FROM asistencia a
-      LEFT JOIN asistencia_detalles ad ON a.id = ad.asistencia_id
-      WHERE 1=1
-    `
-    const params: any[] = []
-    let paramIndex = 1
-
-    if (desde) {
-      query += ` AND a.fecha >= $${paramIndex}`
-      params.push(desde)
-      paramIndex++
-    }
-
-    if (hasta) {
-      query += ` AND a.fecha <= $${paramIndex}`
-      params.push(hasta)
-      paramIndex++
-    }
-
-    query += ' GROUP BY a.id, a.fecha, a.hora ORDER BY a.fecha DESC, a.hora DESC'
-
-    const { rows } = await pool.query(query, params)
-
-    // Calcular promedios
-    const totalRegistros = rows.length
-    const promedioAsistencia = totalRegistros > 0 
-      ? rows.reduce((sum, r) => sum + parseFloat(r.porcentaje_asistencia || 0), 0) / totalRegistros 
-      : 0
-
-    res.json({
-      registros: rows,
-      totalRegistros: totalRegistros,
-      promedioAsistencia: promedioAsistencia.toFixed(2)
-    })
-  } catch (error: any) {
-    console.error('❌ Error en GET /reportes/asistencia/datos:', error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// GET /ninos - Reporte general de niños (estadísticas)
+// GET /ninos - Reporte general de niños
 r.get('/ninos', authMiddleware, async (req: any, res: any) => {
   try {
-    // Obtener todos los niños activos
     const ninosQuery = await pool.query(`
       SELECT 
         n.id,
@@ -148,7 +83,6 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
       ORDER BY n.apellidos, n.nombres
     `)
 
-    // Estadísticas por nivel
     const nivelStats = await pool.query(`
       SELECT 
         nv.nombre as nivel,
@@ -160,7 +94,6 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
       ORDER BY nv.nombre
     `)
 
-    // Estadísticas por género
     const generoStats = await pool.query(`
       SELECT 
         COALESCE(genero, 'No especificado') as genero,
@@ -170,7 +103,6 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
       GROUP BY genero
     `)
 
-    // Estadísticas por rango de edad
     const edadStats = await pool.query(`
       SELECT 
         CASE 
@@ -241,37 +173,6 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
     })
   } catch (error: any) {
     console.error('❌ Error en GET /reportes/actividades:', error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// GET /ninos-inactivos/datos - Datos de niños inactivos
-r.get('/ninos-inactivos/datos', authMiddleware, async (req: any, res: any) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT 
-        n.id,
-        n.codigo,
-        n.nombres,
-        n.apellidos,
-        n.fecha_nacimiento,
-        n.motivo_inactividad,
-        n.fecha_inactivacion,
-        nv.nombre as nivel_nombre,
-        sn.nombre as subnivel_nombre
-      FROM ninos n
-      LEFT JOIN niveles nv ON n.nivel_id = nv.id
-      LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
-      WHERE n.activo = false
-      ORDER BY n.fecha_inactivacion DESC, n.apellidos, n.nombres
-    `)
-
-    res.json({
-      ninos: rows,
-      total: rows.length
-    })
-  } catch (error: any) {
-    console.error('❌ Error en GET /reportes/ninos-inactivos/datos:', error)
     res.status(500).json({ error: error.message })
   }
 })

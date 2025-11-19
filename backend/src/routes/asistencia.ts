@@ -17,12 +17,13 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
         a.id,
         a.fecha,
         a.hora,
-        a.notas,
+        a.nota,
+        a.estado,
         u.nombres as usuario_nombre,
         u.apellidos as usuario_apellidos
       FROM asistencia a
       LEFT JOIN usuarios u ON a.usuario_id = u.id
-      ORDER BY a.fecha DESC
+      ORDER BY a.fecha DESC, a.creado_en DESC
     `)
     res.json(rows)
   } catch (error: any) {
@@ -34,7 +35,7 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
 // POST / - Crear registro de asistencia
 r.post('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { fecha, hora, notas } = req.body
+    const { fecha, hora, nota, estado, nino_id, subnivel_id, maestro_id } = req.body
     const userId = req.user?.id
 
     if (!fecha) {
@@ -42,10 +43,19 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
     }
 
     const { rows } = await pool.query(`
-      INSERT INTO asistencia (fecha, hora, notas, usuario_id)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO asistencia (fecha, hora, nota, estado, nino_id, subnivel_id, maestro_id, usuario_id, creado_en, modificado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
       RETURNING *
-    `, [fecha, hora || null, notas || null, userId])
+    `, [
+      fecha, 
+      hora || null, 
+      nota || null, 
+      estado || 'pendiente',
+      nino_id || null,
+      subnivel_id || null,
+      maestro_id || null,
+      userId
+    ])
 
     res.json({ ok: true, asistencia: rows[0] })
   } catch (error: any) {
@@ -59,132 +69,81 @@ r.get('/:id/editar', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
 
-    // Obtener registro de asistencia
-    const asistenciaQuery = await pool.query(
+    const { rows } = await pool.query(
       'SELECT * FROM asistencia WHERE id = $1',
       [id]
     )
 
-    if (asistenciaQuery.rows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ error: 'Registro de asistencia no encontrado' })
     }
 
-    // Obtener detalles de asistencia
-    const detallesQuery = await pool.query(`
-      SELECT ad.*, n.nombres as nino_nombres, n.apellidos as nino_apellidos, n.codigo as nino_codigo
-      FROM asistencia_detalles ad
-      LEFT JOIN ninos n ON ad.nino_id = n.id
-      WHERE ad.asistencia_id = $1
-      ORDER BY n.apellidos, n.nombres
-    `, [id])
-
-    res.json({
-      asistencia: asistenciaQuery.rows[0],
-      detalles: detallesQuery.rows
-    })
+    res.json({ asistencia: rows[0] })
   } catch (error: any) {
     console.error('❌ Error en GET /asistencia/:id/editar:', error)
     res.status(500).json({ error: error.message })
   }
 })
 
-// POST /:id/detalles - Guardar detalles de asistencia
-r.post('/:id/detalles', authMiddleware, async (req: any, res: any) => {
+// PUT /:id - Actualizar asistencia
+r.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
-    const { items, fecha, hora } = req.body
+    const { fecha, hora, nota, estado, nino_id } = req.body
 
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ error: 'Items inválidos' })
+    const updates: string[] = []
+    const values: any[] = []
+    let paramIndex = 1
+
+    if (fecha !== undefined) {
+      updates.push(`fecha = $${paramIndex}`)
+      values.push(fecha)
+      paramIndex++
     }
 
-    // Actualizar fecha/hora si se proporcionan
-    if (fecha || hora) {
-      await pool.query(
-        'UPDATE asistencia SET fecha = COALESCE($1, fecha), hora = COALESCE($2, hora) WHERE id = $3',
-        [fecha, hora, id]
-      )
+    if (hora !== undefined) {
+      updates.push(`hora = $${paramIndex}`)
+      values.push(hora)
+      paramIndex++
     }
 
-    // Eliminar detalles existentes
-    await pool.query('DELETE FROM asistencia_detalles WHERE asistencia_id = $1', [id])
-
-    // Insertar nuevos detalles
-    for (const item of items) {
-      await pool.query(`
-        INSERT INTO asistencia_detalles (asistencia_id, nino_id, presente, observaciones)
-        VALUES ($1, $2, $3, $4)
-      `, [id, item.nino_id, item.presente || false, item.observaciones || null])
+    if (nota !== undefined) {
+      updates.push(`nota = $${paramIndex}`)
+      values.push(nota)
+      paramIndex++
     }
 
-    res.json({ ok: true })
+    if (estado !== undefined) {
+      updates.push(`estado = $${paramIndex}`)
+      values.push(estado)
+      paramIndex++
+    }
+
+    if (nino_id !== undefined) {
+      updates.push(`nino_id = $${paramIndex}`)
+      values.push(nino_id)
+      paramIndex++
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' })
+    }
+
+    updates.push(`modificado_en = NOW()`)
+    values.push(id)
+
+    const { rows } = await pool.query(
+      `UPDATE asistencia SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
+    )
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Registro no encontrado' })
+    }
+
+    res.json({ ok: true, asistencia: rows[0] })
   } catch (error: any) {
-    console.error('❌ Error en POST /asistencia/:id/detalles:', error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// GET /:id/export.csv - Exportar a CSV
-r.get('/:id/export.csv', authMiddleware, async (req: any, res: any) => {
-  try {
-    const { id } = req.params
-
-    const { rows } = await pool.query(`
-      SELECT 
-        n.codigo,
-        n.nombres,
-        n.apellidos,
-        CASE WHEN ad.presente THEN 'Presente' ELSE 'Ausente' END as estado,
-        ad.observaciones
-      FROM asistencia_detalles ad
-      LEFT JOIN ninos n ON ad.nino_id = n.id
-      WHERE ad.asistencia_id = $1
-      ORDER BY n.apellidos, n.nombres
-    `, [id])
-
-    // Crear CSV
-    let csv = 'Código,Nombres,Apellidos,Estado,Observaciones\n'
-    rows.forEach(row => {
-      csv += `"${row.codigo || ''}","${row.nombres || ''}","${row.apellidos || ''}","${row.estado}","${row.observaciones || ''}"\n`
-    })
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-    res.setHeader('Content-Disposition', `attachment; filename="asistencia_${id}.csv"`)
-    res.send(csv)
-  } catch (error: any) {
-    console.error('❌ Error en GET /asistencia/:id/export.csv:', error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// GET /:id/export - Alias
-r.get('/:id/export', authMiddleware, async (req: any, res: any) => {
-  try {
-    const { id } = req.params
-
-    const { rows } = await pool.query(`
-      SELECT 
-        n.codigo,
-        n.nombres,
-        n.apellidos,
-        CASE WHEN ad.presente THEN 'Presente' ELSE 'Ausente' END as estado,
-        ad.observaciones
-      FROM asistencia_detalles ad
-      LEFT JOIN ninos n ON ad.nino_id = n.id
-      WHERE ad.asistencia_id = $1
-      ORDER BY n.apellidos, n.nombres
-    `, [id])
-
-    let csv = 'Código,Nombres,Apellidos,Estado,Observaciones\n'
-    rows.forEach(row => {
-      csv += `"${row.codigo || ''}","${row.nombres || ''}","${row.apellidos || ''}","${row.estado}","${row.observaciones || ''}"\n`
-    })
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-    res.setHeader('Content-Disposition', `attachment; filename="asistencia_${id}.csv"`)
-    res.send(csv)
-  } catch (error: any) {
-    console.error('❌ Error en GET /asistencia/:id/export:', error)
+    console.error('❌ Error en PUT /asistencia/:id:', error)
     res.status(500).json({ error: error.message })
   }
 })
@@ -194,10 +153,6 @@ r.delete('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
 
-    // Eliminar detalles primero
-    await pool.query('DELETE FROM asistencia_detalles WHERE asistencia_id = $1', [id])
-
-    // Eliminar registro principal
     const { rows } = await pool.query('DELETE FROM asistencia WHERE id = $1 RETURNING id', [id])
 
     if (rows.length === 0) {
