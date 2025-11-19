@@ -12,6 +12,7 @@ interface Nino {
   genero: string | null
   direccion: string | null
   telefono_contacto: string | null
+  nombre_encargado: string | null
   nivel_id: string | null
   subnivel_id: string | null
   maestro_id: string | null
@@ -45,6 +46,7 @@ export default function Ninos() {
   const [genero, setGenero] = useState('')
   const [direccion, setDireccion] = useState('')
   const [telefono, setTelefono] = useState('')
+  const [nombreEncargado, setNombreEncargado] = useState('')
   const [nivelId, setNivelId] = useState('')
   const [subnivelId, setSubnivelId] = useState('')
   const [maestroId, setMaestroId] = useState('')
@@ -108,15 +110,15 @@ export default function Ninos() {
   }
 
   async function cargarSubniveles(nivel_id: string) {
-  try {
-    const data = await api.subniveles_list()  // ✅ Sin parámetro
-    const filtrados = data.filter((s: any) => s.nivel_id === nivel_id)
-    setSubniveles(filtrados)
-  } catch (error) {
-    console.error('Error:', error)
-    setSubniveles([])
+    try {
+      const data = await api.subniveles_list()
+      const filtrados = data.filter((s: any) => s.nivel_id === nivel_id)
+      setSubniveles(filtrados)
+    } catch (error) {
+      console.error('Error:', error)
+      setSubniveles([])
+    }
   }
-}
 
   function handleTelefonoChange(valor: string) {
     const soloNumeros = valor.replace(/\D/g, '')
@@ -133,6 +135,7 @@ export default function Ninos() {
     setGenero('')
     setDireccion('')
     setTelefono('')
+    setNombreEncargado('')
     setNivelId('')
     setSubnivelId('')
     setMaestroId('')
@@ -162,6 +165,7 @@ export default function Ninos() {
         genero: genero || null,
         direccion: direccion.trim() || null,
         telefono_contacto: telefono || null,
+        nombre_encargado: nombreEncargado.trim() || null,
         nivel_id: nivelId || null,
         subnivel_id: subnivelId || null,
         maestro_id: maestroId || null
@@ -216,8 +220,8 @@ export default function Ninos() {
           <p style={{ color: '#6b7280' }}>Gestión de niños registrados</p>
         </div>
         {puedeGestionar && (
-          <button onClick={abrirModal} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span>➕</span>Agregar Niño
+          <button onClick={abrirModal} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '1rem' }}>
+            <span style={{ fontSize: '1.25rem' }}>➕</span>Agregar Niño
           </button>
         )}
       </div>
@@ -229,6 +233,7 @@ export default function Ninos() {
           onChange={(e) => setBusqueda(e.target.value)}
           placeholder="🔍 Buscar por nombre, apellido o código..."
           className="form-input"
+          style={{ fontSize: '1rem' }}
         />
       </div>
 
@@ -250,10 +255,11 @@ export default function Ninos() {
                     {nino.codigo}
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.875rem', color: '#6b7280', flexWrap: 'wrap' }}>
                   {nino.nivel_nombre && <span>📚 {nino.nivel_nombre}</span>}
                   {nino.colaborador_nombre && <span>👤 {nino.colaborador_nombre}</span>}
                   {nino.telefono_contacto && <span>📞 {nino.telefono_contacto}</span>}
+                  {nino.nombre_encargado && <span>👨‍👩‍👧‍👦 {nino.nombre_encargado}</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -268,85 +274,146 @@ export default function Ninos() {
       )}
 
       {mostrarModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, overflow: 'auto' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', overflow: 'auto', margin: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>Agregar Niño</h2>
-              <button onClick={() => setMostrarModal(false)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '2rem',
+              paddingBottom: '1rem',
+              borderBottom: '2px solid #e5e7eb'
+            }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>
+                ➕ Agregar Nuevo Niño
+              </h2>
+              <button onClick={() => setMostrarModal(false)} style={{ background: '#f3f4f6', border: 'none', width: '36px', height: '36px', borderRadius: '50%', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Código *</label>
-                  <input type="text" value={codigo} onChange={(e) => setCodigo(e.target.value)} className="form-input" placeholder="N001" required />
+              <div style={{ display: 'grid', gap: '1.5rem' }}>
+                {/* Sección: Datos Personales */}
+                <div style={{ background: '#f9fafb', padding: '1.5rem', borderRadius: '8px' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#374151' }}>
+                    📋 Datos Personales
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Código *</label>
+                      <input type="text" value={codigo} onChange={(e) => setCodigo(e.target.value)} className="form-input" placeholder="N001" required style={{ fontSize: '1rem' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Género</label>
+                      <select value={genero} onChange={(e) => setGenero(e.target.value)} className="form-input" style={{ fontSize: '1rem' }}>
+                        <option value="">Seleccionar...</option>
+                        <option value="Masculino">👦 Masculino</option>
+                        <option value="Femenino">👧 Femenino</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Nombres *</label>
+                      <input type="text" value={nombres} onChange={(e) => setNombres(e.target.value)} className="form-input" placeholder="Nombres del niño" required style={{ fontSize: '1rem' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Apellidos *</label>
+                      <input type="text" value={apellidos} onChange={(e) => setApellidos(e.target.value)} className="form-input" placeholder="Apellidos del niño" required style={{ fontSize: '1rem' }} />
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Fecha de Nacimiento</label>
+                      <input type="date" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} className="form-input" style={{ fontSize: '1rem' }} />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Nombres *</label>
-                  <input type="text" value={nombres} onChange={(e) => setNombres(e.target.value)} className="form-input" required />
+
+                {/* Sección: Contacto */}
+                <div style={{ background: '#eff6ff', padding: '1.5rem', borderRadius: '8px' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#1e40af' }}>
+                    📞 Información de Contacto
+                  </h3>
+                  <div style={{ display: 'grid', gap: '1rem' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
+                        Nombre del Encargado
+                      </label>
+                      <input type="text" value={nombreEncargado} onChange={(e) => setNombreEncargado(e.target.value)} className="form-input" placeholder="Nombre completo del padre/madre/encargado" style={{ fontSize: '1rem' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
+                        Teléfono de Contacto (8 dígitos) {telefono && <span style={{ color: telefono.length === 8 ? '#10b981' : '#ef4444' }}>({telefono.length}/8)</span>}
+                      </label>
+                      <input
+                        type="text"
+                        value={telefono}
+                        onChange={(e) => handleTelefonoChange(e.target.value)}
+                        className="form-input"
+                        placeholder="12345678"
+                        maxLength={8}
+                        style={{ 
+                          fontSize: '1rem',
+                          borderColor: telefono && telefono.length !== 8 && telefono.length > 0 ? '#ef4444' : telefono.length === 8 ? '#10b981' : undefined,
+                          borderWidth: telefono.length > 0 ? '2px' : '2px'
+                        }}
+                      />
+                      {telefono && telefono.length > 0 && telefono.length !== 8 && (
+                        <p style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          ⚠️ Debe tener exactamente 8 dígitos
+                        </p>
+                      )}
+                      {telefono.length === 8 && (
+                        <p style={{ fontSize: '0.875rem', color: '#10b981', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          ✅ Teléfono válido
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Dirección</label>
+                      <textarea value={direccion} onChange={(e) => setDireccion(e.target.value)} className="form-input" rows={2} placeholder="Dirección completa" style={{ fontSize: '1rem' }} />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Apellidos *</label>
-                  <input type="text" value={apellidos} onChange={(e) => setApellidos(e.target.value)} className="form-input" required />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Fecha de Nacimiento</label>
-                  <input type="date" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} className="form-input" />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Género</label>
-                  <select value={genero} onChange={(e) => setGenero(e.target.value)} className="form-input">
-                    <option value="">Seleccionar...</option>
-                    <option value="Masculino">Masculino</option>
-                    <option value="Femenino">Femenino</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                    Teléfono (8 dígitos) {telefono && `(${telefono.length}/8)`}
-                  </label>
-                  <input
-                    type="text"
-                    value={telefono}
-                    onChange={(e) => handleTelefonoChange(e.target.value)}
-                    className="form-input"
-                    placeholder="12345678"
-                    maxLength={8}
-                    style={{ borderColor: telefono && telefono.length !== 8 && telefono.length > 0 ? '#ef4444' : undefined }}
-                  />
-                  {telefono && telefono.length > 0 && telefono.length !== 8 && (
-                    <p style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.25rem' }}>⚠️ Debe tener 8 dígitos</p>
-                  )}
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Nivel</label>
-                  <select value={nivelId} onChange={(e) => setNivelId(e.target.value)} className="form-input">
-                    <option value="">Seleccionar...</option>
-                    {niveles.map((n) => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Subnivel</label>
-                  <select value={subnivelId} onChange={(e) => setSubnivelId(e.target.value)} className="form-input" disabled={!nivelId}>
-                    <option value="">Seleccionar...</option>
-                    {subniveles.map((s) => (<option key={s.id} value={s.id}>{s.nombre}</option>))}
-                  </select>
-                </div>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Colaborador</label>
-                  <select value={maestroId} onChange={(e) => setMaestroId(e.target.value)} className="form-input">
-                    <option value="">Sin asignar</option>
-                    {usuarios.map((u) => (<option key={u.id} value={u.id}>{u.nombres} {u.apellidos}</option>))}
-                  </select>
-                </div>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Dirección</label>
-                  <textarea value={direccion} onChange={(e) => setDireccion(e.target.value)} className="form-input" rows={2} />
+
+                {/* Sección: Académico */}
+                <div style={{ background: '#fef3c7', padding: '1.5rem', borderRadius: '8px' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#92400e' }}>
+                    🎓 Información Académica
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Nivel</label>
+                      <select value={nivelId} onChange={(e) => setNivelId(e.target.value)} className="form-input" style={{ fontSize: '1rem' }}>
+                        <option value="">Seleccionar...</option>
+                        {niveles.map((n) => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Subnivel</label>
+                      <select value={subnivelId} onChange={(e) => setSubnivelId(e.target.value)} className="form-input" disabled={!nivelId} style={{ fontSize: '1rem' }}>
+                        <option value="">Seleccionar...</option>
+                        {subniveles.map((s) => (<option key={s.id} value={s.id}>{s.nombre}</option>))}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Colaborador Asignado</label>
+                      <select value={maestroId} onChange={(e) => setMaestroId(e.target.value)} className="form-input" style={{ fontSize: '1rem' }}>
+                        <option value="">Sin asignar</option>
+                        {usuarios.map((u) => (<option key={u.id} value={u.id}>{u.nombres} {u.apellidos}</option>))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setMostrarModal(false)} className="btn" disabled={guardando}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={guardando || (telefono.length > 0 && telefono.length !== 8)}>
-                  {guardando ? 'Guardando...' : 'Guardar'}
+
+              <div style={{ 
+                display: 'flex', 
+                gap: '1rem', 
+                marginTop: '2rem',
+                paddingTop: '1.5rem',
+                borderTop: '2px solid #e5e7eb'
+              }}>
+                <button type="button" onClick={() => setMostrarModal(false)} className="btn" disabled={guardando} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={guardando || (telefono.length > 0 && telefono.length !== 8)} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
+                  {guardando ? '⏳ Guardando...' : '✅ Guardar Niño'}
                 </button>
               </div>
             </form>

@@ -10,7 +10,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     const userId = req.user.id
     const { q, incluirInactivos } = req.query
 
-    // Obtener rol del usuario
     const userQuery = await pool.query(
       'SELECT email, nombres, rol FROM usuarios WHERE id = $1',
       [userId]
@@ -23,7 +22,6 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     const userData = userQuery.rows[0]
     const esDirectora = userData.rol === 'directora'
 
-    // Construir query
     let query = `
       SELECT n.*, 
              nv.nombre as nivel_nombre,
@@ -39,21 +37,18 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
     const params: any[] = []
     let paramIndex = 1
 
-    // Filtro por colaborador (solo si NO es directora)
     if (!esDirectora) {
       query += ` AND n.maestro_id = $${paramIndex}`
       params.push(userId)
       paramIndex++
     }
 
-    // Búsqueda
     if (q) {
       query += ` AND (n.nombres ILIKE $${paramIndex} OR n.apellidos ILIKE $${paramIndex} OR n.codigo ILIKE $${paramIndex})`
       params.push(`%${q}%`)
       paramIndex++
     }
 
-    // Activos/Inactivos
     if (!incluirInactivos || incluirInactivos === 'false') {
       query += ' AND n.activo = true'
     }
@@ -127,28 +122,26 @@ router.post('/', authMiddleware, async (req: any, res: any) => {
       genero,
       direccion,
       telefono_contacto,
+      nombre_encargado,
       nivel_id,
       subnivel_id,
       maestro_id
     } = req.body
 
-    // Validaciones básicas
     if (!codigo || !nombres || !apellidos) {
       return res.status(400).json({ error: 'Código, nombres y apellidos son requeridos' })
     }
 
-    // VALIDACIÓN: Teléfono debe tener exactamente 8 dígitos
     if (telefono_contacto) {
-      const telefonoLimpio = telefono_contacto.replace(/\D/g, '') // Quitar no-dígitos
+      const telefonoLimpio = telefono_contacto.replace(/\D/g, '')
       if (telefonoLimpio.length !== 8) {
-        console.log('❌ Teléfono inválido:', telefono_contacto, '- Longitud:', telefonoLimpio.length)
+        console.log('❌ Teléfono inválido:', telefono_contacto)
         return res.status(400).json({ 
           error: 'El teléfono debe tener exactamente 8 dígitos' 
         })
       }
     }
 
-    // Verificar si el código ya existe
     const checkCodigo = await pool.query(
       'SELECT id FROM ninos WHERE codigo = $1',
       [codigo]
@@ -161,8 +154,8 @@ router.post('/', authMiddleware, async (req: any, res: any) => {
     const result = await pool.query(
       `INSERT INTO ninos (
         codigo, nombres, apellidos, fecha_nacimiento, genero, direccion,
-        telefono_contacto, nivel_id, subnivel_id, maestro_id, activo
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+        telefono_contacto, nombre_encargado, nivel_id, subnivel_id, maestro_id, activo
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
       RETURNING *`,
       [
         codigo,
@@ -172,6 +165,7 @@ router.post('/', authMiddleware, async (req: any, res: any) => {
         genero || null,
         direccion || null,
         telefono_contacto || null,
+        nombre_encargado || null,
         nivel_id || null,
         subnivel_id || null,
         maestro_id || null
@@ -192,7 +186,6 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
     const { id } = req.params
     const updates = req.body
 
-    // VALIDACIÓN: Teléfono debe tener exactamente 8 dígitos
     if (updates.telefono_contacto) {
       const telefonoLimpio = updates.telefono_contacto.replace(/\D/g, '')
       if (telefonoLimpio.length !== 8) {
@@ -204,7 +197,7 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
 
     const allowedFields = [
       'codigo', 'nombres', 'apellidos', 'fecha_nacimiento', 'genero',
-      'direccion', 'telefono_contacto', 'nivel_id', 'subnivel_id',
+      'direccion', 'telefono_contacto', 'nombre_encargado', 'nivel_id', 'subnivel_id',
       'maestro_id', 'activo', 'motivo_inactividad', 'fecha_inactivacion'
     ]
 
