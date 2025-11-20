@@ -4,27 +4,17 @@ import { pool } from '../core/db'
 
 const r = Router()
 
-// GET /ping - Health check
 r.get('/ping', (req: any, res: any) => {
   res.json({ ok: true, message: 'reportes ok' })
 })
 
-// GET /financiero - Reporte financiero
+// GET /financiero
 r.get('/financiero', authMiddleware, async (req: any, res: any) => {
   try {
     const { desde, hasta } = req.query
-
-    console.log('📊 GET /reportes/financiero')
-    console.log('Desde:', desde, 'Hasta:', hasta)
-
     let query = `
-      SELECT 
-        f.id,
-        f.descripcion,
-        f.total,
-        f.fecha,
-        f.imagen_path,
-        u.nombres || ' ' || COALESCE(u.apellidos, '') as usuario_nombre
+      SELECT f.id, f.descripcion, f.total, f.fecha, f.imagen_path,
+             u.nombres || ' ' || COALESCE(u.apellidos, '') as usuario_nombre
       FROM facturas f
       LEFT JOIN usuarios u ON f.usuario_id = u.id
       WHERE 1=1
@@ -37,20 +27,15 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
       params.push(desde)
       paramIndex++
     }
-
     if (hasta) {
       query += ` AND f.fecha <= $${paramIndex}`
       params.push(hasta)
       paramIndex++
     }
-
     query += ' ORDER BY f.fecha DESC'
 
     const { rows } = await pool.query(query, params)
-
     const total = rows.reduce((sum, row) => sum + parseFloat(row.total || 0), 0)
-
-    console.log('✅ Facturas encontradas:', rows.length)
 
     res.json({
       facturas: rows,
@@ -59,17 +44,17 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
       periodo: { desde, hasta }
     })
   } catch (error: any) {
-    console.error('❌ Error en GET /reportes/financiero:', error)
+    console.error('❌ Error /reportes/financiero:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
 
-// GET /ninos - Reporte de niños
+// GET /ninos - CON TUS COLUMNAS EXACTAS
 r.get('/ninos', authMiddleware, async (req: any, res: any) => {
   try {
     console.log('📊 GET /reportes/ninos')
 
-    // Lista completa de niños activos
+    // Query con TUS columnas reales
     const ninosQuery = await pool.query(`
       SELECT 
         n.id,
@@ -78,6 +63,9 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
         n.apellidos,
         n.fecha_nacimiento,
         n.genero,
+        n.direccion,
+        n.telefono_contacto,
+        n.nombre_encargado,
         n.activo,
         CASE 
           WHEN n.fecha_nacimiento IS NOT NULL 
@@ -152,18 +140,17 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
       porEdad: edadStats.rows
     })
   } catch (error: any) {
-    console.error('❌ Error en GET /reportes/ninos:', error)
+    console.error('❌ Error /reportes/ninos:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
 
-// GET /actividades - Reporte de actividades del mes
+// GET /actividades - CON TUS COLUMNAS EXACTAS
 r.get('/actividades', authMiddleware, async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
 
-    console.log('📊 GET /reportes/actividades')
-    console.log('Mes:', mes, 'Año:', anio)
+    console.log('📊 GET /reportes/actividades:', { mes, anio })
 
     if (!mes || !anio) {
       return res.status(400).json({ error: 'Mes y año son requeridos' })
@@ -171,18 +158,19 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
 
     const { rows } = await pool.query(`
       SELECT 
-        a.id,
-        a.titulo,
-        a.descripcion,
-        a.fecha,
-        a.hora,
-        TO_CHAR(a.fecha, 'DD/MM/YYYY') as fecha_formato
-      FROM actividades a
-      WHERE EXTRACT(MONTH FROM a.fecha) = $1
-        AND EXTRACT(YEAR FROM a.fecha) = $2
-      ORDER BY a.fecha ASC, 
-               CASE WHEN a.hora IS NULL THEN 1 ELSE 0 END,
-               a.hora ASC
+        id,
+        titulo,
+        descripcion,
+        fecha,
+        hora,
+        estado,
+        TO_CHAR(fecha, 'DD/MM/YYYY') as fecha_formato
+      FROM actividades
+      WHERE EXTRACT(MONTH FROM fecha) = $1
+        AND EXTRACT(YEAR FROM fecha) = $2
+      ORDER BY fecha ASC, 
+               CASE WHEN hora IS NULL THEN 1 ELSE 0 END,
+               hora ASC
     `, [mes, anio])
 
     console.log('✅ Actividades encontradas:', rows.length)
@@ -194,7 +182,7 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
       anio: parseInt(anio)
     })
   } catch (error: any) {
-    console.error('❌ Error en GET /reportes/actividades:', error)
+    console.error('❌ Error /reportes/actividades:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
