@@ -4,12 +4,11 @@ import { pool } from '../core/db'
 
 const r = Router()
 
-// GET /ping - Health check
 r.get('/ping', (req: any, res: any) => {
   res.json({ ok: true, message: 'reportes ok' })
 })
 
-// GET /financiero - NO SE TOCA, ESTÁ BIEN
+// GET /financiero - NO SE TOCA
 r.get('/financiero', authMiddleware, async (req: any, res: any) => {
   try {
     const { desde, hasta } = req.query

@@ -20,45 +20,50 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// POST /upload - Subir factura (SIN validaciones estrictas)
+// POST /upload - Subir factura
 r.post('/upload', authMiddleware, async (req: any, res: any) => {
   try {
     const userId = req.user?.id
-    const { descripcion, total, fecha, imagen_url } = req.body
+    const { descripcion, total, fecha, imagen_path, imagen_mime } = req.body
 
     console.log('📝 POST /facturas/upload')
-    console.log('Datos:', { descripcion, total, fecha, imagen_url })
+    console.log('Usuario:', req.user?.email)
+    console.log('Datos:', { descripcion, total, fecha, imagen_path, imagen_mime })
 
-    // Solo validar que total y fecha existan
+    // Validación: solo total y fecha son obligatorios
     if (!total || !fecha) {
-      console.log('❌ Falta total o fecha')
+      console.log('❌ Faltan campos obligatorios')
       return res.status(400).json({ error: 'Total y fecha son requeridos' })
     }
 
+    // Insertar con los nombres EXACTOS de tu BD
     const { rows } = await pool.query(`
       INSERT INTO facturas (
         usuario_id, 
         descripcion, 
+        imagen_path, 
+        imagen_mime, 
         total, 
         fecha, 
-        imagen_path, 
         creado_en, 
         modificado_en
       )
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
     `, [
       userId,
       descripcion || 'Sin descripción',
+      imagen_path || null,
+      imagen_mime || null,
       total,
-      fecha,
-      imagen_url || null
+      fecha
     ])
 
     console.log('✅ Factura creada:', rows[0].id)
     res.json({ ok: true, id: rows[0].id, factura: rows[0] })
   } catch (error: any) {
-    console.error('❌ Error en POST /facturas/upload:', error)
+    console.error('❌ Error en POST /facturas/upload:', error.message)
+    console.error('Detail:', error.detail)
     res.status(500).json({ error: error.message })
   }
 })
@@ -77,6 +82,7 @@ r.get('/:id/imagen', async (req: any, res: any) => {
       return res.status(404).json({ error: 'Imagen no encontrada' })
     }
 
+    // Redirigir a Cloudinary
     res.redirect(rows[0].imagen_path)
   } catch (error: any) {
     console.error('❌ Error en GET /facturas/:id/imagen:', error)
