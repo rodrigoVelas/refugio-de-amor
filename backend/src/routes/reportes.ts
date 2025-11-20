@@ -14,7 +14,8 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
   try {
     const { desde, hasta } = req.query
 
-    console.log('📊 Reporte Financiero:', { desde, hasta })
+    console.log('📊 GET /reportes/financiero')
+    console.log('Desde:', desde, 'Hasta:', hasta)
 
     let query = `
       SELECT 
@@ -23,7 +24,6 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
         f.total,
         f.fecha,
         f.imagen_path,
-        f.creado_en,
         u.nombres || ' ' || COALESCE(u.apellidos, '') as usuario_nombre
       FROM facturas f
       LEFT JOIN usuarios u ON f.usuario_id = u.id
@@ -48,14 +48,13 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
 
     const { rows } = await pool.query(query, params)
 
-    console.log('✅ Facturas encontradas:', rows.length)
+    const total = rows.reduce((sum, row) => sum + parseFloat(row.total || 0), 0)
 
-    // Calcular totales
-    const totalGeneral = rows.reduce((sum, row) => sum + parseFloat(row.total || 0), 0)
+    console.log('✅ Facturas encontradas:', rows.length)
 
     res.json({
       facturas: rows,
-      total: totalGeneral.toFixed(2),
+      total: total.toFixed(2),
       count: rows.length,
       periodo: { desde, hasta }
     })
@@ -65,12 +64,12 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// GET /ninos - Reporte de niños con estadísticas
+// GET /ninos - Reporte de niños
 r.get('/ninos', authMiddleware, async (req: any, res: any) => {
   try {
-    console.log('📊 Reporte de Niños')
+    console.log('📊 GET /reportes/ninos')
 
-    // Obtener TODOS los niños activos
+    // Lista completa de niños activos
     const ninosQuery = await pool.query(`
       SELECT 
         n.id,
@@ -79,8 +78,6 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
         n.apellidos,
         n.fecha_nacimiento,
         n.genero,
-        n.direccion,
-        n.telefono_contacto,
         n.activo,
         CASE 
           WHEN n.fecha_nacimiento IS NOT NULL 
@@ -137,11 +134,11 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
       GROUP BY rango_edad
       ORDER BY 
         CASE rango_edad
-          WHEN 'Sin especificar' THEN 5
           WHEN '0-2 años' THEN 1
           WHEN '3-5 años' THEN 2
           WHEN '6-11 años' THEN 3
           WHEN '12+ años' THEN 4
+          ELSE 5
         END
     `)
 
@@ -165,7 +162,8 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
 
-    console.log('📊 Reporte de Actividades:', { mes, anio })
+    console.log('📊 GET /reportes/actividades')
+    console.log('Mes:', mes, 'Año:', anio)
 
     if (!mes || !anio) {
       return res.status(400).json({ error: 'Mes y año son requeridos' })
@@ -178,15 +176,13 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
         a.descripcion,
         a.fecha,
         a.hora,
-        a.ubicacion,
-        TO_CHAR(a.fecha, 'Day') as dia_semana,
-        TO_CHAR(a.fecha, 'DD') as dia_numero,
-        TO_CHAR(a.fecha, 'Month') as mes_nombre,
         TO_CHAR(a.fecha, 'DD/MM/YYYY') as fecha_formato
       FROM actividades a
       WHERE EXTRACT(MONTH FROM a.fecha) = $1
         AND EXTRACT(YEAR FROM a.fecha) = $2
-      ORDER BY a.fecha ASC, a.hora ASC
+      ORDER BY a.fecha ASC, 
+               CASE WHEN a.hora IS NULL THEN 1 ELSE 0 END,
+               a.hora ASC
     `, [mes, anio])
 
     console.log('✅ Actividades encontradas:', rows.length)

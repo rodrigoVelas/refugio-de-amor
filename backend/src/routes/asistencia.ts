@@ -35,35 +35,48 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
 // POST / - Crear registro de asistencia
 r.post('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { fecha, hora, nota, estado, nino_id, subnivel_id, maestro_id } = req.body
+    const { fecha, hora, notas, estado, nino_id, subnivel_id, maestro_id } = req.body
     const userId = req.user?.id
 
     if (!fecha) {
       return res.status(400).json({ error: 'La fecha es requerida' })
     }
 
+    console.log('📝 POST /asistencia - Datos:', { fecha, hora, notas, userId })
+
     const { rows } = await pool.query(`
-      INSERT INTO asistencia (fecha, hora, nota, estado, nino_id, subnivel_id, maestro_id, usuario_id, creado_en, modificado_en)
+      INSERT INTO asistencia (
+        fecha, 
+        hora, 
+        nota, 
+        estado, 
+        nino_id, 
+        subnivel_id, 
+        maestro_id, 
+        usuario_id, 
+        creado_en, 
+        modificado_en
+      )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
       RETURNING *
     `, [
       fecha, 
       hora || null, 
-      nota || null, 
+      notas || null, 
       estado || 'pendiente',
       nino_id || null,
       subnivel_id || null,
-      maestro_id || null,
+      maestro_id || userId, // Usar userId si no viene maestro_id
       userId
     ])
 
+    console.log('✅ Asistencia creada:', rows[0].id)
     res.json({ ok: true, asistencia: rows[0] })
   } catch (error: any) {
     console.error('❌ Error en POST /asistencia:', error)
     res.status(500).json({ error: error.message })
   }
 })
-
 // GET /:id/editar - Obtener datos para editar
 r.get('/:id/editar', authMiddleware, async (req: any, res: any) => {
   try {
