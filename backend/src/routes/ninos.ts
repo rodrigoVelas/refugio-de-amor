@@ -63,11 +63,14 @@ router.get('/', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// GET /:id - Obtener un niño
+// GET /:id - Obtener detalle de un niño (PARA POPUP Y EDITAR)
 router.get('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const userId = req.user.id
+
+    console.log('📋 GET /ninos/:id - Ver detalle')
+    console.log('Niño ID:', id)
 
     const userQuery = await pool.query(
       'SELECT rol FROM usuarios WHERE id = $1',
@@ -76,11 +79,16 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
     const esDirectora = userQuery.rows[0]?.rol === 'directora'
 
     let query = `
-      SELECT n.*, 
-             nv.nombre as nivel_nombre,
-             sn.nombre as subnivel_nombre,
-             u.nombres as colaborador_nombre,
-             u.apellidos as colaborador_apellidos
+      SELECT 
+        n.*,
+        CASE 
+          WHEN n.fecha_nacimiento IS NOT NULL 
+          THEN EXTRACT(YEAR FROM AGE(n.fecha_nacimiento))
+          ELSE NULL
+        END as edad,
+        nv.nombre as nivel_nombre,
+        sn.nombre as subnivel_nombre,
+        u.nombres || ' ' || COALESCE(u.apellidos, '') as colaborador_nombre
       FROM ninos n
       LEFT JOIN niveles nv ON n.nivel_id = nv.id
       LEFT JOIN subniveles sn ON n.subnivel_id = sn.id
@@ -100,6 +108,7 @@ router.get('/:id', authMiddleware, async (req: any, res: any) => {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
+    console.log('✅ Niño encontrado:', result.rows[0].nombres)
     res.json(result.rows[0])
   } catch (error: any) {
     console.error('❌ Error en GET /ninos/:id:', error)
@@ -179,12 +188,15 @@ router.post('/', authMiddleware, async (req: any, res: any) => {
     res.status(500).json({ error: error.message })
   }
 })
-
 // PUT /:id - Actualizar niño
 router.put('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
     const updates = req.body
+
+    console.log('✏️ PUT /ninos/:id - Actualizar niño')
+    console.log('Niño ID:', id)
+    console.log('Datos a actualizar:', updates)
 
     if (updates.telefono_contacto) {
       const telefonoLimpio = updates.telefono_contacto.replace(/\D/g, '')
@@ -232,6 +244,7 @@ router.put('/:id', authMiddleware, async (req: any, res: any) => {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
+    console.log('✅ Niño actualizado:', result.rows[0].id)
     res.json({ ok: true, nino: result.rows[0] })
   } catch (error: any) {
     console.error('❌ Error en PUT /ninos/:id:', error)
@@ -244,12 +257,16 @@ router.delete('/:id', authMiddleware, async (req: any, res: any) => {
   try {
     const { id } = req.params
 
+    console.log('🗑️ DELETE /ninos/:id')
+    console.log('Niño ID:', id)
+
     const result = await pool.query('DELETE FROM ninos WHERE id = $1 RETURNING id', [id])
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Niño no encontrado' })
     }
 
+    console.log('✅ Niño eliminado:', id)
     res.json({ ok: true })
   } catch (error: any) {
     console.error('❌ Error en DELETE /ninos/:id:', error)

@@ -20,30 +20,43 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// POST /upload - Subir factura
+// POST /upload - Subir factura (SIN validaciones estrictas)
 r.post('/upload', authMiddleware, async (req: any, res: any) => {
   try {
     const userId = req.user?.id
-    const { descripcion, total, fecha, imagen_path, imagen_mime } = req.body
+    const { descripcion, total, fecha, imagen_url } = req.body
 
+    console.log('📝 POST /facturas/upload')
+    console.log('Datos:', { descripcion, total, fecha, imagen_url })
+
+    // Solo validar que total y fecha existan
     if (!total || !fecha) {
+      console.log('❌ Falta total o fecha')
       return res.status(400).json({ error: 'Total y fecha son requeridos' })
     }
 
     const { rows } = await pool.query(`
-      INSERT INTO facturas (usuario_id, descripcion, total, fecha, imagen_path, imagen_mime, creado_en, modificado_en)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      INSERT INTO facturas (
+        usuario_id, 
+        descripcion, 
+        total, 
+        fecha, 
+        imagen_path, 
+        creado_en, 
+        modificado_en
+      )
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
       RETURNING *
     `, [
       userId,
-      descripcion || null,
+      descripcion || 'Sin descripción',
       total,
       fecha,
-      imagen_path || null,
-      imagen_mime || null
+      imagen_url || null
     ])
 
-    res.json({ ok: true, factura: rows[0] })
+    console.log('✅ Factura creada:', rows[0].id)
+    res.json({ ok: true, id: rows[0].id, factura: rows[0] })
   } catch (error: any) {
     console.error('❌ Error en POST /facturas/upload:', error)
     res.status(500).json({ error: error.message })
@@ -64,7 +77,6 @@ r.get('/:id/imagen', async (req: any, res: any) => {
       return res.status(404).json({ error: 'Imagen no encontrada' })
     }
 
-    // Redirigir a la URL de Cloudinary
     res.redirect(rows[0].imagen_path)
   } catch (error: any) {
     console.error('❌ Error en GET /facturas/:id/imagen:', error)

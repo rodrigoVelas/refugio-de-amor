@@ -58,10 +58,10 @@ r.get('/financiero', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// GET /ninos - SOLO LOS DATOS QUE PEDISTE
+// GET /ninos - LISTADO OFICIAL
 r.get('/ninos', authMiddleware, async (req: any, res: any) => {
   try {
-    console.log('📊 GET /reportes/ninos - Listado oficial')
+    console.log('📊 GET /reportes/ninos')
 
     const { rows } = await pool.query(`
       SELECT 
@@ -83,19 +83,20 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
       ORDER BY n.apellidos, n.nombres
     `)
 
-    console.log('✅ Total niños activos:', rows.length)
+    console.log('✅ Niños encontrados:', rows.length)
 
     res.json({
       ninos: rows,
       totalNinos: rows.length
     })
   } catch (error: any) {
-    console.error('❌ Error en GET /reportes/ninos:', error)
+    console.error('❌ Error /reportes/ninos:', error.message)
+    console.error('Stack:', error.stack)
     res.status(500).json({ error: error.message })
   }
 })
 
-// GET /actividades - SOLO LOS DATOS QUE PEDISTE
+// GET /actividades - CALENDARIO MENSUAL
 r.get('/actividades', authMiddleware, async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
@@ -103,7 +104,7 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
     console.log('📊 GET /reportes/actividades:', { mes, anio })
 
     if (!mes || !anio) {
-      return res.status(400).json({ error: 'Mes y año son requeridos' })
+      return res.status(400).json({ error: 'Mes y año requeridos' })
     }
 
     const { rows } = await pool.query(`
@@ -127,7 +128,8 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
       anio: parseInt(anio)
     })
   } catch (error: any) {
-    console.error('❌ Error en GET /reportes/actividades:', error)
+    console.error('❌ Error /reportes/actividades:', error.message)
+    console.error('Stack:', error.stack)
     res.status(500).json({ error: error.message })
   }
 })

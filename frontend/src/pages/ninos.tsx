@@ -9,6 +9,7 @@ interface Nino {
   nombres: string
   apellidos: string
   fecha_nacimiento: string | null
+  edad: number | null
   genero: string | null
   direccion: string | null
   telefono_contacto: string | null
@@ -19,7 +20,6 @@ interface Nino {
   nivel_nombre: string | null
   subnivel_nombre: string | null
   colaborador_nombre: string | null
-  colaborador_apellidos: string | null
   activo: boolean
 }
 
@@ -36,7 +36,15 @@ export default function Ninos() {
   const [loading, setLoading] = useState(true)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [busqueda, setBusqueda] = useState('')
+  
+  // Modal crear/editar
   const [mostrarModal, setMostrarModal] = useState(false)
+  const [modoEditar, setModoEditar] = useState(false)
+  const [ninoEditando, setNinoEditando] = useState<string | null>(null)
+  
+  // Modal ver detalle
+  const [mostrarDetalle, setMostrarDetalle] = useState(false)
+  const [ninoDetalle, setNinoDetalle] = useState<Nino | null>(null)
   
   // Formulario
   const [codigo, setCodigo] = useState('')
@@ -127,7 +135,49 @@ export default function Ninos() {
     }
   }
 
-  function abrirModal() {
+  function abrirModalCrear() {
+    setModoEditar(false)
+    setNinoEditando(null)
+    resetearFormulario()
+    setMostrarModal(true)
+  }
+
+  async function abrirModalEditar(id: string) {
+    try {
+      const nino = await api.ninos_get(id)
+      
+      setModoEditar(true)
+      setNinoEditando(id)
+      setCodigo(nino.codigo)
+      setNombres(nino.nombres)
+      setApellidos(nino.apellidos)
+      setFechaNacimiento(nino.fecha_nacimiento || '')
+      setGenero(nino.genero || '')
+      setDireccion(nino.direccion || '')
+      setTelefono(nino.telefono_contacto || '')
+      setNombreEncargado(nino.nombre_encargado || '')
+      setNivelId(nino.nivel_id || '')
+      setSubnivelId(nino.subnivel_id || '')
+      setMaestroId(nino.maestro_id || '')
+      setMostrarModal(true)
+    } catch (error: any) {
+      console.error('Error:', error)
+      Swal.fire('Error', 'No se pudo cargar los datos del niño', 'error')
+    }
+  }
+
+  async function verDetalle(id: string) {
+    try {
+      const nino = await api.ninos_get(id)
+      setNinoDetalle(nino)
+      setMostrarDetalle(true)
+    } catch (error: any) {
+      console.error('Error:', error)
+      Swal.fire('Error', 'No se pudo cargar el detalle', 'error')
+    }
+  }
+
+  function resetearFormulario() {
     setCodigo('')
     setNombres('')
     setApellidos('')
@@ -139,7 +189,6 @@ export default function Ninos() {
     setNivelId('')
     setSubnivelId('')
     setMaestroId('')
-    setMostrarModal(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -157,7 +206,7 @@ export default function Ninos() {
 
     setGuardando(true)
     try {
-      await api.ninos_create({
+      const datos = {
         codigo: codigo.trim(),
         nombres: nombres.trim(),
         apellidos: apellidos.trim(),
@@ -169,14 +218,21 @@ export default function Ninos() {
         nivel_id: nivelId || null,
         subnivel_id: subnivelId || null,
         maestro_id: maestroId || null
-      })
+      }
 
-      await Swal.fire('¡Éxito!', 'Niño agregado correctamente', 'success')
+      if (modoEditar && ninoEditando) {
+        await api.ninos_update(ninoEditando, datos)
+        await Swal.fire('¡Éxito!', 'Niño actualizado correctamente', 'success')
+      } else {
+        await api.ninos_create(datos)
+        await Swal.fire('¡Éxito!', 'Niño agregado correctamente', 'success')
+      }
+
       setMostrarModal(false)
       cargarNinos()
     } catch (error: any) {
       console.error('Error:', error)
-      Swal.fire('Error', error.message || 'No se pudo agregar el niño', 'error')
+      Swal.fire('Error', error.message || 'No se pudo guardar el niño', 'error')
     } finally {
       setGuardando(false)
     }
@@ -220,7 +276,7 @@ export default function Ninos() {
           <p style={{ color: '#6b7280' }}>Gestión de niños registrados</p>
         </div>
         {puedeGestionar && (
-          <button onClick={abrirModal} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '1rem' }}>
+          <button onClick={abrirModalCrear} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '1rem' }}>
             <span style={{ fontSize: '1.25rem' }}>➕</span>Agregar Niño
           </button>
         )}
@@ -263,9 +319,12 @@ export default function Ninos() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => navigate(`/ninos/${nino.id}`)} className="btn" style={{ background: '#3b82f6', color: 'white' }}>Ver</button>
+                <button onClick={() => verDetalle(nino.id)} className="btn" style={{ background: '#3b82f6', color: 'white' }}>👁️ Ver</button>
                 {puedeGestionar && (
-                  <button onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} className="btn" style={{ background: '#ef4444', color: 'white' }}>🗑️</button>
+                  <>
+                    <button onClick={() => abrirModalEditar(nino.id)} className="btn" style={{ background: '#10b981', color: 'white' }}>✏️ Editar</button>
+                    <button onClick={() => handleEliminar(nino.id, `${nino.nombres} ${nino.apellidos}`)} className="btn" style={{ background: '#ef4444', color: 'white' }}>🗑️</button>
+                  </>
                 )}
               </div>
             </div>
@@ -273,29 +332,71 @@ export default function Ninos() {
         </div>
       )}
 
+      {/* MODAL VER DETALLE */}
+      {mostrarDetalle && ninoDetalle && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '2px solid #e5e7eb' }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>
+                👶 {ninoDetalle.nombres} {ninoDetalle.apellidos}
+              </h2>
+              <button onClick={() => setMostrarDetalle(false)} style={{ background: '#f3f4f6', border: 'none', width: '36px', height: '36px', borderRadius: '50%', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'grid', gap: '1.5rem' }}>
+              <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#374151' }}>📋 Información Personal</h3>
+                <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.875rem' }}>
+                  <div><span style={{ fontWeight: '600' }}>Código:</span> {ninoDetalle.codigo}</div>
+                  <div><span style={{ fontWeight: '600' }}>Edad:</span> {ninoDetalle.edad ? `${ninoDetalle.edad} años` : 'No especificada'}</div>
+                  <div><span style={{ fontWeight: '600' }}>Género:</span> {ninoDetalle.genero || 'No especificado'}</div>
+                  <div><span style={{ fontWeight: '600' }}>Fecha de Nacimiento:</span> {ninoDetalle.fecha_nacimiento ? new Date(ninoDetalle.fecha_nacimiento).toLocaleDateString('es-GT') : 'No especificada'}</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#1e40af' }}>👨‍👩‍👧‍👦 Información del Encargado</h3>
+                <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.875rem' }}>
+                  <div><span style={{ fontWeight: '600' }}>Nombre:</span> {ninoDetalle.nombre_encargado || 'No especificado'}</div>
+                  <div><span style={{ fontWeight: '600' }}>Teléfono:</span> {ninoDetalle.telefono_contacto || 'No especificado'}</div>
+                  <div><span style={{ fontWeight: '600' }}>Dirección:</span> {ninoDetalle.direccion || 'No especificada'}</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#92400e' }}>🎓 Información Académica</h3>
+                <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.875rem' }}>
+                  <div><span style={{ fontWeight: '600' }}>Nivel:</span> {ninoDetalle.nivel_nombre || 'Sin nivel'}</div>
+                  <div><span style={{ fontWeight: '600' }}>Subnivel:</span> {ninoDetalle.subnivel_nombre || 'Sin subnivel'}</div>
+                  <div><span style={{ fontWeight: '600' }}>Colaborador:</span> {ninoDetalle.colaborador_nombre || 'Sin asignar'}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '2px solid #e5e7eb' }}>
+              <button onClick={() => setMostrarDetalle(false)} className="btn" style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CREAR/EDITAR */}
       {mostrarModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div className="card" style={{ width: '100%', maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              marginBottom: '2rem',
-              paddingBottom: '1rem',
-              borderBottom: '2px solid #e5e7eb'
-            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '2px solid #e5e7eb' }}>
               <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0, color: '#1f2937' }}>
-                ➕ Agregar Nuevo Niño
+                {modoEditar ? '✏️ Editar Niño' : '➕ Agregar Nuevo Niño'}
               </h2>
-              <button onClick={() => setMostrarModal(false)} style={{ background: '#f3f4f6', border: 'none', width: '36px', height: '36px', borderRadius: '50%', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+              <button onClick={() => setMostrarModal(false)} style={{ background: '#f3f4f6', border: 'none', width: '36px', height: '36px', borderRadius: '50%', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div style={{ display: 'grid', gap: '1.5rem' }}>
                 {/* Sección: Datos Personales */}
                 <div style={{ background: '#f9fafb', padding: '1.5rem', borderRadius: '8px' }}>
-                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#374151' }}>
-                    📋 Datos Personales
-                  </h3>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#374151' }}>📋 Datos Personales</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Código *</label>
@@ -311,11 +412,11 @@ export default function Ninos() {
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Nombres *</label>
-                      <input type="text" value={nombres} onChange={(e) => setNombres(e.target.value)} className="form-input" placeholder="Nombres del niño" required style={{ fontSize: '1rem' }} />
+                      <input type="text" value={nombres} onChange={(e) => setNombres(e.target.value)} className="form-input" placeholder="Nombres" required style={{ fontSize: '1rem' }} />
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Apellidos *</label>
-                      <input type="text" value={apellidos} onChange={(e) => setApellidos(e.target.value)} className="form-input" placeholder="Apellidos del niño" required style={{ fontSize: '1rem' }} />
+                      <input type="text" value={apellidos} onChange={(e) => setApellidos(e.target.value)} className="form-input" placeholder="Apellidos" required style={{ fontSize: '1rem' }} />
                     </div>
                     <div style={{ gridColumn: 'span 2' }}>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Fecha de Nacimiento</label>
@@ -326,19 +427,15 @@ export default function Ninos() {
 
                 {/* Sección: Contacto */}
                 <div style={{ background: '#eff6ff', padding: '1.5rem', borderRadius: '8px' }}>
-                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#1e40af' }}>
-                    📞 Información de Contacto
-                  </h3>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#1e40af' }}>📞 Información de Contacto</h3>
                   <div style={{ display: 'grid', gap: '1rem' }}>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
-                        Nombre del Encargado
-                      </label>
-                      <input type="text" value={nombreEncargado} onChange={(e) => setNombreEncargado(e.target.value)} className="form-input" placeholder="Nombre completo del padre/madre/encargado" style={{ fontSize: '1rem' }} />
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Nombre del Encargado</label>
+                      <input type="text" value={nombreEncargado} onChange={(e) => setNombreEncargado(e.target.value)} className="form-input" placeholder="Nombre completo" style={{ fontSize: '1rem' }} />
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
-                        Teléfono de Contacto (8 dígitos) {telefono && <span style={{ color: telefono.length === 8 ? '#10b981' : '#ef4444' }}>({telefono.length}/8)</span>}
+                        Teléfono (8 dígitos) {telefono && <span style={{ color: telefono.length === 8 ? '#10b981' : '#ef4444' }}>({telefono.length}/8)</span>}
                       </label>
                       <input
                         type="text"
@@ -347,21 +444,13 @@ export default function Ninos() {
                         className="form-input"
                         placeholder="12345678"
                         maxLength={8}
-                        style={{ 
-                          fontSize: '1rem',
-                          borderColor: telefono && telefono.length !== 8 && telefono.length > 0 ? '#ef4444' : telefono.length === 8 ? '#10b981' : undefined,
-                          borderWidth: telefono.length > 0 ? '2px' : '2px'
-                        }}
+                        style={{ fontSize: '1rem', borderColor: telefono && telefono.length !== 8 && telefono.length > 0 ? '#ef4444' : telefono.length === 8 ? '#10b981' : undefined, borderWidth: '2px' }}
                       />
                       {telefono && telefono.length > 0 && telefono.length !== 8 && (
-                        <p style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          ⚠️ Debe tener exactamente 8 dígitos
-                        </p>
+                        <p style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.5rem' }}>⚠️ Debe tener 8 dígitos</p>
                       )}
                       {telefono.length === 8 && (
-                        <p style={{ fontSize: '0.875rem', color: '#10b981', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          ✅ Teléfono válido
-                        </p>
+                        <p style={{ fontSize: '0.875rem', color: '#10b981', marginTop: '0.5rem' }}>✅ Teléfono válido</p>
                       )}
                     </div>
                     <div>
@@ -373,9 +462,7 @@ export default function Ninos() {
 
                 {/* Sección: Académico */}
                 <div style={{ background: '#fef3c7', padding: '1.5rem', borderRadius: '8px' }}>
-                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#92400e' }}>
-                    🎓 Información Académica
-                  </h3>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#92400e' }}>🎓 Información Académica</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Nivel</label>
@@ -393,7 +480,7 @@ export default function Ninos() {
                     </div>
                     <div style={{ gridColumn: 'span 2' }}>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>Colaborador Asignado</label>
-                      <select value={maestroId} onChange={(e) => setMaestroId(e.target.value)} className="form-input" style={{ fontSize: '1rem' }}>
+                      <select value={maestroId} onChange={(e) => setMaestroId(e.target.value)} className ="form-input" style={{ fontSize: '1rem' }}>
                         <option value="">Sin asignar</option>
                         {usuarios.map((u) => (<option key={u.id} value={u.id}>{u.nombres} {u.apellidos}</option>))}
                       </select>
@@ -402,18 +489,12 @@ export default function Ninos() {
                 </div>
               </div>
 
-              <div style={{ 
-                display: 'flex', 
-                gap: '1rem', 
-                marginTop: '2rem',
-                paddingTop: '1.5rem',
-                borderTop: '2px solid #e5e7eb'
-              }}>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid #e5e7eb' }}>
                 <button type="button" onClick={() => setMostrarModal(false)} className="btn" disabled={guardando} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
                   Cancelar
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={guardando || (telefono.length > 0 && telefono.length !== 8)} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
-                  {guardando ? '⏳ Guardando...' : '✅ Guardar Niño'}
+                  {guardando ? '⏳ Guardando...' : modoEditar ? '💾 Actualizar' : '✅ Guardar'}
                 </button>
               </div>
             </form>
