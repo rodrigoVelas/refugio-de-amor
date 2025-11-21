@@ -24,19 +24,30 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
 r.post('/upload', authMiddleware, async (req: any, res: any) => {
   try {
     const userId = req.user?.id
-    const { descripcion, total, fecha, imagen_path, imagen_mime } = req.body
 
     console.log('📝 POST /facturas/upload')
     console.log('Usuario:', req.user?.email)
-    console.log('Datos:', { descripcion, total, fecha, imagen_path, imagen_mime })
+    console.log('Body:', req.body)
+    console.log('Files:', req.files)
 
-    // Validación: solo total y fecha son obligatorios
+    // Los datos pueden venir en req.body o req.files dependiendo del Content-Type
+    const descripcion = req.body?.descripcion || req.body?.get?.('descripcion')
+    const total = req.body?.total || req.body?.get?.('total')
+    const fecha = req.body?.fecha || req.body?.get?.('fecha')
+    const imagen_path = req.body?.imagen_path || req.body?.imagen || req.body?.get?.('imagen')
+    const imagen_mime = req.body?.imagen_mime || 'image/jpeg'
+
+    console.log('Datos extraídos:', { descripcion, total, fecha, imagen_path })
+
+    // Validación
     if (!total || !fecha) {
       console.log('❌ Faltan campos obligatorios')
-      return res.status(400).json({ error: 'Total y fecha son requeridos' })
+      return res.status(400).json({ 
+        error: 'Total y fecha son requeridos',
+        recibido: { descripcion, total, fecha }
+      })
     }
 
-    // Insertar con los nombres EXACTOS de tu BD
     const { rows } = await pool.query(`
       INSERT INTO facturas (
         usuario_id, 
@@ -53,8 +64,8 @@ r.post('/upload', authMiddleware, async (req: any, res: any) => {
     `, [
       userId,
       descripcion || 'Sin descripción',
-      imagen_path || null,
-      imagen_mime || null,
+      typeof imagen_path === 'string' ? imagen_path : null,
+      imagen_mime,
       total,
       fecha
     ])
@@ -63,11 +74,9 @@ r.post('/upload', authMiddleware, async (req: any, res: any) => {
     res.json({ ok: true, id: rows[0].id, factura: rows[0] })
   } catch (error: any) {
     console.error('❌ Error en POST /facturas/upload:', error.message)
-    console.error('Detail:', error.detail)
     res.status(500).json({ error: error.message })
   }
 })
-
 // GET /:id/imagen - Obtener imagen de factura
 r.get('/:id/imagen', async (req: any, res: any) => {
   try {

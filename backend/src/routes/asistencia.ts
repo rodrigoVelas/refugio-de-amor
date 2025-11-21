@@ -35,45 +35,46 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
 // POST / - Crear registro de asistencia
 r.post('/', authMiddleware, async (req: any, res: any) => {
   try {
-    const { fecha, hora, notas, estado, nino_id, subnivel_id, maestro_id } = req.body
+    const { fecha, hora, notas } = req.body
     const userId = req.user?.id
+
+    console.log('📝 POST /asistencia - Datos:', { fecha, hora, notas, userId })
 
     if (!fecha) {
       return res.status(400).json({ error: 'La fecha es requerida' })
     }
 
-    console.log('📝 POST /asistencia - Datos:', { fecha, hora, notas, userId })
+    // Generar sesion_id único
+    const sesionId = `sesion-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
     const { rows } = await pool.query(`
       INSERT INTO asistencia (
+        sesion_id,
+        maestro_id,
+        usuario_id,
         fecha, 
         hora, 
         nota, 
         estado, 
-        nino_id, 
-        subnivel_id, 
-        maestro_id, 
-        usuario_id, 
         creado_en, 
         modificado_en
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       RETURNING *
     `, [
+      sesionId,
+      userId,
+      userId,
       fecha, 
       hora || null, 
       notas || null, 
-      estado || 'pendiente',
-      nino_id || null,
-      subnivel_id || null,
-      maestro_id || userId, // Usar userId si no viene maestro_id
-      userId
+      'pendiente'
     ])
 
     console.log('✅ Asistencia creada:', rows[0].id)
     res.json({ ok: true, asistencia: rows[0] })
   } catch (error: any) {
-    console.error('❌ Error en POST /asistencia:', error)
+    console.error('❌ Error en POST /asistencia:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
