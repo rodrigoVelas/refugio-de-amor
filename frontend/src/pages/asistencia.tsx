@@ -139,47 +139,50 @@ export default function Asistencia() {
   }
 
   async function guardarAsistencia() {
-    if (ninosSeleccionados.length === 0) {
-      Swal.fire('Error', 'Debe seleccionar al menos un niño', 'error')
-      return
-    }
-
-    if (!asistenciaTemporal?.id) {
-      Swal.fire('Error', 'No hay asistencia activa', 'error')
-      return
-    }
-
-    setGuardando(true)
-    try {
-      // Crear items de asistencia (todos presentes por defecto)
-      const items: DetalleItem[] = ninosSeleccionados.map(ninoId => ({
-        nino_id: ninoId,
-        presente: true
-      }))
-
-      // Guardar detalles usando la API existente
-      await api.asistencia_set_detalles(
-        asistenciaTemporal.id,
-        items,
-        fecha,
-        hora || undefined
-      )
-      
-      await Swal.fire('¡Éxito!', `Asistencia guardada para ${ninosSeleccionados.length} niños`, 'success')
-      
-      setMostrarModalCrear(false)
-      setPaso(1)
-      setAsistenciaTemporal(null)
-      setNinosSeleccionados([])
-      
-      await cargarDatos()
-    } catch (error: any) {
-      console.error('Error:', error)
-      Swal.fire('Error', error.message || 'No se pudo guardar la asistencia', 'error')
-    } finally {
-      setGuardando(false)
-    }
+  if (ninosSeleccionados.length === 0) {
+    Swal.fire('Error', 'Debe seleccionar al menos un niño', 'error')
+    return
   }
+
+  if (!asistenciaTemporal?.id && !asistenciaTemporal?.sesion_id) {
+    Swal.fire('Error', 'No hay asistencia activa', 'error')
+    return
+  }
+
+  setGuardando(true)
+  try {
+    // Crear items de asistencia (todos presentes por defecto)
+    const items: DetalleItem[] = ninosSeleccionados.map(ninoId => ({
+      nino_id: ninoId,
+      presente: true
+    }))
+
+    // Usar sesion_id O id, el que esté disponible
+    const asistenciaId = asistenciaTemporal.id || asistenciaTemporal.sesion_id
+
+    // Guardar detalles usando la API existente
+    await api.asistencia_set_detalles(
+      asistenciaId,
+      items,
+      fecha,
+      hora || undefined
+    )
+    
+    await Swal.fire('¡Éxito!', `Asistencia guardada para ${ninosSeleccionados.length} niños`, 'success')
+    
+    setMostrarModalCrear(false)
+    setPaso(1)
+    setAsistenciaTemporal(null)
+    setNinosSeleccionados([])
+    
+    await cargarDatos()
+  } catch (error: any) {
+    console.error('Error:', error)
+    Swal.fire('Error', error.message || 'No se pudo guardar la asistencia', 'error')
+  } finally {
+    setGuardando(false)
+  }
+}
 
   async function verDetalle(id: string) {
     try {
