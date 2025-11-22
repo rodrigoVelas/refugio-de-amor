@@ -95,7 +95,7 @@ r.get('/ninos', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// GET /actividades - CALENDARIO MENSUAL
+// GET /actividades - CALENDARIO MENSUAL CON HORA
 r.get('/actividades', authMiddleware, async (req: any, res: any) => {
   try {
     const { mes, anio } = req.query
@@ -111,11 +111,12 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
         TO_CHAR(fecha, 'DD/MM/YYYY') as fecha,
         titulo,
         descripcion,
-        estado
+        estado,
+        COALESCE(TO_CHAR(hora, 'HH24:MI'), 'No especificada') as hora
       FROM actividades
       WHERE EXTRACT(MONTH FROM fecha) = $1
         AND EXTRACT(YEAR FROM fecha) = $2
-      ORDER BY fecha ASC
+      ORDER BY fecha ASC, hora ASC NULLS LAST
     `, [mes, anio])
 
     console.log('✅ Actividades encontradas:', rows.length)
@@ -128,7 +129,6 @@ r.get('/actividades', authMiddleware, async (req: any, res: any) => {
     })
   } catch (error: any) {
     console.error('❌ Error /reportes/actividades:', error.message)
-    console.error('Stack:', error.stack)
     res.status(500).json({ error: error.message })
   }
 })
