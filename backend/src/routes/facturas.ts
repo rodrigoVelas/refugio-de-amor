@@ -1,14 +1,18 @@
 import { Router } from 'express'
 import { authMiddleware } from '../core/auth_middleware'
 import { pool } from '../core/db'
+import multer from 'multer'
 
 const r = Router()
+
+// Configurar multer para manejar archivos en memoria
+const upload = multer({ storage: multer.memoryStorage() })
 
 // GET / - Listar facturas
 r.get('/', authMiddleware, async (req: any, res: any) => {
   try {
     const { rows } = await pool.query(`
-      SELECT f.*, u.nombres as usuario_nombre, u.apellidos as usuario_apellidos
+      SELECT f.*, u.nombres as usuario_nombre, u.apellidos as usuario_apellidos, u.email
       FROM facturas f
       LEFT JOIN usuarios u ON f.usuario_id = u.id
       ORDER BY f.fecha DESC, f.creado_en DESC
@@ -20,24 +24,23 @@ r.get('/', authMiddleware, async (req: any, res: any) => {
   }
 })
 
-// POST /upload - Subir factura
-r.post('/upload', authMiddleware, async (req: any, res: any) => {
+// POST /upload - Subir factura (CON MULTER para FormData)
+r.post('/upload', authMiddleware, upload.single('imagen'), async (req: any, res: any) => {
   try {
     const userId = req.user?.id
 
     console.log('📝 POST /facturas/upload')
     console.log('Usuario:', req.user?.email)
     console.log('Body:', req.body)
-    console.log('Files:', req.files)
+    console.log('File:', req.file ? 'Sí hay archivo' : 'No hay archivo')
 
-    // Los datos pueden venir en req.body o req.files dependiendo del Content-Type
-    const descripcion = req.body?.descripcion || req.body?.get?.('descripcion')
-    const total = req.body?.total || req.body?.get?.('total')
-    const fecha = req.body?.fecha || req.body?.get?.('fecha')
-    const imagen_path = req.body?.imagen_path || req.body?.imagen || req.body?.get?.('imagen')
-    const imagen_mime = req.body?.imagen_mime || 'image/jpeg'
+    // Extraer datos del FormData
+    const descripcion = req.body.descripcion
+    const total = req.body.total
+    const fecha = req.body.fecha
+    const imagen = req.file
 
-    console.log('Datos extraídos:', { descripcion, total, fecha, imagen_path })
+    console.log('Datos extraídos:', { descripcion, total, fecha, tieneImagen: !!imagen })
 
     // Validación
     if (!total || !fecha) {
@@ -46,6 +49,18 @@ r.post('/upload', authMiddleware, async (req: any, res: any) => {
         error: 'Total y fecha son requeridos',
         recibido: { descripcion, total, fecha }
       })
+    }
+
+    // Si hay imagen, subirla a Cloudinary (o guardar la URL)
+    let imagen_path = null
+    let imagen_mime = null
+
+    if (imagen) {
+      // AQUÍ deberías subir a Cloudinary
+      // Por ahora, guardamos datos básicos
+      imagen_mime = imagen.mimetype
+      // imagen_path = URL_DE_CLOUDINARY después de subir
+      console.log('⚠️ Imagen recibida pero no se sube a Cloudinary aún')
     }
 
     const { rows } = await pool.query(`
@@ -64,9 +79,9 @@ r.post('/upload', authMiddleware, async (req: any, res: any) => {
     `, [
       userId,
       descripcion || 'Sin descripción',
-      typeof imagen_path === 'string' ? imagen_path : null,
+      imagen_path,
       imagen_mime,
-      total,
+      parseFloat(total),
       fecha
     ])
 
@@ -77,6 +92,7 @@ r.post('/upload', authMiddleware, async (req: any, res: any) => {
     res.status(500).json({ error: error.message })
   }
 })
+
 // GET /:id/imagen - Obtener imagen de factura
 r.get('/:id/imagen', async (req: any, res: any) => {
   try {
@@ -91,7 +107,6 @@ r.get('/:id/imagen', async (req: any, res: any) => {
       return res.status(404).json({ error: 'Imagen no encontrada' })
     }
 
-    // Redirigir a Cloudinary
     res.redirect(rows[0].imagen_path)
   } catch (error: any) {
     console.error('❌ Error en GET /facturas/:id/imagen:', error)

@@ -44,9 +44,7 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
       return res.status(400).json({ error: 'La fecha es requerida' })
     }
 
-    // Generar sesion_id único
-    const sesionId = `sesion-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
+    // Generar UUID válido para sesion_id usando la función de PostgreSQL
     const { rows } = await pool.query(`
       INSERT INTO asistencia (
         sesion_id,
@@ -59,12 +57,11 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
         creado_en, 
         modificado_en
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
     `, [
-      sesionId,
-      userId,
-      userId,
+      userId,      // maestro_id
+      userId,      // usuario_id
       fecha, 
       hora || null, 
       notas || null, 
