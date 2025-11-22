@@ -1,185 +1,453 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import Modal from '../components/modal'
+import Swal from 'sweetalert2'
 
-type Sesion = { id:string; fecha:string; hora:string; presentes?:number }
-type Nino = { id:string; codigo:string; nombres:string; apellidos:string }
-type Marca = { nino_id:string; estado:'presente'|'ausente'|'suplente'; nota?:string }
+interface Asistencia {
+  id: string
+  fecha: string
+  hora: string | null
+  estado: string
+  creado_en: string
+}
 
-export default function Asistencia(){
-  const [rows,setRows] = useState<Sesion[]>([])
-  const [openNueva,setOpenNueva] = useState(false)
-  const [f,setF] = useState({ fecha:'', hora:'' })
-  const [saving,setSaving] = useState(false)
+interface Nino {
+  id: string
+  codigo: string
+  nombres: string
+  apellidos: string
+  nivel_nombre: string | null
+  subnivel_nombre: string | null
+}
 
-  const [openMarcar,setOpenMarcar] = useState(false)
-  const [sesionId,setSesionId] = useState<string>('')
-  const [ninos,setNinos] = useState<Nino[]>([])
-  const [marcas,setMarcas] = useState<Record<string,Marca>>({})
-  const [tituloModal,setTituloModal] = useState('marcar asistencia')
+interface Usuario {
+  id: string
+  email: string
+  nombres: string
+  rol: string
+}
 
-  const load = async ()=>{ 
+interface DetalleItem {
+  nino_id: string
+  presente: boolean
+}
+
+export default function Asistencia() {
+  const navigate = useNavigate()
+  const [asistencias, setAsistencias] = useState<Asistencia[]>([])
+  const [loading, setLoading] = useState(true)
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  
+  // Estados para crear nueva asistencia
+  const [mostrarModalCrear, setMostrarModalCrear] = useState(false)
+  const [paso, setPaso] = useState(1) // 1: fecha/hora, 2: seleccionar niños
+  const [fecha, setFecha] = useState('')
+  const [hora, setHora] = useState('')
+  const [asistenciaTemporal, setAsistenciaTemporal] = useState<any>(null)
+  
+  // Estados para seleccionar niños
+  const [ninosDisponibles, setNinosDisponibles] = useState<Nino[]>([])
+  const [ninosSeleccionados, setNinosSeleccionados] = useState<string[]>([])
+  const [busquedaNino, setBusquedaNino] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    cargarDatos()
+  }, [])
+
+  async function cargarDatos() {
     try {
-      const d = await api.asistencia_list()
-      setRows(d)
-    } catch (e:any){
-      console.error('error cargando sesiones', e)
+      setLoading(true)
+      const [userData, asistenciasData] = await Promise.all([
+        api.me(),
+        api.asistencia_list()
+      ])
+      setUsuario(userData)
+      setAsistencias(asistenciasData)
+    } catch (error) {
+      console.error('Error:', error)
+      Swal.fire('Error', 'No se pudieron cargar los datos', 'error')
+    } finally {
+      setLoading(false)
     }
   }
-  useEffect(()=>{ void load() },[])
 
-  const crearSesion = async ()=>{
-    if(!f.fecha || !f.hora){ alert('completa fecha y hora'); return }
-    setSaving(true)
-    try{
-      const s = await api.asistencia_create({ fecha:f.fecha, hora:f.hora })
-      setOpenNueva(false); setF({fecha:'', hora:''})
-      await abrirEditorDeSesion(s.id, true)
-      await load()
-    } catch (e:any){
-      console.error('crearSesion error:', e)
-      alert(e?.message || 'no se pudo crear la sesion')
-    } finally { setSaving(false) }
+  async function iniciarNuevaAsistencia() {
+    // Resetear estados
+    setFecha(new Date().toISOString().split('T')[0])
+    setHora(new Date().toTimeString().slice(0, 5))
+    setAsistenciaTemporal(null)
+    setNinosSeleccionados([])
+    setPaso(1)
+    setMostrarModalCrear(true)
   }
 
-  const abrirEditorDeSesion = async (id:string, esNueva=false)=>{
-    try {
-      const d = await api.asistencia_editar_load(id)
-      setSesionId(id)
-      setTituloModal(esNueva ? 'marcar asistencia' : 'editar asistencia')
+  async function crearAsistencia() {
+    if (!fecha) {
+      Swal.fire('Error', 'La fecha es obligatoria', 'error')
+      return
+    }
 
-      const map:Record<string,Marca> = {}
-      const byId:Record<string, any> = {}
-      d.detalles.forEach((m:any)=>{ byId[m.nino_id] = m })
-      for(const n of d.ninos){
-        const m = byId[n.id]
-        map[n.id] = { nino_id:n.id, estado: m?.estado || 'presente', nota: m?.nota || '' }
+    setGuardando(true)
+    try {
+      console.log('Creando asistencia con:', { fecha, hora })
+      
+      // Crear asistencia inicial (sin niños)
+      const resultado = await api.asistencia_create({
+        fecha,
+        hora: hora || null
+      })
+
+      console.log('Asistencia creada:', resultado)
+      setAsistenciaTemporal(resultado)
+      
+      // Cargar niños a cargo del colaborador
+      const ninos = await api.ninos_list()
+      setNinosDisponibles(ninos)
+      
+      // Pasar al paso 2
+      setPaso(2)
+    } catch (error: any) {
+      console.error('Error creando asistencia:', error)
+      Swal.fire('Error', error.message || 'No se pudo crear la asistencia', 'error')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  function toggleNino(ninoId: string) {
+    if (ninosSeleccionados.includes(ninoId)) {
+      setNinosSeleccionados(ninosSeleccionados.filter(id => id !== ninoId))
+    } else {
+      setNinosSeleccionados([...ninosSeleccionados, ninoId])
+    }
+  }
+
+  function seleccionarTodos() {
+    const ninosFiltrados = ninosDisponibles
+      .filter(n => {
+        const nombreCompleto = `${n.nombres} ${n.apellidos} ${n.codigo}`.toLowerCase()
+        return nombreCompleto.includes(busquedaNino.toLowerCase())
+      })
+      .map(n => n.id)
+    
+    setNinosSeleccionados(ninosFiltrados)
+  }
+
+  function deseleccionarTodos() {
+    setNinosSeleccionados([])
+  }
+
+  async function guardarAsistencia() {
+    if (ninosSeleccionados.length === 0) {
+      Swal.fire('Error', 'Debe seleccionar al menos un niño', 'error')
+      return
+    }
+
+    if (!asistenciaTemporal?.id) {
+      Swal.fire('Error', 'No hay asistencia activa', 'error')
+      return
+    }
+
+    setGuardando(true)
+    try {
+      // Crear items de asistencia (todos presentes por defecto)
+      const items: DetalleItem[] = ninosSeleccionados.map(ninoId => ({
+        nino_id: ninoId,
+        presente: true
+      }))
+
+      // Guardar detalles usando la API existente
+      await api.asistencia_set_detalles(
+        asistenciaTemporal.id,
+        items,
+        fecha,
+        hora || undefined
+      )
+      
+      await Swal.fire('¡Éxito!', `Asistencia guardada para ${ninosSeleccionados.length} niños`, 'success')
+      
+      setMostrarModalCrear(false)
+      setPaso(1)
+      setAsistenciaTemporal(null)
+      setNinosSeleccionados([])
+      
+      await cargarDatos()
+    } catch (error: any) {
+      console.error('Error:', error)
+      Swal.fire('Error', error.message || 'No se pudo guardar la asistencia', 'error')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function verDetalle(id: string) {
+    try {
+      const detalle = await api.asistencia_editar_load(id)
+      
+      const ninosHtml = detalle.items && detalle.items.length > 0
+        ? detalle.items.map((item: any) => `
+            <div style="text-align: left; padding: 8px; border-bottom: 1px solid #e5e7eb;">
+              <strong>${item.codigo || ''}</strong> ${item.nombre || ''}
+              ${item.presente ? '<span style="color: #10b981;">✅ Presente</span>' : '<span style="color: #ef4444;">❌ Ausente</span>'}
+            </div>
+          `).join('')
+        : '<p style="text-align: center; color: #6b7280;">Sin niños registrados</p>'
+
+      await Swal.fire({
+        title: `📋 Asistencia del ${new Date(detalle.fecha).toLocaleDateString('es-GT')}`,
+        html: `
+          <div style="text-align: left; margin-bottom: 20px;">
+            <p><strong>Hora:</strong> ${detalle.hora || 'No especificada'}</p>
+            <p><strong>Estado:</strong> ${detalle.estado}</p>
+          </div>
+          <div style="background: #f9fafb; padding: 12px; border-radius: 8px; max-height: 300px; overflow-y: auto;">
+            <h4 style="margin-top: 0;">Niños (${detalle.items?.length || 0})</h4>
+            ${ninosHtml}
+          </div>
+        `,
+        width: '600px',
+        confirmButtonText: 'Cerrar'
+      })
+    } catch (error: any) {
+      console.error('Error:', error)
+      Swal.fire('Error', 'No se pudo cargar el detalle', 'error')
+    }
+  }
+
+  async function eliminarAsistencia(id: string, fecha: string) {
+    const result = await Swal.fire({
+      title: '¿Eliminar asistencia?',
+      text: `Se eliminará la asistencia del ${new Date(fecha).toLocaleDateString('es-GT')}`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (result.isConfirmed) {
+      try {
+        await api.asistencia_delete(id)
+        await Swal.fire('¡Eliminada!', 'Asistencia eliminada correctamente', 'success')
+        cargarDatos()
+      } catch (error: any) {
+        console.error('Error:', error)
+        Swal.fire('Error', 'No se pudo eliminar la asistencia', 'error')
       }
-      setNinos(d.ninos)
-      setMarcas(map)
-      setOpenMarcar(true)
-    } catch (e:any){
-      console.error('abrirEditorDeSesion error:', e)
-      alert(e?.message || 'no se pudo cargar la sesion')
     }
   }
 
-  const setEstado = (nino_id:string, estado:Marca['estado'])=>{
-    setMarcas(prev => ({ ...prev, [nino_id]: { ...(prev[nino_id]||{nino_id}), estado } }))
-  }
-  const setNota = (nino_id:string, nota:string)=>{
-    setMarcas(prev => ({ ...prev, [nino_id]: { ...(prev[nino_id]||{nino_id}), estado: prev[nino_id]?.estado || 'presente', nota } }))
-  }
-
-  const seleccionarTodos = ()=>{
-    setMarcas(prev=>{
-      const clone = {...prev}
-      for(const n of ninos){ clone[n.id] = { ...(clone[n.id]||{nino_id:n.id}), estado:'presente', nota:clone[n.id]?.nota||'' } }
-      return clone
-    })
-  }
-  const limpiarTodos = ()=>{
-    setMarcas(prev=>{
-      const clone = {...prev}
-      for(const n of ninos){ clone[n.id] = { ...(clone[n.id]||{nino_id:n.id}), estado:'ausente', nota:clone[n.id]?.nota||'' } }
-      return clone
+  function cancelarCreacion() {
+    Swal.fire({
+      title: '¿Cancelar?',
+      text: 'Se perderá la información ingresada',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, cancelar',
+      cancelButtonText: 'Continuar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setMostrarModalCrear(false)
+        setPaso(1)
+        setAsistenciaTemporal(null)
+        setNinosSeleccionados([])
+      }
     })
   }
 
-  const guardarMarcas = async ()=>{
-    try {
-      const items = Object.values(marcas)
-      await api.asistencia_set_detalles(sesionId, items)
-      setOpenMarcar(false)
-      await load()
-    } catch (e:any){
-      console.error('guardarMarcas error:', e)
-      alert(e?.message || 'no se pudo guardar la asistencia')
-    }
-  }
-
-  const eliminarSesion = async (id:string)=>{
-    if(!window.confirm('¿estas seguro de eliminar esta sesion de asistencia?')) return
-    try {
-      await api.asistencia_delete(id)
-      await load()
-    } catch (e:any){
-      console.error('eliminarSesion error:', e)
-      alert(e?.message || 'no se pudo eliminar la sesion')
-    }
+  const ninosFiltrados = ninosDisponibles.filter(n => {
+    const nombreCompleto = `${n.nombres} ${n.apellidos} ${n.codigo}`.toLowerCase()
+    return nombreCompleto.includes(busquedaNino.toLowerCase())
+  })
+  if (loading) {
+    return <div className="loading">Cargando asistencias...</div>
   }
 
   return (
-    <div>
-      <h1>Asistencia</h1>
-
-      <div style={{marginBottom:8}}>
-        <button className="btn" onClick={()=>setOpenNueva(true)}>Nueva sesion</button>
+    <div style={{ padding: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div>
+          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>📋 Asistencia</h1>
+          <p style={{ color: '#6b7280' }}>Gestión de asistencia de niños</p>
+        </div>
+        <button onClick={iniciarNuevaAsistencia} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '1rem' }}>
+          <span style={{ fontSize: '1.25rem' }}>➕</span>Nueva Asistencia
+        </button>
       </div>
 
-      <table className="table">
-        <thead><tr><th>Fecha</th><th>Hora</th><th>Presentes</th><th>Acciones</th></tr></thead>
-        <tbody>
-          {rows.map(s=>(
-            <tr key={s.id}>
-              <td>{s.fecha}</td>
-              <td>{s.hora}</td>
-              <td>{s.presentes ?? 0}</td>
-              <td className="flex" style={{gap:8}}>
-                <button className="btn" onClick={()=>abrirEditorDeSesion(s.id, false)}>Editar</button>
-                <a className="btn" href={api.asistencia_export_url(s.id,'csv')} target="_blank" rel="noreferrer">Descargar asistencia</a>
-                <button className="btn" onClick={()=>eliminarSesion(s.id)}>eliminar</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* modal crear sesion */}
-      <Modal open={openNueva} title="nueva sesion" onClose={()=>setOpenNueva(false)}
-        actions={<>
-          <button className="btn" onClick={crearSesion} disabled={saving}>{saving?'creando...':'crear y marcar'}</button>
-          <button className="linklike" onClick={()=>setOpenNueva(false)}>Cancelar</button>
-        </>}>
-        <div className="form">
-          <label>Fecha</label>
-          <input className="input" type="date" value={f.fecha} onChange={e=>setF({...f, fecha:e.target.value})} />
-          <label>Hora</label>
-          <input className="input" type="time" value={f.hora} onChange={e=>setF({...f, hora:e.target.value})} />
+      {asistencias.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</p>
+          <p style={{ fontSize: '1.25rem', color: '#6b7280' }}>No hay asistencias registradas</p>
         </div>
-      </Modal>
-
-      {/* modal marcar/editar */}
-      <Modal open={openMarcar} title={tituloModal} onClose={()=>setOpenMarcar(false)}
-        actions={<>
-          {sesionId && (
-            <a className="btn" href={api.asistencia_export_url(sesionId,'csv')} target="_blank" rel="noreferrer">
-              Descargar asistencia
-            </a>
-          )}
-          <button className="btn" onClick={guardarMarcas}>guardar</button>
-          <button className="linklike" onClick={()=>setOpenMarcar(false)}>Cancelar</button>
-        </>}>
-        {ninos.length===0 ? <div className="alert">No tienes ninos asignados</div> : (
-          <div style={{display:'grid', gap:10}}>
-            <div style={{display:'flex', gap:8}}>
-              <button className="btn" onClick={seleccionarTodos}>Seleccionar todos</button>
-              <button className="btn" onClick={limpiarTodos}>Limpiar</button>
-            </div>
-            {ninos.map(n=>(
-              <div key={n.id} className="card" style={{display:'grid', gap:6}}>
-                <div style={{fontWeight:700}}>{n.codigo} · {n.nombres} {n.apellidos}</div>
-                <div style={{display:'flex', gap:10, alignItems:'center'}}>
-                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='presente')} onChange={()=>setEstado(n.id,'presente')} /> Presente</label>
-                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='ausente')} onChange={()=>setEstado(n.id,'ausente')} /> Ausente</label>
-                  <label><input type="radio" name={`e-${n.id}`} checked={(marcas[n.id]?.estado==='suplente')} onChange={()=>setEstado(n.id,'suplente')} /> Suplente</label>
+      ) : (
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          {asistencias.map((asistencia) => (
+            <div key={asistencia.id} className="card" style={{ padding: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }}>
+                      📅 {new Date(asistencia.fecha).toLocaleDateString('es-GT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </h3>
+                    <span style={{ 
+                      padding: '0.25rem 0.75rem', 
+                      background: asistencia.estado === 'completada' ? '#d1fae5' : '#fef3c7', 
+                      color: asistencia.estado === 'completada' ? '#065f46' : '#92400e', 
+                      borderRadius: '9999px', 
+                      fontSize: '0.875rem', 
+                      fontWeight: '500' 
+                    }}>
+                      {asistencia.estado === 'completada' ? '✅ Completada' : '⏳ Pendiente'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.875rem', color: '#6b7280', flexWrap: 'wrap' }}>
+                    {asistencia.hora && <span>🕐 {asistencia.hora}</span>}
+                    <span>📆 {new Date(asistencia.creado_en).toLocaleDateString('es-GT')}</span>
+                  </div>
                 </div>
-                <input className="input" placeholder="nota (opcional)" value={marcas[n.id]?.nota||''} onChange={e=>setNota(n.id, e.target.value)} />
+                <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                  <button onClick={() => verDetalle(asistencia.id)} className="btn" style={{ background: '#3b82f6', color: 'white', fontSize: '0.875rem' }}>
+                    👁️ Ver Detalle
+                  </button>
+                  <button onClick={() => eliminarAsistencia(asistencia.id, asistencia.fecha)} className="btn" style={{ background: '#ef4444', color: 'white', fontSize: '0.875rem' }}>
+                    🗑️ Eliminar
+                  </button>
+                </div>
               </div>
-            ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* MODAL CREAR ASISTENCIA */}
+      {mostrarModalCrear && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="card" style={{ width: '100%', maxWidth: paso === 1 ? '500px' : '800px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '2px solid #e5e7eb' }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>
+                {paso === 1 ? '📅 Nueva Asistencia - Fecha y Hora' : '👶 Seleccionar Niños'}
+              </h2>
+              <button onClick={cancelarCreacion} style={{ background: '#f3f4f6', border: 'none', width: '36px', height: '36px', borderRadius: '50%', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
+            </div>
+
+            {/* PASO 1: Fecha y Hora */}
+            {paso === 1 && (
+              <div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Fecha *</label>
+                  <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="form-input" required style={{ fontSize: '1rem' }} />
+                </div>
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Hora</label>
+                  <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="form-input" style={{ fontSize: '1rem' }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid #e5e7eb' }}>
+                  <button type="button" onClick={cancelarCreacion} className="btn" disabled={guardando} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
+                    Cancelar
+                  </button>
+                  <button type="button" onClick={crearAsistencia} className="btn btn-primary" disabled={guardando || !fecha} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
+                    {guardando ? '⏳ Creando...' : 'Siguiente →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* PASO 2: Seleccionar Niños */}
+            {paso === 2 && (
+              <div>
+                <div style={{ marginBottom: '1rem', padding: '1rem', background: '#eff6ff', borderRadius: '8px' }}>
+                  <p style={{ margin: 0, fontSize: '0.875rem', color: '#1e40af' }}>
+                    📅 <strong>{new Date(fecha).toLocaleDateString('es-GT')}</strong> {hora && `• 🕐 ${hora}`}
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <input
+                    type="text"
+                    value={busquedaNino}
+                    onChange={(e) => setBusquedaNino(e.target.value)}
+                    placeholder="🔍 Buscar niño por nombre o código..."
+                    className="form-input"
+                    style={{ fontSize: '1rem' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <button type="button" onClick={seleccionarTodos} className="btn" style={{ fontSize: '0.875rem', padding: '0.5rem 1rem' }}>
+                    ✅ Seleccionar Todos
+                  </button>
+                  <button type="button" onClick={deseleccionarTodos} className="btn" style={{ fontSize: '0.875rem', padding: '0.5rem 1rem' }}>
+                    ❌ Deseleccionar Todos
+                  </button>
+                  <div style={{ marginLeft: 'auto', padding: '0.5rem 1rem', background: '#f3f4f6', borderRadius: '6px', fontSize: '0.875rem', fontWeight: '600' }}>
+                    {ninosSeleccionados.length} seleccionados
+                  </div>
+                </div><div style={{ maxHeight: '400px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.5rem' }}>
+                  {ninosFiltrados.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                      {busquedaNino ? 'No se encontraron niños' : 'No tienes niños asignados'}
+                    </div>
+                  ) : (
+                    ninosFiltrados.map((nino) => (
+                      <div
+                        key={nino.id}
+                        onClick={() => toggleNino(nino.id)}
+                        style={{
+                          padding: '1rem',
+                          marginBottom: '0.5rem',
+                          background: ninosSeleccionados.includes(nino.id) ? '#dbeafe' : 'white',
+                          border: `2px solid ${ninosSeleccionados.includes(nino.id) ? '#3b82f6' : '#e5e7eb'}`,
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '4px',
+                            border: '2px solid #3b82f6',
+                            background: ninosSeleccionados.includes(nino.id) ? '#3b82f6' : 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '0.875rem',
+                            fontWeight: 'bold'
+                          }}>
+                            {ninosSeleccionados.includes(nino.id) && '✓'}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: '600' }}>{nino.nombres} {nino.apellidos}</div>
+                            <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                              {nino.codigo} {nino.nivel_nombre && `• ${nino.nivel_nombre}`} {nino.subnivel_nombre && `• ${nino.subnivel_nombre}`}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid #e5e7eb' }}>
+                  <button type="button" onClick={() => setPaso(1)} className="btn" disabled={guardando} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
+                    ← Atrás
+                  </button>
+                  <button type="button" onClick={guardarAsistencia} className="btn btn-primary" disabled={guardando || ninosSeleccionados.length === 0} style={{ flex: 1, fontSize: '1rem', padding: '0.75rem' }}>
+                    {guardando ? '⏳ Guardando...' : `✅ Guardar (${ninosSeleccionados.length})`}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
     </div>
   )
 }
