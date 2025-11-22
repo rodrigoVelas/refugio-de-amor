@@ -146,7 +146,7 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
       return res.status(400).json({ error: 'La fecha es requerida' })
     }
 
-    // Crear sesión inicial con UUID generado por PostgreSQL
+    // Crear sesión inicial con UUID y estado 'borrador' o 'pendiente'
     const { rows } = await pool.query(`
       INSERT INTO asistencia (
         sesion_id,
@@ -159,24 +159,26 @@ r.post('/', authMiddleware, async (req: any, res: any) => {
         creado_en, 
         modificado_en
       )
-      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
+      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'borrador', NOW(), NOW())
       RETURNING *
     `, [
       userId,      // maestro_id
       userId,      // usuario_id
       fecha, 
       hora || null, 
-      notas || null, 
-      'pendiente'
+      notas || null
     ])
 
     console.log('✅ Sesión de asistencia creada:', rows[0].sesion_id)
     res.json({ ok: true, asistencia: rows[0] })
   } catch (error: any) {
     console.error('❌ Error en POST /asistencia:', error.message)
+    console.error('Detail:', error.detail)
+    console.error('Constraint:', error.constraint)
     res.status(500).json({ error: error.message })
   }
 })
+
 // POST /:sesion_id/ninos - Agregar niños a la sesión de asistencia
 r.post('/:sesion_id/ninos', authMiddleware, async (req: any, res: any) => {
   try {
